@@ -1,0 +1,85 @@
+.map-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.map-container h3 {
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.map-placeholder {
+  background: var(--bg);
+  border: 2px dashed var(--border);
+  padding: 3rem 1rem;
+  text-align: center;
+  border-radius: 6px;
+  color: var(--text-light);
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.regions-list {
+  margin-top: 1rem;
+}
+
+.regions-list h4 {
+  font-size: 0.95rem;
+  color: var(--text-light);
+  margin-bottom: 0.75rem;
+}
+
+.region-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.region-btn {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  background: var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.region-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.region-btn.selected {
+  background: var(--secondary);
+  color: white;
+  font-weight: 600;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+}

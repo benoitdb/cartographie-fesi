@@ -73,6 +73,19 @@ df_json = prepare_for_json(df)
 # Exporter les opérations brutes
 print("💾 Export des opérations brutes...")
 operations = df_json.to_dict(orient='records')
+
+# Nettoyer les NaN qui auraient échappé à la conversion
+def clean_nans(obj):
+    if isinstance(obj, dict):
+        return {k: clean_nans(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nans(v) for v in obj]
+    elif isinstance(obj, float) and pd.isna(obj):
+        return None
+    return obj
+
+operations = clean_nans(operations)
+
 with open(OUTPUT_DIR / "operations.json", 'w', encoding='utf-8') as f:
     json.dump(operations, f, ensure_ascii=False, indent=2)
 
@@ -167,6 +180,10 @@ for fonds in sorted(df[COLS['fonds']].unique()):
 
 # Créer le fichier final
 print("💾 Création du fichier de sortie...")
+
+# Nettoyer les agrégats aussi
+aggregates = clean_nans(aggregates)
+
 output_data = {
     'metadata': {
         'generated_at': datetime.now().isoformat(),
