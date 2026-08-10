@@ -2,6 +2,7 @@ import pandas as pd
 import json
 from pathlib import Path
 from datetime import datetime
+from region_mapping import harmonize_region
 
 # Chemins
 XLSX_PATH = Path(__file__).parent.parent / "data" / "raw" / "20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx"
@@ -52,8 +53,22 @@ for col in df.columns:
     if df[col].dtype == 'object':
         df.loc[df[col] == 'nan', col] = None
 
-# Normaliser les régions : si manquante, utiliser valeur par défaut
-df[COLS['region']] = df[COLS['region']].fillna('Région inconnue')
+# Harmoniser les régions avec la fonction de mapping
+print("🌍 Harmonisation des régions (pré-2016 → modernes)...")
+def apply_harmonize(row):
+    regions_modernes, is_interregional, is_national = harmonize_region(
+        row[COLS['region']],
+        row[COLS['libelle_prog']]
+    )
+    return pd.Series({
+        'regions_modernes': regions_modernes,
+        'is_interregional': is_interregional,
+        'is_national': is_national,
+        'regions_source': str(row[COLS['region']]) if pd.notna(row[COLS['region']]) else None
+    })
+
+harmonization = df.apply(apply_harmonize, axis=1)
+df = pd.concat([df, harmonization], axis=1)
 
 # Préparer les données pour JSON
 def prepare_for_json(df):
@@ -89,25 +104,56 @@ operations = clean_nans(operations)
 with open(OUTPUT_DIR / "operations.json", 'w', encoding='utf-8') as f:
     json.dump(operations, f, ensure_ascii=False, indent=2)
 
-# Calculer les agrégats
-print("📊 Calcul des agrégats...")
+# Calculer les agrégats (respecte la structure : by_region, national, interregional, etc.)
+print("📊 Calcul des agrégats harmonisés...")
 
 aggregates = {}
 
-# Par région
-print("  - Agrégats par région...")
+# Partitionner les données selon le type de région
+df_mono_region = df[~df['is_interregional'] & ~df['is_national']]
+df_interregional = df[df['is_interregional']]
+df_national = df[df['is_national']]
+
+print(f"  Partitions : mono-région={len(df_mono_region)} | interrég={len(df_interregional)} | national={len(df_national)}")
+
+# === by_region : uniquement opérations mono-région ===
+print("  - Agrégats par région (mono-région uniquement)...")
 aggregates['by_region'] = {}
-for region in sorted(df[COLS['region']].unique()):
-    subset = df[df[COLS['region']] == region]
-    aggregates['by_region'][region] = {
-        'count': int(len(subset)),
-        'montant_ue_total': float(subset[COLS['montant_ue']].sum()),
-        'montant_ue_moyen': float(subset[COLS['montant_ue']].mean()),
-        'depenses_total': float(subset[COLS['depenses']].sum()),
-        'depenses_moyen': float(subset[COLS['depenses']].mean()),
+for region in sorted(df_mono_region['regions_modernes'].apply(lambda x: x[0] if x else None).dropna().unique()):
+    subset = df_mono_region[df_mono_region['regions_modernes'].apply(lambda x: (x[0] if x else None) == region)]
+    if len(subset) > 0:
+        aggregates['by_region'][region] = {
+            'count': int(len(subset)),
+            'montant_ue_total': float(subset[COLS['montant_ue']].sum()),
+            'montant_ue_moyen': float(subset[COLS['montant_ue']].mean()),
+            'depenses_total': float(subset[COLS['depenses']].sum()),
+            'depenses_moyen': float(subset[COLS['depenses']].mean()),
+        }
+
+# === national : opérations sans région ===
+print("  - Agrégat national...")
+if len(df_national) > 0:
+    aggregates['national'] = {
+        'count': int(len(df_national)),
+        'montant_ue_total': float(df_national[COLS['montant_ue']].sum()),
+        'montant_ue_moyen': float(df_national[COLS['montant_ue']].mean()),
+        'depenses_total': float(df_national[COLS['depenses']].sum()),
+        'depenses_moyen': float(df_national[COLS['depenses']].mean()),
     }
 
-# Par fonds
+# === interregional : opérations multi-régions ===
+print("  - Agrégat interrégional...")
+if len(df_interregional) > 0:
+    aggregates['interregional'] = {
+        'count': int(len(df_interregional)),
+        'montant_ue_total': float(df_interregional[COLS['montant_ue']].sum()),
+        'montant_ue_moyen': float(df_interregional[COLS['montant_ue']].mean()),
+        'depenses_total': float(df_interregional[COLS['depenses']].sum()),
+        'depenses_moyen': float(df_interregional[COLS['depenses']].mean()),
+        'operations': [row[COLS['numero_op']] for _, row in df_interregional.iterrows()]
+    }
+
+# === by_fonds : sur toutes les opérations ===
 print("  - Agrégats par fonds...")
 aggregates['by_fonds'] = {}
 for fonds in sorted(df[COLS['fonds']].unique()):
@@ -120,7 +166,7 @@ for fonds in sorted(df[COLS['fonds']].unique()):
         'depenses_moyen': float(subset[COLS['depenses']].mean()),
     }
 
-# Par objectif stratégique
+# === by_objectif_strategique : sur toutes les opérations ===
 print("  - Agrégats par objectif stratégique...")
 aggregates['by_objectif_strategique'] = {}
 for obj in sorted(df[COLS['objectif_strat']].dropna().unique()):
@@ -133,12 +179,15 @@ for obj in sorted(df[COLS['objectif_strat']].dropna().unique()):
         'depenses_moyen': float(subset[COLS['depenses']].mean()),
     }
 
-# Croisements : région × fonds
+# === by_region_fonds : uniquement mono-région ===
 print("  - Croisements région × fonds...")
 aggregates['by_region_fonds'] = {}
-for region in sorted(df[COLS['region']].unique()):
+for region in sorted(df_mono_region['regions_modernes'].apply(lambda x: x[0] if x else None).dropna().unique()):
     for fonds in sorted(df[COLS['fonds']].unique()):
-        subset = df[(df[COLS['region']] == region) & (df[COLS['fonds']] == fonds)]
+        subset = df_mono_region[
+            (df_mono_region['regions_modernes'].apply(lambda x: (x[0] if x else None) == region)) &
+            (df_mono_region[COLS['fonds']] == fonds)
+        ]
         if len(subset) > 0:
             key = f"{region}|{fonds}"
             aggregates['by_region_fonds'][key] = {
@@ -148,12 +197,15 @@ for region in sorted(df[COLS['region']].unique()):
                 'montant_ue_total': float(subset[COLS['montant_ue']].sum()),
             }
 
-# Croisements : région × objectif stratégique
+# === by_region_objectif : uniquement mono-région ===
 print("  - Croisements région × objectif stratégique...")
 aggregates['by_region_objectif'] = {}
-for region in sorted(df[COLS['region']].unique()):
+for region in sorted(df_mono_region['regions_modernes'].apply(lambda x: x[0] if x else None).dropna().unique()):
     for obj in sorted(df[COLS['objectif_strat']].dropna().unique()):
-        subset = df[(df[COLS['region']] == region) & (df[COLS['objectif_strat']] == obj)]
+        subset = df_mono_region[
+            (df_mono_region['regions_modernes'].apply(lambda x: (x[0] if x else None) == region)) &
+            (df_mono_region[COLS['objectif_strat']] == obj)
+        ]
         if len(subset) > 0:
             key = f"{region}|{obj}"
             aggregates['by_region_objectif'][key] = {
@@ -163,7 +215,7 @@ for region in sorted(df[COLS['region']].unique()):
                 'montant_ue_total': float(subset[COLS['montant_ue']].sum()),
             }
 
-# Croisements : fonds × objectif stratégique
+# === by_fonds_objectif : sur toutes les opérations ===
 print("  - Croisements fonds × objectif stratégique...")
 aggregates['by_fonds_objectif'] = {}
 for fonds in sorted(df[COLS['fonds']].unique()):
@@ -188,9 +240,15 @@ output_data = {
     'metadata': {
         'generated_at': datetime.now().isoformat(),
         'total_operations': len(df),
-        'nb_regions': df[COLS['region']].nunique(),
+        'nb_regions_harmonized': len(aggregates['by_region']),
+        'nb_regions_raw': df[COLS['region']].nunique(),
         'nb_fonds': df[COLS['fonds']].nunique(),
         'nb_objectifs_strategiques': df[COLS['objectif_strat']].nunique(),
+        'partitions': {
+            'mono_region': int(len(df_mono_region)),
+            'interregional': int(len(df_interregional)),
+            'national': int(len(df_national)),
+        }
     },
     'operations': operations,
     'aggregates': aggregates,
@@ -202,9 +260,16 @@ with open(OUTPUT_DIR / "data.json", 'w', encoding='utf-8') as f:
 print("\n✅ Pipeline terminé !")
 print(f"   📁 Fichiers générés dans: {OUTPUT_DIR}")
 print(f"   - operations.json ({len(operations)} opérations)")
-print(f"   - data.json (opérations + agrégats)")
-print(f"\n📊 Résumé:")
-print(f"   Régions: {df[COLS['region']].nunique()}")
+print(f"   - data.json (opérations + agrégats harmonisés)")
+print(f"\n📊 Résumé harmonisé:")
+print(f"   Régions harmonisées: {len(aggregates['by_region'])} (brutes: {df[COLS['region']].nunique()})")
 print(f"   Fonds: {df[COLS['fonds']].nunique()}")
 print(f"   Objectifs stratégiques: {df[COLS['objectif_strat']].nunique()}")
+print(f"   Partitions:")
+print(f"     - Mono-région: {len(df_mono_region)}")
+print(f"     - Interrégional: {len(df_interregional)}")
+print(f"     - National (Volet national): {len(df_national)}")
 print(f"   Montant UE total: €{df[COLS['montant_ue']].sum():,.0f}")
+print(f"     - Mono-région: €{df_mono_region[COLS['montant_ue']].sum():,.0f}")
+print(f"     - Interrégional: €{df_interregional[COLS['montant_ue']].sum():,.0f}")
+print(f"     - National: €{df_national[COLS['montant_ue']].sum():,.0f}")

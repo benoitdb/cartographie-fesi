@@ -83,3 +83,100 @@
   font-size: 1.8rem;
   font-weight: 700;
 }
+
+/* Map Leaflet */
+.map-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.map-loading,
+.map-error {
+  padding: 2rem;
+  text-align: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-light);
+}
+
+.map-error {
+  color: #cc0000;
+}
+
+/* Leaflet popup personnalisé */
+.geo-popup {
+  font-size: 0.9rem;
+  min-width: 180px;
+}
+
+.geo-popup strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+}
+
+.popup-stat {
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+/* Légende */
+.map-legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: white;
+  padding: 1rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 400;
+  font-size: 0.85rem;
+}
+
+.legend-title {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+.legend-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+/* Liste des régions sous la carte */
+.regions-list-below-map {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.regions-list-below-map h4 {
+  font-size: 0.95rem;
+  color: var(--text-light);
+  margin-bottom: 0.75rem;
+  margin-top: 0;
+}
+
+.region-buttons-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
