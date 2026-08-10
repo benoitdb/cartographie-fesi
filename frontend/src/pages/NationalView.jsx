@@ -1,6 +1,10 @@
 import { useData } from '../hooks/useData'
 import Map from '../components/Map'
 import StatsGrid from '../components/StatsGrid'
+import FondsChart from '../components/FondsChart'
+import TopRegionsChart from '../components/TopRegionsChart'
+import ObjectifsSunburst from '../components/ObjectifsSunburst'
+import { objectifStrategiqueToSunburst } from '../utils/chartData'
 import '../styles/views.css'
 
 function NationalView({ onRegionSelect }) {
@@ -55,9 +59,19 @@ function NationalView({ onRegionSelect }) {
         </div>
       </div>
 
-      {/* Les graphiques seront ajoutés après */}
-      <div className="charts-placeholder">
-        Graphiques (Recharts) à venir...
+      {/* Graphiques */}
+      <div className="charts-section">
+        <div className="chart-row">
+          <div className="chart-half">
+            <FondsChart byFonds={data.aggregates.by_fonds} />
+          </div>
+          <div className="chart-half">
+            <ObjectifsSunburst hierarchyData={objectifStrategiqueToSunburst(data.aggregates.by_objectif_strategique)} />
+          </div>
+        </div>
+        <div className="chart-full">
+          <TopRegionsChart byRegion={data.aggregates.by_region} />
+        </div>
       </div>
     </div>
   )

@@ -93,3 +93,36 @@
   font-size: 1.1rem;
   font-weight: 600;
 }
+
+/* Charts layout */
+.charts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.chart-half {
+  min-height: 400px;
+}
+
+.chart-full {
+  width: 100%;
+  min-height: 500px;
+}
+
+@media (max-width: 1024px) {
+  .chart-row {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-half {
+    min-height: 300px;
+  }
+}

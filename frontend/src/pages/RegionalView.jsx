@@ -1,6 +1,9 @@
 import { useData } from '../hooks/useData'
 import Map from '../components/Map'
 import StatsGrid from '../components/StatsGrid'
+import FondsChart from '../components/FondsChart'
+import ObjectifsSunburst from '../components/ObjectifsSunburst'
+import { filtrerFondsParRegion, regionalObjectifsToSunburst } from '../utils/chartData'
 import '../styles/views.css'
 
 function RegionalView({ region, onBack }) {
@@ -34,9 +37,16 @@ function RegionalView({ region, onBack }) {
         </div>
       </div>
 
-      {/* Les graphiques seront ajoutés après */}
-      <div className="charts-placeholder">
-        Graphiques filtrés par région (Recharts) à venir...
+      {/* Graphiques filtrés par région */}
+      <div className="charts-section">
+        <div className="chart-row">
+          <div className="chart-half">
+            <FondsChart byFonds={filtrerFondsParRegion(data.aggregates.by_region_fonds, region)} />
+          </div>
+          <div className="chart-half">
+            <ObjectifsSunburst hierarchyData={regionalObjectifsToSunburst(data.operations, region)} />
+          </div>
+        </div>
       </div>
     </div>
   )
