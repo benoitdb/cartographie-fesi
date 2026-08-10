@@ -19,7 +19,9 @@ function ObjectifsSunburst({ hierarchyData }) {
         borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
         radialLabelsSkipAngle={10}
         radialLabelsTextXOffset={6}
-        radialLabelsTextColor="#1a1a1a"
+        radialLabelsTextColor="#000"
+        radialLabelsTextStrokeWidth={2}
+        radialLabelsTextStroke="#fff"
         slicesLabelsSkipAngle={10}
         slicesLabelsTextColor={{ from: 'color', modifiers: [['darker', 2.5]] }}
         animate={true}
