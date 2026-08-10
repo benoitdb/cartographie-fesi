@@ -19,25 +19,27 @@ function ObjectifsSunburst({ hierarchyData }) {
         borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
         radialLabelsSkipAngle={10}
         radialLabelsTextXOffset={6}
-        radialLabelsTextColor="#000"
+        radialLabelsTextColor={{ from: 'color', modifiers: [['darker', 2.5]] }}
         slicesLabelsSkipAngle={10}
-        slicesLabelsTextColor="#000"
-        slicesLabelsTextStrokeWidth={1}
-        slicesLabelsTextStroke="#fff"
+        slicesLabelsTextColor={{ from: 'color', modifiers: [['darker', 2.5]] }}
         animate={true}
         motionConfig="gentle"
         tooltip={({ id, value }) => (
           <div
             style={{
               background: 'white',
-              padding: '8px 12px',
+              padding: '12px 16px',
               borderRadius: '4px',
-              border: '1px solid #ccc'
+              border: '1px solid #ccc',
+              minWidth: '220px',
+              whiteSpace: 'normal',
+              wordWrap: 'break-word'
             }}
           >
-            <strong>{id}</strong>
-            <br />
-            {formatCurrency(value)}
+            <strong style={{ display: 'block', marginBottom: '6px' }}>{id}</strong>
+            <span style={{ fontSize: '1.1em', fontWeight: 'bold', color: '#1f8fb0' }}>
+              {formatCurrency(value)}
+            </span>
           </div>
         )}
         isInteractive={true}
