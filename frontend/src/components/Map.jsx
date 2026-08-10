@@ -16,9 +16,21 @@ function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
 
     // Chercher la région dans le GeoJSON
     const feature = geoJsonData.features.find(f => f.properties.nom === selectedRegion)
-    if (feature && feature.geometry.type === 'Polygon') {
-      const coords = feature.geometry.coordinates[0]
-      const bounds = L.latLngBounds(coords.map(([lng, lat]) => [lat, lng]))
+    if (!feature) return
+
+    const bounds = L.latLngBounds([])
+    const { type, coordinates } = feature.geometry
+
+    if (type === 'Polygon') {
+      const coords = coordinates[0]
+      coordinates[0].forEach(([lng, lat]) => bounds.extend([lat, lng]))
+    } else if (type === 'MultiPolygon') {
+      coordinates.forEach(polygon => {
+        polygon[0].forEach(([lng, lat]) => bounds.extend([lat, lng]))
+      })
+    }
+
+    if (bounds.isValid()) {
       map.fitBounds(bounds, { padding: [50, 50] })
     }
   }, [selectedRegion, geoJsonData, map])
@@ -94,6 +106,7 @@ function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
 function Map({ data, selectedRegion, onRegionSelect }) {
   const [geoJsonData, setGeoJsonData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const byRegion = data?.aggregates?.by_region || {}
 
   // Charger le GeoJSON au montage
   useEffect(() => {

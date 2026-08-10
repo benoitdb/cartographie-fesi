@@ -19,9 +19,11 @@ function ObjectifsSunburst({ hierarchyData }) {
         borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
         radialLabelsSkipAngle={10}
         radialLabelsTextXOffset={6}
-        radialLabelsTextColor="#333"
+        radialLabelsTextColor="#000"
         slicesLabelsSkipAngle={10}
-        slicesLabelsTextColor="#333"
+        slicesLabelsTextColor="#000"
+        slicesLabelsTextStrokeWidth={1}
+        slicesLabelsTextStroke="#fff"
         animate={true}
         motionConfig="gentle"
         tooltip={({ id, value }) => (
