@@ -124,7 +124,7 @@
 /* Légende */
 .map-legend {
   position: absolute;
-  bottom: 20px;
+  top: 20px;
   right: 20px;
   background: white;
   padding: 1rem;
@@ -137,7 +137,7 @@
 .legend-title {
   font-weight: 600;
   margin-bottom: 0.75rem;
-  color: var(--text);
+  color: #333;
 }
 
 .legend-scale {
@@ -150,6 +150,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  color: #333;
 }
 
 .legend-color {
@@ -203,14 +204,11 @@
 }
 
 .sunburst-container {
-  min-height: 500px;
-  display: flex;
-  flex-direction: column;
+  height: 520px;
 }
 
 .sunburst-container > div:last-child {
-  flex: 1;
-  min-height: 500px;
+  height: 100%;
 }
 
 .chart-error {

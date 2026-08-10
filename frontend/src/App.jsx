@@ -1,24 +1,16 @@
-import { useState } from 'react'
 import { useData } from './hooks/useData'
+import { useRegion } from './context/RegionContext'
 import NationalView from './pages/NationalView'
 import RegionalView from './pages/RegionalView'
 import './App.css'
 
 function App() {
-  const [selectedRegion, setSelectedRegion] = useState(null)
+  const { selectedRegion, goToNational } = useRegion()
   const { data, loading, error } = useData()
 
   if (loading) return <div className="loading">Chargement des données...</div>
   if (error) return <div className="error">Erreur: {error}</div>
   if (!data) return <div className="error">Pas de données disponibles</div>
-
-  const handleRegionSelect = (region) => {
-    setSelectedRegion(region)
-  }
-
-  const handleBackToNational = () => {
-    setSelectedRegion(null)
-  }
 
   return (
     <div className="app">
@@ -30,7 +22,7 @@ function App() {
       <nav className="app-nav">
         <button
           className={!selectedRegion ? 'active' : ''}
-          onClick={handleBackToNational}
+          onClick={goToNational}
         >
           Vue Nationale
         </button>
@@ -41,9 +33,9 @@ function App() {
 
       <main className="app-main">
         {selectedRegion ? (
-          <RegionalView region={selectedRegion} onBack={handleBackToNational} />
+          <RegionalView />
         ) : (
-          <NationalView onRegionSelect={handleRegionSelect} />
+          <NationalView />
         )}
       </main>
     </div>

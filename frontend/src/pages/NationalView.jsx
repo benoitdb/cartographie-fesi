@@ -1,4 +1,5 @@
 import { useData } from '../hooks/useData'
+import { useRegion } from '../context/RegionContext'
 import Map from '../components/Map'
 import StatsGrid from '../components/StatsGrid'
 import FondsChart from '../components/FondsChart'
@@ -7,8 +8,9 @@ import ObjectifsSunburst from '../components/ObjectifsSunburst'
 import { objectifStrategiqueToSunburst } from '../utils/chartData'
 import '../styles/views.css'
 
-function NationalView({ onRegionSelect }) {
+function NationalView() {
   const { data } = useData()
+  const { selectRegion } = useRegion()
 
   if (!data) return <div>Chargement...</div>
 
@@ -19,45 +21,48 @@ function NationalView({ onRegionSelect }) {
         <p>Cliquez sur une région pour voir les détails</p>
       </div>
 
-      <div className="section">
-        <Map
-          data={data}
-          selectedRegion={null}
-          onRegionSelect={onRegionSelect}
-        />
-      </div>
+      <div className="view-grid">
+        <div className="section">
+          <Map
+            data={data}
+            selectedRegion={null}
+            onRegionSelect={selectRegion}
+          />
+        </div>
 
-      <div className="section">
-        <h3>Statistiques nationales</h3>
-        <StatsGrid aggregates={data.aggregates} />
+        <div className="section">
+          <h3>Statistiques nationales</h3>
+          <StatsGrid aggregates={data.aggregates} />
 
-        {/* Volet national + Interrégional */}
-        <div className="special-aggregates">
-          {data.aggregates.national && (
-            <div className="aggregate-card">
-              <div className="aggregate-title">📋 Volet National</div>
-              <div className="aggregate-stat">
-                <span>{data.aggregates.national.count} projets</span>
-                <span>
-                  €{(data.aggregates.national.montant_ue_total / 1e6).toFixed(1)}M
-                </span>
+          {/* Volet national + Interrégional */}
+          <div className="special-aggregates">
+            {data.aggregates.national && (
+              <div className="aggregate-card">
+                <div className="aggregate-title">📋 Volet National</div>
+                <div className="aggregate-stat">
+                  <span>{data.aggregates.national.count} projets</span>
+                  <span>
+                    €{(data.aggregates.national.montant_ue_total / 1e6).toFixed(1)}M
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {data.aggregates.interregional && (
-            <div className="aggregate-card">
-              <div className="aggregate-title">🌍 Interrégional</div>
-              <div className="aggregate-stat">
-                <span>{data.aggregates.interregional.count} projets</span>
-                <span>
-                  €{(data.aggregates.interregional.montant_ue_total / 1e6).toFixed(1)}M
-                </span>
+            {data.aggregates.interregional && (
+              <div className="aggregate-card">
+                <div className="aggregate-title">🌍 Interrégional</div>
+                <div className="aggregate-stat">
+                  <span>{data.aggregates.interregional.count} projets</span>
+                  <span>
+                    €{(data.aggregates.interregional.montant_ue_total / 1e6).toFixed(1)}M
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+
 
       {/* Graphiques */}
       <div className="charts-section">

@@ -1,4 +1,5 @@
 import { useData } from '../hooks/useData'
+import { useRegion } from '../context/RegionContext'
 import Map from '../components/Map'
 import StatsGrid from '../components/StatsGrid'
 import FondsChart from '../components/FondsChart'
@@ -6,8 +7,10 @@ import ObjectifsSunburst from '../components/ObjectifsSunburst'
 import { filtrerFondsParRegion, regionalObjectifsToSunburst } from '../utils/chartData'
 import '../styles/views.css'
 
-function RegionalView({ region, onBack }) {
+function RegionalView() {
   const { data, getAggregatesByRegion } = useData()
+  const { selectedRegion, selectRegion, goToNational } = useRegion()
+  const region = selectedRegion
   const regionAggregates = getAggregatesByRegion(region)
 
   if (!data) return <div>Chargement...</div>
@@ -16,7 +19,7 @@ function RegionalView({ region, onBack }) {
     <div className="view regional-view">
       <div className="view-header">
         <h2>Vue Régionale: {region}</h2>
-        <button className="back-btn" onClick={onBack}>
+        <button className="back-btn" onClick={goToNational}>
           ← Retour à la vue nationale
         </button>
       </div>
@@ -26,7 +29,7 @@ function RegionalView({ region, onBack }) {
           <Map
             data={data}
             selectedRegion={region}
-            onRegionSelect={() => {}}
+            onRegionSelect={selectRegion}
           />
         </div>
 

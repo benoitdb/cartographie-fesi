@@ -1,32 +1,27 @@
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet'
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getColorScale, formatCurrency } from '../utils/colorScale'
 import '../styles/components.css'
 
-function Map({ data, selectedRegion, onRegionSelect }) {
-  const [geoJsonData, setGeoJsonData] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  // Charger le GeoJSON au montage
-  useEffect(() => {
-    fetch('/geo/regions-metropole.geojson')
-      .then(res => res.json())
-      .then(geoJson => {
-        setGeoJsonData(geoJson)
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error('Erreur chargement GeoJSON:', err)
-        setLoading(false)
-      })
-  }, [])
-
-  if (loading) return <div className="map-loading">Chargement de la carte...</div>
-
-  const colorScale = getColorScale(data?.aggregates?.by_region || {})
+function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
+  const map = useMap()
   const byRegion = data?.aggregates?.by_region || {}
+  const colorScale = getColorScale(byRegion)
+
+  // Re-center map when selectedRegion changes
+  useEffect(() => {
+    if (!selectedRegion || !geoJsonData) return
+
+    // Chercher la région dans le GeoJSON
+    const feature = geoJsonData.features.find(f => f.properties.nom === selectedRegion)
+    if (feature && feature.geometry.type === 'Polygon') {
+      const coords = feature.geometry.coordinates[0]
+      const bounds = L.latLngBounds(coords.map(([lng, lat]) => [lat, lng]))
+      map.fitBounds(bounds, { padding: [50, 50] })
+    }
+  }, [selectedRegion, geoJsonData, map])
 
   // Fonction pour styliser chaque région
   const getFeatureStyle = (feature) => {
@@ -85,6 +80,36 @@ function Map({ data, selectedRegion, onRegionSelect }) {
     })
   }
 
+  return (
+    <>
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <GeoJSON data={geoJsonData} style={getFeatureStyle} onEachFeature={onEachFeature} />
+    </>
+  )
+}
+
+function Map({ data, selectedRegion, onRegionSelect }) {
+  const [geoJsonData, setGeoJsonData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  // Charger le GeoJSON au montage
+  useEffect(() => {
+    fetch('/geo/regions-metropole.geojson')
+      .then(res => res.json())
+      .then(geoJson => {
+        setGeoJsonData(geoJson)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error('Erreur chargement GeoJSON:', err)
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) return <div className="map-loading">Chargement de la carte...</div>
   if (!geoJsonData) return <div className="map-error">Impossible de charger la carte</div>
 
   return (
@@ -95,11 +120,7 @@ function Map({ data, selectedRegion, onRegionSelect }) {
         scrollWheelZoom={false}
         style={{ height: '500px', width: '100%' }}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <GeoJSON data={geoJsonData} style={getFeatureStyle} onEachFeature={onEachFeature} />
+        <MapContent geoJsonData={geoJsonData} data={data} selectedRegion={selectedRegion} onRegionSelect={onRegionSelect} />
       </MapContainer>
 
       {/* Légende */}
