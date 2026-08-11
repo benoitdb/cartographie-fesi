@@ -69,3 +69,25 @@ with domtom_col:
                         st.caption(f"{values['montant_ue_total'] / 1e6:,.1f} M€ · {values['count']} projets".replace(",", " "))
                     else:
                         st.caption("Aucun projet")
+
+# Répartition par fonds
+st.subheader("Répartition par fonds")
+
+by_fonds = data["aggregates"]["by_fonds"]
+df_fonds = pd.DataFrame(
+    [{"fonds": fonds, "montant_ue_total": v["montant_ue_total"], "count": v["count"]} for fonds, v in by_fonds.items()]
+).sort_values("montant_ue_total")
+
+fig_fonds = px.bar(
+    df_fonds,
+    x="montant_ue_total",
+    y="fonds",
+    orientation="h",
+    color="fonds",
+    hover_data=["count"],
+    labels={"montant_ue_total": "Montant UE (€)", "fonds": "Fonds", "count": "Nb projets"},
+)
+fig_fonds.update_layout(height=250, showlegend=False)
+fig_fonds.update_traces(width=0.5)
+
+st.plotly_chart(fig_fonds, use_container_width=True)
