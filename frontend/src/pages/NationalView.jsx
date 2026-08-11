@@ -7,6 +7,7 @@ import FondsChart from '../components/FondsChart'
 import TopRegionsChart from '../components/TopRegionsChart'
 import ObjectifsGrid from '../components/ObjectifsGrid'
 import FiltersBar from '../components/FiltersBar'
+import KPIHeader from '../components/KPIHeader'
 import { applyFilters } from '../utils/filterUtils'
 
 function NationalView() {
@@ -28,6 +29,9 @@ function NationalView() {
         <h2 className="text-3xl font-bold font-sans mb-3">Vue Nationale</h2>
         <p className="text-gray-600 dark:text-gray-400 text-sm">Cliquez sur une région pour voir les détails</p>
       </div>
+
+      {/* KPI Header */}
+      <KPIHeader aggregates={filteredAggregates} />
 
       {/* Filtres */}
       <FiltersBar filters={filters} onFiltersChange={setFilters} />
