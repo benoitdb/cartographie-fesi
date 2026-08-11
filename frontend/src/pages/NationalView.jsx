@@ -14,7 +14,6 @@ function NationalView() {
   const { selectRegion } = useRegion()
   const [filters, setFilters] = useState({
     fonds: ['FEDER', 'FSE+', 'FTJ'],
-    montantMin: 0,
   })
 
   if (!data) return <div className="py-8 text-center">Chargement...</div>
