@@ -1,85 +1,29 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Lato:wght@400;500;700&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* Compatibilité avec anciennes variables CSS (transition graduée) */
-:root {
-  --primary: #0066cc;
-  --secondary: #ff6600;
-  --accent: #ff8533;
-  --bg: #f8fafc;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --text-light: #475569;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Lato', system-ui, sans-serif;
+  background-color: white;
+  color: #0f172a;
+  line-height: 1.5;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f172a;
-    --border: #1e293b;
-    --text: #f1f5f9;
-    --text-light: #cbd5e1;
-  }
-}
-
-@layer base {
   body {
-    @apply font-body bg-white text-gray-900 transition-colors duration-200;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    body {
-      @apply bg-gray-950 text-gray-100;
-    }
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-sans font-bold;
-  }
-
-  h1 {
-    @apply text-4xl;
-  }
-
-  h2 {
-    @apply text-3xl;
-  }
-
-  h3 {
-    @apply text-2xl;
-  }
-
-  h4 {
-    @apply text-xl;
+    background-color: #020617;
+    color: #f1f5f9;
   }
 }
 
-@layer components {
-  .btn-primary {
-    @apply px-4 py-2 bg-primary text-white rounded-lg font-medium transition-all hover:opacity-90 active:opacity-75;
-  }
-
-  .btn-secondary {
-    @apply px-4 py-2 bg-secondary text-white rounded-lg font-medium transition-all hover:opacity-90 active:opacity-75;
-  }
-
-  .card {
-    @apply bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6 transition-all;
-  }
-
-  .stat-card {
-    @apply bg-gradient-to-br from-primary to-blue-600 text-white rounded-xl p-6 shadow-lg;
-  }
-}
-
-/* Styles existants à migrer progressivement */
-.loading,
-.error {
-  @apply p-8 text-center text-lg;
-}
-
-.error {
-  @apply text-red-600 dark:text-red-400;
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-weight: 700;
 }

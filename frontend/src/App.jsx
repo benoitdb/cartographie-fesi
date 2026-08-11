@@ -36,7 +36,7 @@ function App() {
         )}
       </nav>
 
-      <main className="flex-1 px-8 py-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 py-8 px-4 sm:px-8 max-w-7xl mx-auto w-full">
         {selectedRegion ? (
           <RegionalView />
         ) : (

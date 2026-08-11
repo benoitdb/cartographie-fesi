@@ -4,8 +4,7 @@ import Map from '../components/Map'
 import StatsGrid from '../components/StatsGrid'
 import FondsChart from '../components/FondsChart'
 import TopRegionsChart from '../components/TopRegionsChart'
-import ObjectifsSunburst from '../components/ObjectifsSunburst'
-import { objectifStrategiqueToSunburst, formatCurrency } from '../utils/chartData'
+import ObjectifsGrid from '../components/ObjectifsGrid'
 
 function NationalView() {
   const { data } = useData()
@@ -72,14 +71,14 @@ function NationalView() {
 
       {/* Graphiques */}
       <div className="flex flex-col gap-8">
-        {/* Charts 2 colonnes */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
-            <FondsChart byFonds={data.aggregates.by_fonds} />
-          </div>
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
-            <ObjectifsSunburst hierarchyData={objectifStrategiqueToSunburst(data.aggregates.by_objectif_strategique)} />
-          </div>
+        {/* Fonds Chart */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
+          <FondsChart byFonds={data.aggregates.by_fonds} />
+        </div>
+
+        {/* Objectifs Grid */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
+          <ObjectifsGrid objectifs={data.aggregates.by_objectif_strategique} />
         </div>
 
         {/* Top regions - full width */}
@@ -87,7 +86,6 @@ function NationalView() {
           <TopRegionsChart byRegion={data.aggregates.by_region} />
         </div>
       </div>
-    </div>
     </div>
   )
 }

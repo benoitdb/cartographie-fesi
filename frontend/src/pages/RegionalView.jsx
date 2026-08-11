@@ -3,14 +3,36 @@ import { useRegion } from '../context/RegionContext'
 import Map from '../components/Map'
 import StatsGrid from '../components/StatsGrid'
 import FondsChart from '../components/FondsChart'
-import ObjectifsSunburst from '../components/ObjectifsSunburst'
-import { filtrerFondsParRegion, regionalObjectifsToSunburst } from '../utils/chartData'
+import ObjectifsGrid from '../components/ObjectifsGrid'
+import { filtrerFondsParRegion } from '../utils/chartData'
 
 function RegionalView() {
   const { data, getAggregatesByRegion } = useData()
   const { selectedRegion, selectRegion, goToNational } = useRegion()
   const region = selectedRegion
   const regionAggregates = getAggregatesByRegion(region)
+
+  // Extraire les objectifs stratégiques de la région
+  const getRegionalObjectifs = () => {
+    if (!data?.operations || !region) return {}
+
+    const regional = data.operations.filter(op => {
+      const regions = op.regions_modernes || []
+      return regions.length === 1 && regions[0] === region && !op.is_interregional && !op.is_national
+    })
+
+    const objectives = {}
+    regional.forEach(op => {
+      const strateg = op['Objectif stratégique'] || 'Non spécifié'
+      if (!objectives[strateg]) {
+        objectives[strateg] = { count: 0, montant_ue_total: 0 }
+      }
+      objectives[strateg].count += 1
+      objectives[strateg].montant_ue_total += op['Montant UE'] || 0
+    })
+
+    return objectives
+  }
 
   if (!data) return <div className="py-8 text-center">Chargement...</div>
 
@@ -49,14 +71,14 @@ function RegionalView() {
         </div>
       </div>
 
-      {/* Graphiques filtrés par région - 2 colonnes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
-          <FondsChart byFonds={filtrerFondsParRegion(data.aggregates.by_region_fonds, region)} />
-        </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
-          <ObjectifsSunburst hierarchyData={regionalObjectifsToSunburst(data.operations, region)} />
-        </div>
+      {/* Graphiques filtrés par région */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
+        <FondsChart byFonds={filtrerFondsParRegion(data.aggregates.by_region_fonds, region)} />
+      </div>
+
+      {/* Objectifs Stratégiques */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
+        <ObjectifsGrid objectifs={getRegionalObjectifs()} title="Objectifs Stratégiques - Région" />
       </div>
     </div>
   )
