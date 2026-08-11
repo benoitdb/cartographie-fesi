@@ -3,7 +3,6 @@ import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getColorScale, formatCurrency } from '../utils/colorScale'
-import '../styles/components.css'
 
 function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
   const map = useMap()
