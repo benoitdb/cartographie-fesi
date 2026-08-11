@@ -114,3 +114,34 @@ fig_objectif = px.treemap(
 fig_objectif.update_traces(textinfo="label+value+percent root")
 
 st.plotly_chart(fig_objectif, use_container_width=True)
+
+# Volet national
+st.subheader("Volet national")
+
+national = data["aggregates"]["national"]
+col1, col2 = st.columns(2)
+col1.metric("Montant UE total", f"{national['montant_ue_total'] / 1e6:,.1f} M€".replace(",", " "))
+col2.metric("Nombre de projets", f"{national['count']:,}".replace(",", " "))
+
+national_ops = [op for op in data["operations"] if op.get("is_national")]
+df_national_fonds = (
+    pd.DataFrame(national_ops)
+    .groupby("Fonds")
+    .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
+    .reset_index()
+    .sort_values("montant_ue_total")
+)
+
+fig_national_fonds = px.bar(
+    df_national_fonds,
+    x="montant_ue_total",
+    y="Fonds",
+    orientation="h",
+    color="Fonds",
+    hover_data=["count"],
+    labels={"montant_ue_total": "Montant UE (€)", "count": "Nb projets"},
+)
+fig_national_fonds.update_layout(height=200, showlegend=False)
+fig_national_fonds.update_traces(width=0.5)
+
+st.plotly_chart(fig_national_fonds, use_container_width=True)
