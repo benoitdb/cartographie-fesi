@@ -91,3 +91,26 @@ fig_fonds.update_layout(height=250, showlegend=False)
 fig_fonds.update_traces(width=0.5)
 
 st.plotly_chart(fig_fonds, use_container_width=True)
+
+# Objectifs stratégiques
+st.subheader("Objectifs stratégiques")
+
+by_objectif = data["aggregates"]["by_objectif_strategique"]
+df_objectif = pd.DataFrame(
+    [
+        {"objectif": objectif, "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
+        for objectif, v in by_objectif.items()
+    ]
+)
+
+fig_objectif = px.treemap(
+    df_objectif,
+    path=["objectif"],
+    values="montant_ue_total",
+    color="objectif",
+    hover_data=["count"],
+    labels={"montant_ue_total": "Montant UE (€)", "count": "Nb projets"},
+)
+fig_objectif.update_traces(textinfo="label+value+percent root")
+
+st.plotly_chart(fig_objectif, use_container_width=True)
