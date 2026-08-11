@@ -26,8 +26,8 @@ function FondsChart({ byFonds }) {
   const data = fondsToChartData(byFonds)
 
   return (
-    <div className="chart-container">
-      <h3>Répartition par fonds</h3>
+    <div>
+      <h3 className="text-xl font-bold font-sans mb-4 text-gray-900 dark:text-white">Répartition par fonds</h3>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />

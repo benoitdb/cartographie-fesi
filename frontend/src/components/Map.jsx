@@ -137,35 +137,39 @@ function Map({ data, selectedRegion, onRegionSelect }) {
       </MapContainer>
 
       {/* Légende */}
-      <div className="map-legend">
-        <div className="legend-title">Montants UE par région</div>
-        <div className="legend-scale">
-          <div className="legend-item">
-            <div className="legend-color" style={{ backgroundColor: '#eff8fb' }}></div>
-            <span>Faible</span>
+      <div className="absolute top-5 right-5 bg-white dark:bg-gray-900 rounded-lg p-4 shadow-lg z-400 max-w-xs">
+        <h4 className="font-sans font-semibold text-gray-900 dark:text-white mb-3 text-sm">Montants UE par région</h4>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded border border-gray-300" style={{ backgroundColor: '#eff8fb' }}></div>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Faible</span>
           </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{ backgroundColor: '#5cb8dc' }}></div>
-            <span>Moyen</span>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded border border-gray-300" style={{ backgroundColor: '#5cb8dc' }}></div>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Moyen</span>
           </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{ backgroundColor: '#0d5a78' }}></div>
-            <span>Élevé</span>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded border border-gray-300" style={{ backgroundColor: '#0d5a78' }}></div>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Élevé</span>
           </div>
         </div>
       </div>
 
       {/* Liste des régions pour DOM-TOM et accessibilité */}
-      <div className="regions-list-below-map">
-        <h4>Toutes les régions</h4>
-        <div className="region-buttons-grid">
+      <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
+        <h4 className="font-sans font-semibold text-gray-900 dark:text-white mb-3 text-sm">Toutes les régions</h4>
+        <div className="flex flex-wrap gap-2">
           {Object.keys(byRegion)
             .sort()
             .map((region) => (
               <button
                 key={region}
-                className={`region-btn ${selectedRegion === region ? 'selected' : ''}`}
                 onClick={() => onRegionSelect(region)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  selectedRegion === region
+                    ? 'bg-primary text-white shadow-md'
+                    : 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-700'
+                }`}
               >
                 {region}
               </button>

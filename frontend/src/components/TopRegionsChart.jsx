@@ -6,8 +6,8 @@ function TopRegionsChart({ byRegion }) {
   const data = regionsToChartData(byRegion)
 
   return (
-    <div className="chart-container">
-      <h3>Montants UE par région</h3>
+    <div>
+      <h3 className="text-xl font-bold font-sans mb-4 text-gray-900 dark:text-white">Montants UE par région</h3>
       <ResponsiveContainer width="100%" height={400}>
         <BarChart data={data} layout="vertical" margin={{ left: 150, right: 30 }}>
           <CartesianGrid strokeDasharray="3 3" />
