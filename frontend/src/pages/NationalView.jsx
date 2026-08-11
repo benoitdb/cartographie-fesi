@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useData } from '../hooks/useData'
 import { useRegion } from '../context/RegionContext'
 import Map from '../components/Map'
@@ -5,12 +6,21 @@ import StatsGrid from '../components/StatsGrid'
 import FondsChart from '../components/FondsChart'
 import TopRegionsChart from '../components/TopRegionsChart'
 import ObjectifsGrid from '../components/ObjectifsGrid'
+import FiltersBar from '../components/FiltersBar'
+import { applyFilters } from '../utils/filterUtils'
 
 function NationalView() {
   const { data } = useData()
   const { selectRegion } = useRegion()
+  const [filters, setFilters] = useState({
+    fonds: ['FEDER', 'FSE+', 'FTJ'],
+    montantMin: 0,
+  })
 
   if (!data) return <div className="py-8 text-center">Chargement...</div>
+
+  // Appliquer les filtres
+  const filteredAggregates = applyFilters(data.aggregates, filters)
 
   return (
     <div className="flex flex-col gap-10">
@@ -19,6 +29,9 @@ function NationalView() {
         <h2 className="text-3xl font-bold font-sans mb-3">Vue Nationale</h2>
         <p className="text-gray-600 dark:text-gray-400 text-sm">Cliquez sur une région pour voir les détails</p>
       </div>
+
+      {/* Filtres */}
+      <FiltersBar filters={filters} onFiltersChange={setFilters} />
 
       {/* Map + Stats Grid côte à côte */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -35,33 +48,33 @@ function NationalView() {
         <div className="lg:col-span-2 flex flex-col gap-6">
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
             <h3 className="text-xl font-bold font-sans mb-4">Statistiques nationales</h3>
-            <StatsGrid aggregates={data.aggregates} />
+            <StatsGrid aggregates={filteredAggregates} />
           </div>
 
           {/* Volet national + Interrégional */}
           <div className="flex flex-col gap-3">
-            {data.aggregates.national && (
+            {filteredAggregates.national && (
               <div className="bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-700 dark:to-orange-800 text-white rounded-xl p-4 shadow-md">
                 <div className="text-sm font-medium opacity-90 mb-2">📋 Volet National</div>
                 <div className="flex justify-between items-end">
-                  <span className="text-2xl font-bold">{data.aggregates.national.count}</span>
+                  <span className="text-2xl font-bold">{filteredAggregates.national.count}</span>
                   <span className="text-sm opacity-95">projets</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-orange-400 border-opacity-30">
-                  <span className="text-xl font-bold">€{(data.aggregates.national.montant_ue_total / 1e6).toFixed(1)}M</span>
+                  <span className="text-xl font-bold">€{(filteredAggregates.national.montant_ue_total / 1e6).toFixed(1)}M</span>
                 </div>
               </div>
             )}
 
-            {data.aggregates.interregional && (
+            {filteredAggregates.interregional && (
               <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 dark:from-cyan-700 dark:to-cyan-800 text-white rounded-xl p-4 shadow-md">
                 <div className="text-sm font-medium opacity-90 mb-2">🌍 Interrégional</div>
                 <div className="flex justify-between items-end">
-                  <span className="text-2xl font-bold">{data.aggregates.interregional.count}</span>
+                  <span className="text-2xl font-bold">{filteredAggregates.interregional.count}</span>
                   <span className="text-sm opacity-95">projets</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-cyan-400 border-opacity-30">
-                  <span className="text-xl font-bold">€{(data.aggregates.interregional.montant_ue_total / 1e6).toFixed(1)}M</span>
+                  <span className="text-xl font-bold">€{(filteredAggregates.interregional.montant_ue_total / 1e6).toFixed(1)}M</span>
                 </div>
               </div>
             )}
@@ -73,17 +86,17 @@ function NationalView() {
       <div className="flex flex-col gap-8">
         {/* Fonds Chart */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
-          <FondsChart byFonds={data.aggregates.by_fonds} />
+          <FondsChart byFonds={filteredAggregates.by_fonds} />
         </div>
 
         {/* Objectifs Grid */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
-          <ObjectifsGrid objectifs={data.aggregates.by_objectif_strategique} />
+          <ObjectifsGrid objectifs={filteredAggregates.by_objectif_strategique} />
         </div>
 
         {/* Top regions - full width */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6">
-          <TopRegionsChart byRegion={data.aggregates.by_region} />
+          <TopRegionsChart byRegion={filteredAggregates.by_region} />
         </div>
       </div>
     </div>
