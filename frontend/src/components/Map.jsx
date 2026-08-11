@@ -4,10 +4,16 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getColorScale, formatCurrency } from '../utils/colorScale'
 
-function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
+function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect, viewMode }) {
   const map = useMap()
   const byRegion = data?.aggregates?.by_region || {}
-  const colorScale = getColorScale(byRegion)
+
+  // Adapter les données selon le viewMode
+  const displayData = viewMode === 'count'
+    ? Object.fromEntries(Object.entries(byRegion).map(([k, v]) => [k, { ...v, montant_ue_total: v.count }]))
+    : byRegion
+
+  const colorScale = getColorScale(displayData)
 
   // Re-center map when selectedRegion changes
   useEffect(() => {
@@ -37,7 +43,7 @@ function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
   // Fonction pour styliser chaque région
   const getFeatureStyle = (feature) => {
     const regionName = feature.properties.nom
-    const regionData = byRegion[regionName]
+    const regionData = displayData[regionName]
     const montant = regionData?.montant_ue_total || 0
     const color = colorScale(montant)
 
@@ -54,7 +60,7 @@ function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
   // Callback pour chaque feature (région)
   const onEachFeature = (feature, layer) => {
     const regionName = feature.properties.nom
-    const regionData = byRegion[regionName]
+    const regionData = displayData[regionName]
 
     // Créer le popup
     const popupContent = `
@@ -105,6 +111,7 @@ function MapContent({ geoJsonData, data, selectedRegion, onRegionSelect }) {
 function Map({ data, selectedRegion, onRegionSelect }) {
   const [geoJsonData, setGeoJsonData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState('montant') // 'montant' or 'count'
   const byRegion = data?.aggregates?.by_region || {}
 
   // Charger le GeoJSON au montage
@@ -121,18 +128,42 @@ function Map({ data, selectedRegion, onRegionSelect }) {
       })
   }, [])
 
-  if (loading) return <div className="map-loading">Chargement de la carte...</div>
+  if (loading) return <div className="py-4 text-center">Chargement de la carte...</div>
   if (!geoJsonData) return <div className="py-4 text-center text-red-600 dark:text-red-400">Impossible de charger la carte</div>
 
   return (
     <div className="flex flex-col h-full">
+      {/* View Mode Tabs */}
+      <div className="flex gap-2 mb-3 border-b border-gray-200 dark:border-gray-800 pb-3">
+        <button
+          onClick={() => setViewMode('montant')}
+          className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+            viewMode === 'montant'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+          }`}
+        >
+          Montants
+        </button>
+        <button
+          onClick={() => setViewMode('count')}
+          className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+            viewMode === 'count'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+          }`}
+        >
+          Projets
+        </button>
+      </div>
+
       <MapContainer
         center={[46.2276, 2.2137]}
         zoom={6}
         scrollWheelZoom={false}
         style={{ height: '500px', width: '100%' }}
       >
-        <MapContent geoJsonData={geoJsonData} data={data} selectedRegion={selectedRegion} onRegionSelect={onRegionSelect} />
+        <MapContent geoJsonData={geoJsonData} data={data} selectedRegion={selectedRegion} onRegionSelect={onRegionSelect} viewMode={viewMode} />
       </MapContainer>
 
       {/* Légende */}
