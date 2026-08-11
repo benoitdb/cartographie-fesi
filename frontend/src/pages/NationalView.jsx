@@ -13,17 +13,17 @@ function NationalView() {
   if (!data) return <div className="py-8 text-center">Chargement...</div>
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-10">
       {/* Header */}
       <div className="border-b border-gray-200 dark:border-gray-800 pb-6">
-        <h2 className="text-3xl font-bold font-sans mb-2">Vue Nationale</h2>
-        <p className="text-gray-600 dark:text-gray-400">Cliquez sur une région pour voir les détails</p>
+        <h2 className="text-3xl font-bold font-sans mb-3">Vue Nationale</h2>
+        <p className="text-gray-600 dark:text-gray-400 text-sm">Cliquez sur une région pour voir les détails</p>
       </div>
 
       {/* Map + Stats Grid côte à côte */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         {/* Carte - 3 colonnes */}
-        <div className="lg:col-span-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md overflow-hidden">
+        <div className="lg:col-span-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-4">
           <Map
             data={data}
             selectedRegion={null}

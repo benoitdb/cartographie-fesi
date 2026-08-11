@@ -37,7 +37,7 @@ function RegionalView() {
   if (!data) return <div className="py-8 text-center">Chargement...</div>
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-10">
       {/* Header avec bouton retour */}
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-6">
         <div>
@@ -46,7 +46,7 @@ function RegionalView() {
         </div>
         <button
           onClick={goToNational}
-          className="px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-700 transition-all"
+          className="px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-700 transition-all text-sm"
         >
           ← Retour national
         </button>
@@ -55,7 +55,7 @@ function RegionalView() {
       {/* Map + Stats côte à côte */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         {/* Carte - 3 colonnes */}
-        <div className="lg:col-span-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md overflow-hidden">
+        <div className="lg:col-span-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-4">
           <Map
             data={data}
             selectedRegion={region}

@@ -123,10 +123,10 @@ function Map({ data, selectedRegion, onRegionSelect }) {
   }, [])
 
   if (loading) return <div className="map-loading">Chargement de la carte...</div>
-  if (!geoJsonData) return <div className="map-error">Impossible de charger la carte</div>
+  if (!geoJsonData) return <div className="py-4 text-center text-red-600 dark:text-red-400">Impossible de charger la carte</div>
 
   return (
-    <div className="map-wrapper">
+    <div className="flex flex-col h-full">
       <MapContainer
         center={[46.2276, 2.2137]}
         zoom={6}
