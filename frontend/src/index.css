@@ -1,58 +1,85 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Lato:wght@400;500;700&display=swap');
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Compatibilité avec anciennes variables CSS (transition graduée) */
 :root {
   --primary: #0066cc;
-  --secondary: #00cc66;
-  --accent: #ff6600;
-  --bg: #f5f7fa;
-  --border: #e0e6ed;
-  --text: #1a1a1a;
-  --text-light: #666;
+  --secondary: #ff6600;
+  --accent: #ff8533;
+  --bg: #f8fafc;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-light: #475569;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1a1a1a;
-    --border: #333;
-    --text: #f5f7fa;
-    --text-light: #aaa;
+    --bg: #0f172a;
+    --border: #1e293b;
+    --text: #f1f5f9;
+    --text-light: #cbd5e1;
   }
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background-color: var(--bg);
-  color: var(--text);
-  line-height: 1.5;
+@layer base {
+  body {
+    @apply font-body bg-white text-gray-900 transition-colors duration-200;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body {
+      @apply bg-gray-950 text-gray-100;
+    }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-sans font-bold;
+  }
+
+  h1 {
+    @apply text-4xl;
+  }
+
+  h2 {
+    @apply text-3xl;
+  }
+
+  h3 {
+    @apply text-2xl;
+  }
+
+  h4 {
+    @apply text-xl;
+  }
 }
 
-button {
-  cursor: pointer;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  background: var(--primary);
-  color: white;
-  font-size: 0.9rem;
-  transition: background 0.2s;
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-primary text-white rounded-lg font-medium transition-all hover:opacity-90 active:opacity-75;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-secondary text-white rounded-lg font-medium transition-all hover:opacity-90 active:opacity-75;
+  }
+
+  .card {
+    @apply bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-md p-6 transition-all;
+  }
+
+  .stat-card {
+    @apply bg-gradient-to-br from-primary to-blue-600 text-white rounded-xl p-6 shadow-lg;
+  }
 }
 
-button:hover {
-  background: var(--primary);
-  opacity: 0.9;
-}
-
+/* Styles existants à migrer progressivement */
 .loading,
 .error {
-  padding: 2rem;
-  text-align: center;
-  font-size: 1.1rem;
+  @apply p-8 text-center text-lg;
 }
 
 .error {
-  color: #cc0000;
+  @apply text-red-600 dark:text-red-400;
 }

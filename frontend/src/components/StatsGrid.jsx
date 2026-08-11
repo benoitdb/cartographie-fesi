@@ -1,38 +1,33 @@
-import '../styles/components.css'
+import { formatCurrency } from '../utils/colorScale'
 
 function StatsGrid({ aggregates }) {
   const regionStats = Object.values(aggregates.by_region || {})[0]
 
-  if (!regionStats) return <div>Pas de données</div>
+  if (!regionStats) return <div className="py-4 text-gray-500">Pas de données</div>
 
-  const formatCurrency = (value) => {
-    if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B€'
-    if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M€'
-    if (value >= 1e3) return (value / 1e3).toFixed(1) + 'k€'
-    return value.toFixed(0) + '€'
-  }
+  const stats = [
+    { label: 'Projets', value: regionStats.count, icon: '📋' },
+    { label: 'Montant UE Total', value: formatCurrency(regionStats.montant_ue_total), icon: '💶' },
+    { label: 'Montant UE Moyen', value: formatCurrency(regionStats.montant_ue_moyen), icon: '📊' },
+    { label: 'Dépenses Total', value: formatCurrency(regionStats.depenses_total), icon: '💰' },
+  ]
 
   return (
-    <div className="stats-grid">
-      <div className="stat-card">
-        <div className="stat-label">Projets</div>
-        <div className="stat-value">{regionStats.count}</div>
-      </div>
-
-      <div className="stat-card">
-        <div className="stat-label">Montant UE Total</div>
-        <div className="stat-value">{formatCurrency(regionStats.montant_ue_total)}</div>
-      </div>
-
-      <div className="stat-card">
-        <div className="stat-label">Montant UE Moyen</div>
-        <div className="stat-value">{formatCurrency(regionStats.montant_ue_moyen)}</div>
-      </div>
-
-      <div className="stat-card">
-        <div className="stat-label">Dépenses Total</div>
-        <div className="stat-value">{formatCurrency(regionStats.depenses_total)}</div>
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {stats.map((stat, idx) => (
+        <div
+          key={idx}
+          className="bg-gradient-to-br from-primary to-blue-600 dark:from-blue-700 dark:to-blue-900 text-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow"
+        >
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <div className="text-sm font-medium opacity-90 mb-1">{stat.label}</div>
+              <div className="text-2xl font-bold font-sans">{stat.value}</div>
+            </div>
+            <span className="text-2xl">{stat.icon}</span>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
