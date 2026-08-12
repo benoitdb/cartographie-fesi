@@ -136,3 +136,38 @@ fig_national_fonds.update_layout(height=200, showlegend=False)
 fig_national_fonds.update_traces(width=0.5)
 
 st.plotly_chart(fig_national_fonds, use_container_width=True)
+
+# Courbe cumulée d'engagement UE dans le temps (Volet national)
+st.subheader("Engagement UE cumulé dans le temps")
+st.caption(
+    "Basé sur la date de début de l'opération. Environ 60% des dates sont arrondies au 1ᵉʳ janvier "
+    "(date administrative/programmatique plutôt qu'une date de démarrage individuelle précise) : "
+    "la courbe présente donc des paliers plutôt qu'une progression lissée."
+)
+st.caption("Cliquer sur un fonds dans la légende pour l'isoler ou le masquer.")
+
+df_national_dates = pd.DataFrame(national_ops)[["Date de début de l'opération", "Montant UE", "Fonds"]].copy()
+df_national_dates["Date de début de l'opération"] = pd.to_datetime(df_national_dates["Date de début de l'opération"])
+df_national_dates = (
+    df_national_dates.groupby(["Fonds", "Date de début de l'opération"], as_index=False)["Montant UE"]
+    .sum()
+    .sort_values(["Fonds", "Date de début de l'opération"])
+)
+df_national_dates["cumule"] = df_national_dates.groupby("Fonds")["Montant UE"].cumsum()
+
+fig_national_cumul = px.line(
+    df_national_dates,
+    x="Date de début de l'opération",
+    y="cumule",
+    color="Fonds",
+    labels={"Date de début de l'opération": "Date", "cumule": "Montant UE cumulé (€)"},
+)
+fig_national_cumul.update_traces(line=dict(width=2))
+
+for year in range(
+    df_national_dates["Date de début de l'opération"].dt.year.min(),
+    df_national_dates["Date de début de l'opération"].dt.year.max() + 1,
+):
+    fig_national_cumul.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
+
+st.plotly_chart(fig_national_cumul, use_container_width=True)
