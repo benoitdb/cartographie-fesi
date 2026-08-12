@@ -3,6 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 from utils.data_loader import load_data
+from utils.departments import DEPT_TO_REGION, assign_departments_df, build_department_choropleth, department_coverage_summary
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.stats import (
     build_boxplot,
@@ -254,3 +255,65 @@ for year in range(
     fig_cumul.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
 
 st.plotly_chart(fig_cumul, use_container_width=True)
+
+# Détail par département (régions métropole uniquement : les régions DOM-TOM
+# correspondent chacune à un département unique, pas de découpage pertinent)
+if region in DEPT_TO_REGION.values():
+    st.subheader("Détail par département")
+
+    df_region_dept = assign_departments_df(df_region_ops)
+    coverage = department_coverage_summary(df_region_dept)
+
+    depts_region = {code for code, r in DEPT_TO_REGION.items() if r == region}
+    hors_region = df_region_dept["dept"].notna() & ~df_region_dept["dept"].isin(depts_region)
+    part_hors_region = hors_region.sum() / len(df_region_dept) if len(df_region_dept) else 0
+
+    st.caption(
+        f"Rattachement département : {coverage['opération']:.0%} via la donnée pipeline (fiable), "
+        f"{coverage['approximé']:.0%} approximé via le code postal du bénéficiaire (siège du "
+        f"bénéficiaire, pas nécessairement le lieu de réalisation du projet), "
+        f"{coverage['inconnu']:.0%} non rattaché (exclu de la carte et du tableau ci-dessous). "
+        f"{part_hors_region:.0%} des opérations pointent vers un département situé hors de {region} — "
+        "voir la section dédiée plus bas ; elles restent comptées dans les totaux de la région "
+        "(Fonds, objectifs, courbe...) puisque leur rattachement régional reste fiable, seul le "
+        "département est en cause."
+    )
+
+    st.plotly_chart(build_department_choropleth(df_region_dept, region), use_container_width=True)
+
+    df_dept_connu = df_region_dept[df_region_dept["dept"].notna() & df_region_dept["dept"].isin(depts_region)]
+    dept_table = (
+        df_dept_connu.groupby("dept")
+        .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
+        .reset_index()
+        .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
+        .sort_values("Montant UE total", ascending=False)
+    )
+    st.dataframe(
+        dept_table,
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Montant UE total": st.column_config.NumberColumn(format="%d €")},
+    )
+
+    # Opérations dont le département assigné sort du périmètre de la région
+    st.subheader("Opérations rattachées à un département hors de la région")
+    st.caption(
+        f"Ces opérations sont bien attribuées à {region} (donnée fiable), mais leur département "
+        "assigné (donnée pipeline ou approximation via le code postal du bénéficiaire) appartient à "
+        "une autre région — le plus souvent parce que le siège du bénéficiaire est situé ailleurs "
+        "que le lieu de réalisation du projet. Elles sont incluses dans tous les totaux de la région "
+        "affichés sur cette page, mais exclues de la carte et du tableau ci-dessus."
+    )
+
+    df_hors_region = df_region_dept[hors_region].copy()
+    df_hors_region["Région du département"] = df_hors_region["dept"].map(DEPT_TO_REGION)
+    st.caption(f"{len(df_hors_region)} opération(s) concernée(s).")
+    st.dataframe(
+        df_hors_region[
+            ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "dept", "Région du département", "dept_source", "Montant UE"]
+        ].rename(columns={"dept": "Département", "dept_source": "Rattachement"}).sort_values("Montant UE", ascending=False),
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Montant UE": st.column_config.NumberColumn(format="%d €")},
+    )
