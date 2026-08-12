@@ -4,6 +4,15 @@ import streamlit as st
 
 from utils.data_loader import load_data, load_geojson
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
+from utils.stats import (
+    build_boxplot,
+    build_histogram,
+    build_portfolio_scatter,
+    compute_cofinancement_table,
+    compute_stats_table,
+    detect_cofinancement_outliers,
+    detect_outliers,
+)
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)"
@@ -118,6 +127,124 @@ df_national_ops[LEVEL2] = df_national_ops[LEVEL2].fillna("Non spécifié")
 fig_hierarchy = build_hierarchy_treemap(df_national_ops, [FONDS, LEVEL1, LEVEL2])
 
 st.plotly_chart(fig_hierarchy, use_container_width=True)
+
+# Analyses statistiques
+st.subheader("Analyses statistiques")
+st.caption(
+    "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés plus haut : ils "
+    "renseignent sur la dispersion des montants, la concentration du portefeuille et la cohérence "
+    "des taux de cofinancement — des repères usuels pour l'analyse de dépense publique."
+)
+
+st.caption(
+    "Distribution des montants UE par opération, à l'échelle nationale. Ces montants sont très "
+    "asymétriques (majorité de petites opérations, quelques grands projets) : l'échelle "
+    "logarithmique rend la forme de la distribution plus lisible."
+)
+echelle_hist = st.radio("Échelle", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_hist_national")
+st.plotly_chart(
+    build_histogram(df_national_ops, log_x=echelle_hist == "Logarithmique", color_col="Fonds"),
+    use_container_width=True,
+)
+
+montant_col_config = st.column_config.NumberColumn(format="%d €")
+cv_col_config = st.column_config.NumberColumn(
+    "Coeff. de variation", help="Écart-type / médiane — dispersion relative, comparable entre groupes de tailles différentes"
+)
+concentration_col_config = st.column_config.NumberColumn(
+    "Concentration (top 10%)", format="percent", help="Part du montant total portée par les 10% de projets les plus importants du groupe"
+)
+stats_col_config = {
+    "Médiane": montant_col_config,
+    "Écart-type": montant_col_config,
+    "cv": cv_col_config,
+    "concentration_top10": concentration_col_config,
+}
+
+st.caption(
+    "La médiane et l'écart-type mesurent la dispersion des montants au sein d'un groupe. Le "
+    "coefficient de variation (écart-type / médiane) rend cette dispersion comparable entre "
+    "groupes de tailles très différentes. La concentration indique la part du montant total "
+    "portée par les 10% de projets les plus importants du groupe. Chaque boîte à moustaches "
+    "représente la médiane et l'écart interquartile (IQR) ; les points au-delà des moustaches "
+    "sont les opérations à montant atypique."
+)
+echelle_box = st.radio("Échelle des boîtes à moustaches", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_box_national")
+
+mono_region = df_national_ops["regions_modernes"].apply(lambda r: isinstance(r, list) and len(r) == 1)
+df_mono_region = df_national_ops[
+    mono_region & ~df_national_ops["is_interregional"] & ~df_national_ops["is_national"]
+].copy()
+df_mono_region["Région"] = df_mono_region["regions_modernes"].apply(lambda r: r[0])
+
+col_fonds, box_col_fonds = st.columns(2)
+with col_fonds:
+    st.markdown("**Médiane, écart-type et concentration par fonds**")
+    stats_fonds = compute_stats_table(df_national_ops, "Fonds").rename(
+        columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
+    )
+    st.dataframe(stats_fonds, hide_index=True, use_container_width=True, column_config=stats_col_config)
+with box_col_fonds:
+    st.plotly_chart(
+        build_boxplot(df_national_ops, "Fonds", log_y=echelle_box == "Logarithmique"), use_container_width=True
+    )
+
+st.markdown("**Médiane, écart-type et concentration par région**")
+stats_region = compute_stats_table(df_mono_region, "Région").rename(
+    columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
+)
+st.dataframe(stats_region, hide_index=True, use_container_width=True, column_config=stats_col_config)
+
+st.plotly_chart(
+    build_boxplot(df_mono_region, "Région", log_y=echelle_box == "Logarithmique"), use_container_width=True
+)
+
+st.markdown("**Opérations à montant atypique**")
+st.caption(
+    "Opérations dont le montant s'écarte fortement de la distribution habituelle du groupe "
+    "(méthode IQR) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
+    "correspondre à un projet structurant légitime."
+)
+outliers = detect_outliers(df_national_ops)
+st.caption(f"{len(outliers)} opération(s) hors de l'intervalle interquartile habituel.")
+st.dataframe(
+    outliers[["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Région de l'opération", "Montant UE"]].head(50),
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Montant UE": montant_col_config},
+)
+
+st.markdown("**Structure du portefeuille par région**")
+st.caption(
+    "Nombre de projets (x) vs montant UE moyen (y), taille de bulle = montant UE total : distingue "
+    "les régions portées par peu de gros projets de celles portées par de nombreux petits projets."
+)
+st.plotly_chart(build_portfolio_scatter(df_mono_region, "Région"), use_container_width=True)
+
+st.markdown("**Taux de cofinancement UE**")
+st.caption(
+    "Le taux de cofinancement est plafonné réglementairement selon le fonds et la catégorie de région "
+    "(plafonds non modélisés ici) ; un taux atypique peut signaler une opération à vérifier."
+)
+taux_col_config = st.column_config.NumberColumn(format="percent")
+cofinancement_fonds = compute_cofinancement_table(df_national_ops, "Fonds").rename(
+    columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
+)
+st.dataframe(
+    cofinancement_fonds,
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Taux moyen": taux_col_config, "Taux médian": taux_col_config},
+)
+
+cofinancement_outliers = detect_cofinancement_outliers(df_national_ops)
+st.caption(f"{len(cofinancement_outliers)} opération(s) à taux de cofinancement atypique (méthode IQR).")
+st.dataframe(
+    cofinancement_outliers[["Intitulé du projet", "Fonds", "Région de l'opération", "Taux de cofinancement"]].head(50),
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Taux de cofinancement": taux_col_config},
+)
 
 # Volet national
 st.subheader("Volet national")

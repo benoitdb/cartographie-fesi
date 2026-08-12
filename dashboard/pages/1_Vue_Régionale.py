@@ -4,6 +4,15 @@ import streamlit as st
 
 from utils.data_loader import load_data
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
+from utils.stats import (
+    build_boxplot,
+    build_histogram,
+    build_portfolio_scatter,
+    compute_cofinancement_table,
+    compute_stats_table,
+    detect_cofinancement_outliers,
+    detect_outliers,
+)
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
@@ -100,6 +109,116 @@ for col, fonds in zip(fonds_cols, fonds_presents):
         df_fonds = df_region_ops[df_region_ops[FONDS] == fonds]
         fig_fonds_detail = build_hierarchy_treemap(df_fonds, [LEVEL1, LEVEL2, LEVEL3])
         st.plotly_chart(fig_fonds_detail, use_container_width=True)
+
+# Analyses statistiques
+st.subheader("Analyses statistiques")
+st.caption(
+    "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés plus haut : ils "
+    "renseignent sur la dispersion des montants, la concentration du portefeuille et la cohérence "
+    "des taux de cofinancement — des repères usuels pour l'analyse de dépense publique."
+)
+
+st.caption(
+    f"Distribution des montants UE par opération, pour {region}. Ces montants sont très "
+    "asymétriques (majorité de petites opérations, quelques grands projets) : l'échelle "
+    "logarithmique rend la forme de la distribution plus lisible."
+)
+echelle_hist = st.radio("Échelle", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_hist_regionale")
+st.plotly_chart(
+    build_histogram(df_region_ops, log_x=echelle_hist == "Logarithmique", color_col=FONDS),
+    use_container_width=True,
+)
+
+montant_col_config = st.column_config.NumberColumn(format="%d €")
+cv_col_config = st.column_config.NumberColumn(
+    "Coeff. de variation", help="Écart-type / médiane — dispersion relative, comparable entre groupes de tailles différentes"
+)
+concentration_col_config = st.column_config.NumberColumn(
+    "Concentration (top 10%)", format="percent", help="Part du montant total portée par les 10% de projets les plus importants du groupe"
+)
+stats_col_config = {
+    "Médiane": montant_col_config,
+    "Écart-type": montant_col_config,
+    "cv": cv_col_config,
+    "concentration_top10": concentration_col_config,
+}
+
+st.caption(
+    "La médiane et l'écart-type mesurent la dispersion des montants au sein d'un groupe. Le "
+    "coefficient de variation (écart-type / médiane) rend cette dispersion comparable entre "
+    "groupes de tailles très différentes. La concentration indique la part du montant total "
+    "portée par les 10% de projets les plus importants du groupe."
+)
+
+st.markdown("**Médiane, écart-type et concentration par fonds**")
+stats_fonds_region = compute_stats_table(df_region_ops, FONDS).rename(
+    columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
+)
+st.dataframe(stats_fonds_region, hide_index=True, use_container_width=True, column_config=stats_col_config)
+
+st.markdown("**Visualisation (boîtes à moustaches)**")
+st.caption(
+    "Chaque boîte représente la médiane et l'écart interquartile (IQR) du groupe ; les points "
+    "au-delà des moustaches sont les opérations à montant atypique."
+)
+echelle_box_region = st.radio("Échelle ", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_box_regionale")
+box_col_fonds_region, box_col_objectif_region = st.columns(2)
+with box_col_fonds_region:
+    st.plotly_chart(
+        build_boxplot(df_region_ops, FONDS, log_y=echelle_box_region == "Logarithmique"), use_container_width=True
+    )
+with box_col_objectif_region:
+    st.plotly_chart(
+        build_boxplot(df_region_ops, LEVEL1, log_y=echelle_box_region == "Logarithmique"), use_container_width=True
+    )
+
+st.markdown("**Opérations à montant atypique**")
+st.caption(
+    "Opérations dont le montant s'écarte fortement de la distribution habituelle du groupe "
+    "(méthode IQR) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
+    "correspondre à un projet structurant légitime."
+)
+outliers_region = detect_outliers(df_region_ops)
+st.caption(f"{len(outliers_region)} opération(s) hors de l'intervalle interquartile habituel.")
+st.dataframe(
+    outliers_region[["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Montant UE"]].head(50),
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Montant UE": montant_col_config},
+)
+
+st.markdown("**Structure du portefeuille par type d'intervention**")
+st.caption(
+    "Nombre de projets (x) vs montant UE moyen (y), taille de bulle = montant UE total : distingue "
+    "les types d'intervention portés par peu de gros projets (souvent infrastructure) de ceux portés "
+    "par de nombreux petits projets (souvent formation, aides individuelles)."
+)
+st.plotly_chart(build_portfolio_scatter(df_region_ops, LEVEL3), use_container_width=True)
+
+st.markdown("**Taux de cofinancement UE**")
+st.caption(
+    "Le taux de cofinancement est plafonné réglementairement selon le fonds et la catégorie de région "
+    "(plafonds non modélisés ici) ; un taux atypique peut signaler une opération à vérifier."
+)
+taux_col_config = st.column_config.NumberColumn(format="percent")
+cofinancement_fonds_region = compute_cofinancement_table(df_region_ops, FONDS).rename(
+    columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
+)
+st.dataframe(
+    cofinancement_fonds_region,
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Taux moyen": taux_col_config, "Taux médian": taux_col_config},
+)
+
+cofinancement_outliers_region = detect_cofinancement_outliers(df_region_ops)
+st.caption(f"{len(cofinancement_outliers_region)} opération(s) à taux de cofinancement atypique (méthode IQR).")
+st.dataframe(
+    cofinancement_outliers_region[["Intitulé du projet", FONDS, "Taux de cofinancement"]].head(50),
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Taux de cofinancement": taux_col_config},
+)
 
 # Courbe cumulée d'engagement UE dans le temps
 st.subheader("Engagement UE cumulé dans le temps")
