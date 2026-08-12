@@ -10,8 +10,8 @@ data = load_data()
 by_region = data["aggregates"]["by_region"]
 by_region_fonds = data["aggregates"]["by_region_fonds"]
 
-# "Volet national" n'est pas une région géographique, exclu du sélecteur
-regions = sorted(r for r in by_region if r != "Volet national")
+# "Volet national" n'est pas une région géographique : listé à part, en fin de sélecteur
+regions = sorted(r for r in by_region if r != "Volet national") + ["Volet national"]
 
 region = st.selectbox("Région", regions)
 
