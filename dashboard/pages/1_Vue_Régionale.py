@@ -1,11 +1,11 @@
-import textwrap
-
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
 from utils.data_loader import load_data
+from utils.treemap import build_hierarchy_treemap
+
+FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
 
 st.set_page_config(page_title="Vue Régionale - Cartographie FESI", layout="wide")
 
@@ -52,9 +52,6 @@ fig_region_fonds.update_traces(width=0.5)
 
 st.plotly_chart(fig_region_fonds, use_container_width=True)
 
-# Objectifs : stratégique > spécifique > type d'intervention
-st.subheader("Objectifs stratégiques, spécifiques et types d'intervention")
-
 if region == "Volet national":
     region_ops = [op for op in data["operations"] if op.get("is_national")]
 else:
@@ -65,91 +62,29 @@ else:
     ]
 
 df_region_ops = pd.DataFrame(region_ops)
-df_region_ops["Objectif stratégique"] = df_region_ops["Objectif stratégique"].fillna("Non spécifié")
-df_region_ops["Objectif spécifique (Code et libellé)"] = df_region_ops["Objectif spécifique (Code et libellé)"].fillna(
-    "Non spécifié"
-)
-df_region_ops["Type d'intervention"] = df_region_ops["Type d'intervention"].fillna("Non spécifié")
+df_region_ops[LEVEL1] = df_region_ops[LEVEL1].fillna("Non spécifié")
+df_region_ops[LEVEL2] = df_region_ops[LEVEL2].fillna("Non spécifié")
+df_region_ops[LEVEL3] = df_region_ops[LEVEL3].fillna("Non spécifié")
 
-LEVEL1, LEVEL2, LEVEL3 = "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
-SEP = "|||"  # séparateur d'id peu susceptible d'apparaître dans les libellés (contrairement à "/")
+# Vue d'ensemble : fonds > objectif stratégique > objectif spécifique
+st.subheader("Fonds, objectifs stratégiques et spécifiques")
 
-
-def format_montant(x):
-    return f"{x:,.0f} €".replace(",", " ")
-
-
-def wrap_label(text, width=40):
-    return "<br>".join(textwrap.wrap(text, width=width, break_long_words=False))
-
-
-# Agrégats à chaque niveau, pour que les totaux au survol soient corrects
-# (Plotly agrège automatiquement "value", mais pas les colonnes customdata)
-agg_l1 = df_region_ops.groupby(LEVEL1).agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count")).reset_index()
-agg_l2 = (
-    df_region_ops.groupby([LEVEL1, LEVEL2])
-    .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
-    .reset_index()
-)
-agg_l3 = (
-    df_region_ops.groupby([LEVEL1, LEVEL2, LEVEL3])
-    .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
-    .reset_index()
-)
-
-ids, labels, parents, values, montants_affiches, counts, hover_labels = [], [], [], [], [], [], []
-
-for _, row in agg_l1.iterrows():
-    ids.append(row[LEVEL1])
-    labels.append(row[LEVEL1])
-    parents.append("")
-    values.append(row["montant_ue_total"])
-    montants_affiches.append(format_montant(row["montant_ue_total"]))
-    counts.append(row["count"])
-    hover_labels.append(wrap_label(row[LEVEL1]))
-
-for _, row in agg_l2.iterrows():
-    ids.append(f"{row[LEVEL1]}{SEP}{row[LEVEL2]}")
-    labels.append(row[LEVEL2])
-    parents.append(row[LEVEL1])
-    values.append(row["montant_ue_total"])
-    montants_affiches.append(format_montant(row["montant_ue_total"]))
-    counts.append(row["count"])
-    hover_labels.append(wrap_label(row[LEVEL2]))
-
-for _, row in agg_l3.iterrows():
-    parent_id = f"{row[LEVEL1]}{SEP}{row[LEVEL2]}"
-    ids.append(f"{parent_id}{SEP}{row[LEVEL3]}")
-    labels.append(row[LEVEL3])
-    parents.append(parent_id)
-    values.append(row["montant_ue_total"])
-    montants_affiches.append(format_montant(row["montant_ue_total"]))
-    counts.append(row["count"])
-    hover_labels.append(wrap_label(row[LEVEL3]))
-
-# Couleur cohérente par objectif stratégique, propagée à tous ses descendants
-palette = px.colors.qualitative.Plotly
-color_map = {cat: palette[i % len(palette)] for i, cat in enumerate(agg_l1[LEVEL1])}
-colors = [color_map[node_id.split(SEP)[0]] for node_id in ids]
-
-fig_hierarchy = go.Figure(
-    go.Treemap(
-        ids=ids,
-        labels=labels,
-        parents=parents,
-        values=values,
-        branchvalues="total",
-        marker=dict(colors=colors),
-        customdata=list(zip(montants_affiches, counts, hover_labels)),
-        texttemplate="%{label}<br>%{value:,.0f} €",
-        hovertemplate="<b>%{customdata[2]}</b><br>Montant UE : %{customdata[0]}<br>Nb projets : %{customdata[1]}<extra></extra>",
-    )
-)
-fig_hierarchy.update_layout(
-    hoverlabel=dict(align="left", font=dict(size=13, color="#1a1a1a"), bgcolor="white")
-)
+fig_hierarchy = build_hierarchy_treemap(df_region_ops, [FONDS, LEVEL1, LEVEL2])
 
 st.plotly_chart(fig_hierarchy, use_container_width=True)
+
+# Détail par fonds : objectif stratégique > spécifique > type d'intervention
+st.subheader("Détail par fonds")
+
+fonds_presents = sorted(df_region_ops[FONDS].unique())
+fonds_cols = st.columns(len(fonds_presents))
+
+for col, fonds in zip(fonds_cols, fonds_presents):
+    with col:
+        st.markdown(f"**{fonds}**")
+        df_fonds = df_region_ops[df_region_ops[FONDS] == fonds]
+        fig_fonds_detail = build_hierarchy_treemap(df_fonds, [LEVEL1, LEVEL2, LEVEL3])
+        st.plotly_chart(fig_fonds_detail, use_container_width=True)
 
 # Courbe cumulée d'engagement UE dans le temps
 st.subheader("Engagement UE cumulé dans le temps")
