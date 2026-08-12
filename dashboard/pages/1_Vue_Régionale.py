@@ -3,6 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 from utils.data_loader import load_data
+from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
@@ -13,6 +14,9 @@ data = load_data()
 by_region = data["aggregates"]["by_region"]
 by_region_fonds = data["aggregates"]["by_region_fonds"]
 
+selected_fonds = render_fonds_filter()
+filtre_actif = set(selected_fonds) != set(FONDS_OPTIONS)
+
 # "Volet national" n'est pas une région géographique : listé à part, en fin de sélecteur
 regions = sorted(r for r in by_region if r != "Volet national") + ["Volet national"]
 
@@ -20,7 +24,27 @@ region = st.selectbox("Région", regions)
 
 st.title(f"Vue Régionale - {region}")
 
-region_data = by_region[region]
+if region == "Volet national":
+    region_ops = [op for op in data["operations"] if op.get("is_national") and op.get("Fonds") in selected_fonds]
+else:
+    region_ops = [
+        op
+        for op in data["operations"]
+        if op.get("regions_modernes") == [region]
+        and not op.get("is_interregional")
+        and not op.get("is_national")
+        and op.get("Fonds") in selected_fonds
+    ]
+
+if not region_ops:
+    st.info("Aucune opération pour cette région avec les fonds sélectionnés.")
+    st.stop()
+
+if filtre_actif:
+    region_data = summarize_ops(region_ops)
+else:
+    # Fonds par défaut (tous sélectionnés) : agrégat pré-calculé du pipeline, comportement inchangé
+    region_data = by_region[region]
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Montant UE total", f"{region_data['montant_ue_total'] / 1e6:,.1f} M€".replace(",", " "))
@@ -34,7 +58,7 @@ df_region_fonds = pd.DataFrame(
     [
         {"fonds": v["fonds"], "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
         for key, v in by_region_fonds.items()
-        if v["region"] == region
+        if v["region"] == region and v["fonds"] in selected_fonds
     ]
 ).sort_values("montant_ue_total")
 
@@ -51,15 +75,6 @@ fig_region_fonds.update_layout(height=250, showlegend=False)
 fig_region_fonds.update_traces(width=0.5)
 
 st.plotly_chart(fig_region_fonds, use_container_width=True)
-
-if region == "Volet national":
-    region_ops = [op for op in data["operations"] if op.get("is_national")]
-else:
-    region_ops = [
-        op
-        for op in data["operations"]
-        if op.get("regions_modernes") == [region] and not op.get("is_interregional") and not op.get("is_national")
-    ]
 
 df_region_ops = pd.DataFrame(region_ops)
 df_region_ops[LEVEL1] = df_region_ops[LEVEL1].fillna("Non spécifié")
