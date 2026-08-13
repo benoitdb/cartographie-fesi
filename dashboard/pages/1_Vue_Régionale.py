@@ -246,13 +246,30 @@ st.dataframe(
     column_config={"Taux moyen": taux_col_config, "Taux médian": taux_col_config},
 )
 
-cofinancement_outliers_region = detect_cofinancement_outliers(df_region_ops)
+cofinancement_outliers_region = detect_cofinancement_outliers(df_region_ops).assign(
+    **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}
+)
 st.caption(f"{len(cofinancement_outliers_region)} opération(s) à taux de cofinancement atypique (méthode IQR).")
 st.dataframe(
-    cofinancement_outliers_region[["Intitulé du projet", FONDS, "Taux de cofinancement"]].head(50),
+    cofinancement_outliers_region[
+        [
+            "Intitulé du projet",
+            "Nom du bénéficiaire",
+            FONDS,
+            "Total des dépenses éligibles",
+            "Montant UE",
+            "Montant hors UE",
+            "Taux de cofinancement",
+        ]
+    ].head(50),
     hide_index=True,
     use_container_width=True,
-    column_config={"Taux de cofinancement": taux_col_config},
+    column_config={
+        "Taux de cofinancement": taux_col_config,
+        "Total des dépenses éligibles": montant_col_config,
+        "Montant UE": montant_col_config,
+        "Montant hors UE": montant_col_config,
+    },
 )
 
 # Courbe cumulée d'engagement UE dans le temps
