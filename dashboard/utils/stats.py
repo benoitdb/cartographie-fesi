@@ -10,8 +10,8 @@ from utils.plot_style import format_montant, style_hover, wrap_label
 
 def _concentration_top10(montants):
     """Part du montant total portée par les 10% de projets les plus importants du groupe
-    (indicateur classique d'audit de dépense publique pour évaluer la dépendance à quelques
-    gros projets vs. une répartition diffuse)."""
+    (mesure de concentration du portefeuille : quelques gros projets vs. une répartition
+    diffuse)."""
     montants_tries = montants.sort_values(ascending=False)
     total = montants_tries.sum()
     if not total:
@@ -201,6 +201,36 @@ def build_portfolio_scatter_comparison(df, group_col, theme_col, amount_col="Mon
     return style_hover(fig)
 
 
+def build_cumulative_curve(df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds"):
+    """Courbe d'engagement UE cumulé dans le temps, par color_col, avec repères verticaux à
+    chaque 1ᵉʳ janvier pour situer les années."""
+    plot_df = df[[date_col, amount_col, color_col]].copy()
+    plot_df[date_col] = pd.to_datetime(plot_df[date_col])
+    plot_df = (
+        plot_df.groupby([color_col, date_col], as_index=False)[amount_col]
+        .sum()
+        .sort_values([color_col, date_col])
+    )
+    plot_df["cumule"] = plot_df.groupby(color_col)[amount_col].cumsum()
+
+    fig = px.line(
+        plot_df,
+        x=date_col,
+        y="cumule",
+        color=color_col,
+        labels={date_col: "Date", "cumule": "Montant UE cumulé (€)"},
+    )
+    fig.update_traces(line=dict(width=2))
+    fig.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+        )
+    )
+    for year in range(plot_df[date_col].dt.year.min(), plot_df[date_col].dt.year.max() + 1):
+        fig.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
+    return style_hover(fig)
+
+
 def compute_cofinancement_table(df, group_col, taux_col="Taux de cofinancement"):
     """Taux de cofinancement moyen/médian par groupe, à comparer aux plafonds réglementaires
     (variables selon fonds et catégorie de région) pour repérer les écarts."""
@@ -215,3 +245,108 @@ def detect_cofinancement_outliers(df, taux_col="Taux de cofinancement"):
     iqr = q3 - q1
     borne_basse, borne_haute = q1 - 1.5 * iqr, q3 + 1.5 * iqr
     return df[(df[taux_col] < borne_basse) | (df[taux_col] > borne_haute)].sort_values(taux_col, ascending=False)
+
+
+def detect_incoherent_cofinancement(df, amount_col="Montant UE", depenses_col="Total des dépenses éligibles"):
+    """Opérations où le montant UE dépasse le total des dépenses éligibles (taux de
+    cofinancement > 100%), normalement impossible — contrôle de cohérence sur les montants
+    déclarés, à vérifier plutôt qu'une question de distribution statistique."""
+    return df[df[amount_col] > df[depenses_col]].sort_values(amount_col, ascending=False)
+
+
+def compute_top_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col="Montant UE", top_n=20):
+    """Bénéficiaires cumulant le plus de montant UE, tous projets confondus dans le
+    périmètre affiché — repère de concentration/dépendance à quelques acteurs récurrents,
+    complémentaire à la concentration par opération (compute_stats_table)."""
+    agg = df.groupby(group_col)[amount_col].agg(montant_ue_total="sum", count="count").reset_index()
+    return agg.sort_values("montant_ue_total", ascending=False).head(top_n)
+
+
+def _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_days, max_relative_diff):
+    """Pour chaque bénéficiaire ayant au moins 2 opérations, identifie celles dont le montant
+    (écart relatif ≤ max_relative_diff) et la date de début (écart ≤ max_days) sont proches d'au
+    moins une autre opération du même bénéficiaire. Retourne une liste de (bénéficiaire,
+    sous-DataFrame des opérations concernées) — brique commune aux deux tables construites par
+    detect_regroupements_beneficiaire, qui n'en diffèrent que par la taille du regroupement
+    retenue."""
+    work = df[[beneficiaire_col, "Numéro Opération", "Intitulé du projet", "Libellé Programme", date_col, amount_col]].copy()
+    work[date_col] = pd.to_datetime(work[date_col])
+
+    clusters = []
+    for beneficiaire, group in work.groupby(beneficiaire_col):
+        if len(group) < 2:
+            continue
+        records = group.to_dict("records")
+        involved_numeros = set()
+        for i in range(len(records)):
+            for j in range(i + 1, len(records)):
+                a, b = records[i], records[j]
+                m1, m2 = a[amount_col], b[amount_col]
+                if not m1 or not m2:
+                    continue
+                if abs((a[date_col] - b[date_col]).days) > max_days:
+                    continue
+                if abs(m1 - m2) / max(m1, m2) > max_relative_diff:
+                    continue
+                involved_numeros.add(a["Numéro Opération"])
+                involved_numeros.add(b["Numéro Opération"])
+
+        if len(involved_numeros) >= 2:
+            clusters.append((beneficiaire, group[group["Numéro Opération"].isin(involved_numeros)]))
+
+    return clusters
+
+
+def detect_regroupements_beneficiaire(
+    df,
+    beneficiaire_col="Nom du bénéficiaire",
+    amount_col="Montant UE",
+    date_col="Date de début de l'opération",
+    max_days=60,
+    max_relative_diff=0.15,
+    max_group_size=3,
+):
+    """Pour chaque bénéficiaire, regroupe ses opérations dont le montant et la date de début sont
+    proches d'au moins une autre opération du même bénéficiaire. Retourne deux tables à partir du
+    même calcul (évite de le refaire deux fois, coûteux sur tout le périmètre national) :
+
+    - petits_regroupements : bénéficiaires avec ≤ max_group_size opérations rapprochées (nombre
+      d'opérations, montant cumulé)
+    - grands_regroupements : au-delà de max_group_size (typiquement des programmes découpés en
+      plusieurs lots), avec en plus le coefficient de variation des montants au sein du
+      regroupement — une dispersion élevée indique des lots de taille très inégale, une
+      dispersion quasi nulle indique des lots de montant quasi identique."""
+    clusters = _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_days, max_relative_diff)
+
+    petits_rows, grands_rows = [], []
+    for beneficiaire, involved in clusters:
+        montants = involved[amount_col]
+        row = {
+            beneficiaire_col: beneficiaire,
+            "Nb opérations rapprochées": len(involved),
+            "Montant UE cumulé": montants.sum(),
+            "Première date": involved[date_col].min(),
+            "Dernière date": involved[date_col].max(),
+        }
+        if len(involved) <= max_group_size:
+            petits_rows.append(
+                {
+                    **row,
+                    "Opérations": "; ".join(involved["Intitulé du projet"]),
+                    "Programme(s)": "; ".join(sorted(set(involved["Libellé Programme"]))),
+                }
+            )
+        else:
+            moyenne = montants.mean()
+            grands_rows.append({**row, "Coeff. de variation": (montants.std() / moyenne) if moyenne else 0})
+
+    common_cols = [beneficiaire_col, "Nb opérations rapprochées", "Montant UE cumulé", "Première date", "Dernière date"]
+    petits_cols = common_cols + ["Opérations", "Programme(s)"]
+    grands_cols = common_cols[:3] + ["Coeff. de variation"] + common_cols[3:]
+
+    petits = pd.DataFrame(petits_rows, columns=petits_cols) if petits_rows else pd.DataFrame(columns=petits_cols)
+    grands = pd.DataFrame(grands_rows, columns=grands_cols) if grands_rows else pd.DataFrame(columns=grands_cols)
+    return (
+        petits.sort_values("Montant UE cumulé", ascending=False),
+        grands.sort_values("Montant UE cumulé", ascending=False),
+    )

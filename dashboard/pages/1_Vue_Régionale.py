@@ -8,12 +8,16 @@ from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.plot_style import style_hover
 from utils.stats import (
     build_boxplot,
+    build_cumulative_curve,
     build_histogram,
     build_portfolio_scatter_comparison,
     compute_cofinancement_table,
     compute_stats_table,
+    compute_top_beneficiaires,
     detect_cofinancement_outliers,
+    detect_incoherent_cofinancement,
     detect_outliers,
+    detect_regroupements_beneficiaire,
 )
 from utils.themes import OBJECTIF_STRATEGIQUE_COLORS
 from utils.treemap import build_hierarchy_treemap
@@ -108,7 +112,17 @@ fig_region_fonds.for_each_trace(
 )
 fig_region_fonds = style_hover(fig_region_fonds)
 
-st.plotly_chart(fig_region_fonds, use_container_width=True)
+fonds_col, progress_col = st.columns(2)
+with fonds_col:
+    st.plotly_chart(fig_region_fonds, use_container_width=True)
+with progress_col:
+    st.caption(
+        "Engagement UE cumulé dans le temps. Basé sur la date de début de l'opération — environ 60% "
+        "des dates sont arrondies au 1ᵉʳ janvier (date administrative plutôt qu'une date de démarrage "
+        "précise), d'où des paliers plutôt qu'une progression lissée. Cliquer sur un fonds dans la "
+        "légende pour l'isoler ou le masquer."
+    )
+    st.plotly_chart(build_cumulative_curve(pd.DataFrame(region_ops)), use_container_width=True)
 
 df_region_ops = pd.DataFrame(region_ops)
 df_region_ops[LEVEL1] = df_region_ops[LEVEL1].fillna("Non spécifié")
@@ -217,6 +231,58 @@ st.dataframe(
     column_config={"Montant UE": montant_col_config},
 )
 
+st.markdown("**Concentration par bénéficiaire**")
+st.caption(
+    "Bénéficiaires cumulant le plus de montant UE, tous projets confondus dans la région — vue "
+    "d'ensemble des acteurs les plus représentés dans le portefeuille."
+)
+top_beneficiaires_region = compute_top_beneficiaires(df_region_ops).rename(
+    columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
+)
+st.dataframe(
+    top_beneficiaires_region,
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Montant UE cumulé": montant_col_config},
+)
+
+st.markdown("**Opérations rapprochées par bénéficiaire**")
+st.caption(
+    "On regarde ici de près les opérations d'un même bénéficiaire dont le montant et la date de "
+    "démarrage sont proches."
+)
+proches_region, grands_regroupements_region = detect_regroupements_beneficiaire(df_region_ops)
+
+st.caption(
+    f"Petits regroupements (2 à 3 opérations) : {len(proches_region)} bénéficiaire(s). Les "
+    "programmes découpés en lots (nombreuses opérations très proches par construction) peuvent "
+    "malgré tout apparaître si le nombre de lots reste faible."
+)
+if len(proches_region):
+    st.dataframe(
+        proches_region.head(50),
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Montant UE cumulé": montant_col_config},
+    )
+
+st.caption(
+    f"Grands regroupements (4 opérations ou plus) : {len(grands_regroupements_region)} "
+    "bénéficiaire(s). Le coefficient de variation indique la dispersion des montants au sein du "
+    "regroupement (proche de 0 : montants quasi identiques ; élevé : montants très inégaux, ex. "
+    "plusieurs lots de tailles différentes)."
+)
+if len(grands_regroupements_region):
+    st.dataframe(
+        grands_regroupements_region.head(50),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Montant UE cumulé": montant_col_config,
+            "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
+        },
+    )
+
 st.markdown("**Structure du portefeuille par type d'intervention**")
 st.caption(
     "Chaque bulle est une combinaison type d'intervention / objectif stratégique, positionnée par "
@@ -272,46 +338,27 @@ st.dataframe(
     },
 )
 
-# Courbe cumulée d'engagement UE dans le temps
-st.subheader("Engagement UE cumulé dans le temps")
+st.markdown("**Cohérence des montants**")
 st.caption(
-    "Basé sur la date de début de l'opération. Environ 60% des dates sont arrondies au 1ᵉʳ janvier "
-    "(date administrative/programmatique plutôt qu'une date de démarrage individuelle précise) : "
-    "la courbe présente donc des paliers plutôt qu'une progression lissée."
+    "Contrôle de cohérence (pas une question de distribution) : opérations où le montant UE "
+    "dépasse le total des dépenses éligibles, ce qui correspondrait à un taux de cofinancement "
+    "supérieur à 100%, normalement impossible — à vérifier, potentiel signal de qualité de données."
 )
-
-st.caption("Cliquer sur un fonds dans la légende pour l'isoler ou le masquer.")
-
-df_dates = df_region_ops[["Date de début de l'opération", "Montant UE", "Fonds"]].copy()
-df_dates["Date de début de l'opération"] = pd.to_datetime(df_dates["Date de début de l'opération"])
-df_dates = (
-    df_dates.groupby(["Fonds", "Date de début de l'opération"], as_index=False)["Montant UE"]
-    .sum()
-    .sort_values(["Fonds", "Date de début de l'opération"])
-)
-df_dates["cumule"] = df_dates.groupby("Fonds")["Montant UE"].cumsum()
-
-fig_cumul = px.line(
-    df_dates,
-    x="Date de début de l'opération",
-    y="cumule",
-    color="Fonds",
-    labels={"Date de début de l'opération": "Date", "cumule": "Montant UE cumulé (€)"},
-)
-fig_cumul.update_traces(line=dict(width=2))
-fig_cumul.for_each_trace(
-    lambda t: t.update(
-        hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+incoherentes_region = detect_incoherent_cofinancement(df_region_ops)
+st.caption(f"{len(incoherentes_region)} opération(s) où le montant UE dépasse le total des dépenses éligibles.")
+if len(incoherentes_region):
+    st.dataframe(
+        incoherentes_region[
+            ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Total des dépenses éligibles", "Montant UE", "Taux de cofinancement"]
+        ].head(50),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Total des dépenses éligibles": montant_col_config,
+            "Montant UE": montant_col_config,
+            "Taux de cofinancement": taux_col_config,
+        },
     )
-)
-fig_cumul = style_hover(fig_cumul)
-
-for year in range(
-    df_dates["Date de début de l'opération"].dt.year.min(), df_dates["Date de début de l'opération"].dt.year.max() + 1
-):
-    fig_cumul.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
-
-st.plotly_chart(fig_cumul, use_container_width=True)
 
 # Détail par département (régions métropole uniquement : les régions DOM-TOM
 # correspondent chacune à un département unique, pas de découpage pertinent)

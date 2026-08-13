@@ -6,12 +6,16 @@ from utils.data_loader import load_data, load_geojson
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
 from utils.stats import (
     build_boxplot,
+    build_cumulative_curve,
     build_histogram,
     build_portfolio_scatter,
     compute_cofinancement_table,
     compute_stats_table,
+    compute_top_beneficiaires,
     detect_cofinancement_outliers,
+    detect_incoherent_cofinancement,
     detect_outliers,
+    detect_regroupements_beneficiaire,
 )
 from utils.plot_style import style_hover, style_map_background
 from utils.themes import OBJECTIF_STRATEGIQUE_COLORS
@@ -97,6 +101,10 @@ with domtom_col:
                     else:
                         st.caption("Aucun projet")
 
+df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
+df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
+df_national_ops[LEVEL2] = df_national_ops[LEVEL2].fillna("Non spécifié")
+
 # Répartition par fonds
 st.subheader("Répartition par fonds")
 
@@ -127,14 +135,20 @@ fig_fonds.for_each_trace(
 )
 fig_fonds = style_hover(fig_fonds)
 
-st.plotly_chart(fig_fonds, use_container_width=True)
+fonds_col, progress_col = st.columns(2)
+with fonds_col:
+    st.plotly_chart(fig_fonds, use_container_width=True)
+with progress_col:
+    st.caption(
+        "Engagement UE cumulé dans le temps. Basé sur la date de début de l'opération — environ 60% "
+        "des dates sont arrondies au 1ᵉʳ janvier (date administrative plutôt qu'une date de démarrage "
+        "précise), d'où des paliers plutôt qu'une progression lissée. Cliquer sur un fonds dans la "
+        "légende pour l'isoler ou le masquer."
+    )
+    st.plotly_chart(build_cumulative_curve(df_national_ops), use_container_width=True)
 
 # Fonds, objectifs stratégiques et spécifiques
 st.subheader("Fonds, objectifs stratégiques et spécifiques")
-
-df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
-df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
-df_national_ops[LEVEL2] = df_national_ops[LEVEL2].fillna("Non spécifié")
 
 fig_hierarchy = build_hierarchy_treemap(df_national_ops, [FONDS, LEVEL1, LEVEL2])
 
@@ -234,6 +248,58 @@ st.dataframe(
     column_config={"Montant UE": montant_col_config},
 )
 
+st.markdown("**Concentration par bénéficiaire**")
+st.caption(
+    "Bénéficiaires cumulant le plus de montant UE, tous projets confondus — vue d'ensemble des "
+    "acteurs les plus représentés dans le portefeuille."
+)
+top_beneficiaires = compute_top_beneficiaires(df_national_ops).rename(
+    columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
+)
+st.dataframe(
+    top_beneficiaires,
+    hide_index=True,
+    use_container_width=True,
+    column_config={"Montant UE cumulé": montant_col_config},
+)
+
+st.markdown("**Opérations rapprochées par bénéficiaire**")
+st.caption(
+    "On regarde ici de près les opérations d'un même bénéficiaire dont le montant et la date de "
+    "démarrage sont proches."
+)
+proches, grands_regroupements = detect_regroupements_beneficiaire(df_national_ops)
+
+st.caption(
+    f"Petits regroupements (2 à 3 opérations) : {len(proches)} bénéficiaire(s). Les programmes "
+    "découpés en lots (nombreuses opérations très proches par construction) peuvent malgré tout "
+    "apparaître si le nombre de lots reste faible."
+)
+if len(proches):
+    st.dataframe(
+        proches.head(50),
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Montant UE cumulé": montant_col_config},
+    )
+
+st.caption(
+    f"Grands regroupements (4 opérations ou plus) : {len(grands_regroupements)} bénéficiaire(s). Le "
+    "coefficient de variation indique la dispersion des montants au sein du regroupement (proche de "
+    "0 : montants quasi identiques ; élevé : montants très inégaux, ex. plusieurs lots de tailles "
+    "différentes)."
+)
+if len(grands_regroupements):
+    st.dataframe(
+        grands_regroupements.head(50),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Montant UE cumulé": montant_col_config,
+            "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
+        },
+    )
+
 st.markdown("**Structure du portefeuille par région**")
 st.caption(
     "Nombre de projets (x) vs montant UE moyen (y), taille de bulle = montant UE total : distingue "
@@ -283,6 +349,28 @@ st.dataframe(
         "Montant hors UE": montant_col_config,
     },
 )
+
+st.markdown("**Cohérence des montants**")
+st.caption(
+    "Contrôle de cohérence (pas une question de distribution) : opérations où le montant UE "
+    "dépasse le total des dépenses éligibles, ce qui correspondrait à un taux de cofinancement "
+    "supérieur à 100%, normalement impossible — à vérifier, potentiel signal de qualité de données."
+)
+incoherentes = detect_incoherent_cofinancement(df_national_ops)
+st.caption(f"{len(incoherentes)} opération(s) où le montant UE dépasse le total des dépenses éligibles.")
+if len(incoherentes):
+    st.dataframe(
+        incoherentes[
+            ["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Total des dépenses éligibles", "Montant UE", "Taux de cofinancement"]
+        ].head(50),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Total des dépenses éligibles": montant_col_config,
+            "Montant UE": montant_col_config,
+            "Taux de cofinancement": taux_col_config,
+        },
+    )
 
 # Volet national
 st.subheader("Volet national")
@@ -334,34 +422,4 @@ else:
     )
     st.caption("Cliquer sur un fonds dans la légende pour l'isoler ou le masquer.")
 
-    df_national_dates = pd.DataFrame(national_ops)[["Date de début de l'opération", "Montant UE", "Fonds"]].copy()
-    df_national_dates["Date de début de l'opération"] = pd.to_datetime(df_national_dates["Date de début de l'opération"])
-    df_national_dates = (
-        df_national_dates.groupby(["Fonds", "Date de début de l'opération"], as_index=False)["Montant UE"]
-        .sum()
-        .sort_values(["Fonds", "Date de début de l'opération"])
-    )
-    df_national_dates["cumule"] = df_national_dates.groupby("Fonds")["Montant UE"].cumsum()
-
-    fig_national_cumul = px.line(
-        df_national_dates,
-        x="Date de début de l'opération",
-        y="cumule",
-        color="Fonds",
-        labels={"Date de début de l'opération": "Date", "cumule": "Montant UE cumulé (€)"},
-    )
-    fig_national_cumul.update_traces(line=dict(width=2))
-    fig_national_cumul.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
-        )
-    )
-    fig_national_cumul = style_hover(fig_national_cumul)
-
-    for year in range(
-        df_national_dates["Date de début de l'opération"].dt.year.min(),
-        df_national_dates["Date de début de l'opération"].dt.year.max() + 1,
-    ):
-        fig_national_cumul.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
-
-    st.plotly_chart(fig_national_cumul, use_container_width=True)
+    st.plotly_chart(build_cumulative_curve(pd.DataFrame(national_ops)), use_container_width=True)
