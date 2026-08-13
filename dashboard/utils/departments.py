@@ -7,6 +7,8 @@ import json
 
 import plotly.express as px
 
+from utils.plot_style import style_hover, style_map_background
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEPARTEMENTS_GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "departements.geojson"
 
@@ -23,6 +25,33 @@ DOM_NAME_TO_CODE = {
     "La Réunion": "974",
     "Mayotte": "976",
 }
+
+# Dernier repli quand ni le champ pipeline ni le code postal du bénéficiaire ne permettent de
+# rattacher un département (typiquement la Corse : cp_to_dept renvoie None pour tout code postal
+# préfixé "20", ambigu entre 2A/2B) : mention explicite et non ambiguë d'une ville/du département
+# dans le nom du bénéficiaire. Volontairement restreint aux cas évidents (préfectures, noms de
+# département explicites) plutôt qu'une géolocalisation approximative de toutes les communes.
+NAME_KEYWORDS_TO_DEPT = {
+    "corse-du-sud": "2A",
+    "corse du sud": "2A",
+    "haute-corse": "2B",
+    "haute corse": "2B",
+    "ajaccio": "2A",
+    "bastia": "2B",
+    "porto-vecchio": "2A",
+    "porto vecchio": "2A",
+    "corte": "2B",
+}
+
+
+def _dept_from_name(nom_beneficiaire):
+    if not nom_beneficiaire or not isinstance(nom_beneficiaire, str):
+        return None
+    nom_lower = nom_beneficiaire.lower()
+    for keyword, dept in NAME_KEYWORDS_TO_DEPT.items():
+        if keyword in nom_lower:
+            return dept
+    return None
 
 DEPT_TO_REGION = {}
 _REGIONS_DEPTS = {
@@ -119,25 +148,28 @@ def assign_departments_df(df):
     return df
 
 
+DEPT_SOURCES = ("opération", "approximé", "nom du bénéficiaire", "inconnu")
+
+
 def department_coverage_summary(df):
     """Part des opérations rattachées à un département via le champ pipeline (fiable),
-    via approximation (code postal du bénéficiaire) ou non rattachées."""
+    via approximation (code postal du bénéficiaire), via déduction du nom du bénéficiaire,
+    ou non rattachées."""
     total = len(df)
     if not total:
-        return {"opération": 0, "approximé": 0, "inconnu": 0}
+        return {source: 0 for source in DEPT_SOURCES}
     counts = df["dept_source"].value_counts()
-    return {
-        source: counts.get(source, 0) / total for source in ("opération", "approximé", "inconnu")
-    }
+    return {source: counts.get(source, 0) / total for source in DEPT_SOURCES}
 
 
 def assign_departement(op):
     """Rattache une opération à un département. Priorité au champ pipeline
     "Département de l'opération" quand il désigne un département unique (fiable) ;
     à défaut (champ vide, multi-département, ou non reconnu), approxime via le code
-    postal du bénéficiaire (siège du bénéficiaire, pas nécessairement le lieu du projet).
-    Retourne (code_departement | None, source) avec source dans
-    {"opération", "approximé", "inconnu"}."""
+    postal du bénéficiaire (siège du bénéficiaire, pas nécessairement le lieu du projet) ;
+    en dernier recours, déduit du nom du bénéficiaire quand il mentionne explicitement une
+    ville/le département (cas de la Corse notamment, où le code postal seul ne permet pas de
+    distinguer 2A/2B). Retourne (code_departement | None, source) avec source dans DEPT_SOURCES."""
     codes = parse_departement_field(op.get("Département de l’opération"))
     if len(codes) == 1:
         return codes[0], "opération"
@@ -145,6 +177,10 @@ def assign_departement(op):
     dept = cp_to_dept(op.get("Code postal du bénéficiaire"))
     if dept:
         return dept, "approximé"
+
+    dept = _dept_from_name(op.get("Nom du bénéficiaire"))
+    if dept:
+        return dept, "nom du bénéficiaire"
 
     return None, "inconnu"
 
@@ -163,6 +199,8 @@ def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE
         .agg(montant_ue_total=(amount_col, "sum"), count=(amount_col, "count"))
         .reset_index()
     )
+    code_to_nom = {f["properties"]["code"]: f["properties"]["nom"] for f in features}
+    agg["nom"] = agg["dept"].map(code_to_nom).fillna(agg["dept"])
 
     fig = px.choropleth(
         agg,
@@ -171,9 +209,12 @@ def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE
         featureidkey="properties.code",
         color="montant_ue_total",
         color_continuous_scale="Blues",
-        hover_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)", "count": "Nb projets"},
+        custom_data=["nom", "count"],
+        labels={"montant_ue_total": "Montant UE (€)"},
+    )
+    fig.update_traces(
+        hovertemplate="<b>%{customdata[0]}</b><br>Montant UE : %{z:,.0f} €<br>Nb projets : %{customdata[1]}<extra></extra>"
     )
     fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-    return fig
+    return style_map_background(style_hover(fig))

@@ -5,15 +5,17 @@ import streamlit as st
 from utils.data_loader import load_data
 from utils.departments import DEPT_TO_REGION, assign_departments_df, build_department_choropleth, department_coverage_summary
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
+from utils.plot_style import style_hover
 from utils.stats import (
     build_boxplot,
     build_histogram,
-    build_portfolio_scatter,
+    build_portfolio_scatter_comparison,
     compute_cofinancement_table,
     compute_stats_table,
     detect_cofinancement_outliers,
     detect_outliers,
 )
+from utils.themes import OBJECTIF_STRATEGIQUE_COLORS
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
@@ -83,6 +85,12 @@ fig_region_fonds = px.bar(
 )
 fig_region_fonds.update_layout(height=250, showlegend=False)
 fig_region_fonds.update_traces(width=0.5)
+fig_region_fonds.for_each_trace(
+    lambda t: t.update(
+        hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{x:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
+    )
+)
+fig_region_fonds = style_hover(fig_region_fonds)
 
 st.plotly_chart(fig_region_fonds, use_container_width=True)
 
@@ -108,7 +116,9 @@ for col, fonds in zip(fonds_cols, fonds_presents):
     with col:
         st.markdown(f"**{fonds}**")
         df_fonds = df_region_ops[df_region_ops[FONDS] == fonds]
-        fig_fonds_detail = build_hierarchy_treemap(df_fonds, [LEVEL1, LEVEL2, LEVEL3])
+        fig_fonds_detail = build_hierarchy_treemap(
+            df_fonds, [LEVEL1, LEVEL2, LEVEL3], color_map=OBJECTIF_STRATEGIQUE_COLORS
+        )
         st.plotly_chart(fig_fonds_detail, use_container_width=True)
 
 # Analyses statistiques
@@ -170,7 +180,10 @@ with box_col_fonds_region:
     )
 with box_col_objectif_region:
     st.plotly_chart(
-        build_boxplot(df_region_ops, LEVEL1, log_y=echelle_box_region == "Logarithmique"), use_container_width=True
+        build_boxplot(
+            df_region_ops, LEVEL1, log_y=echelle_box_region == "Logarithmique", color_map=OBJECTIF_STRATEGIQUE_COLORS
+        ),
+        use_container_width=True,
     )
 
 st.markdown("**Opérations à montant atypique**")
@@ -190,11 +203,16 @@ st.dataframe(
 
 st.markdown("**Structure du portefeuille par type d'intervention**")
 st.caption(
-    "Nombre de projets (x) vs montant UE moyen (y), taille de bulle = montant UE total : distingue "
-    "les types d'intervention portés par peu de gros projets (souvent infrastructure) de ceux portés "
-    "par de nombreux petits projets (souvent formation, aides individuelles)."
+    "Chaque bulle est une combinaison type d'intervention / objectif stratégique, positionnée par "
+    "nombre de projets (x) et montant UE moyen ou total (y selon le graphique) — utile pour repérer "
+    "si une thématique de financement (couleur) concentre l'essentiel de la valeur sur certains "
+    "types d'intervention (souvent infrastructure) plutôt que sur de nombreux petits projets "
+    "(souvent formation, aides individuelles)."
 )
-st.plotly_chart(build_portfolio_scatter(df_region_ops, LEVEL3), use_container_width=True)
+st.plotly_chart(
+    build_portfolio_scatter_comparison(df_region_ops, LEVEL3, LEVEL1, color_map=OBJECTIF_STRATEGIQUE_COLORS),
+    use_container_width=True,
+)
 
 st.markdown("**Taux de cofinancement UE**")
 st.caption(
@@ -248,6 +266,12 @@ fig_cumul = px.line(
     labels={"Date de début de l'opération": "Date", "cumule": "Montant UE cumulé (€)"},
 )
 fig_cumul.update_traces(line=dict(width=2))
+fig_cumul.for_each_trace(
+    lambda t: t.update(
+        hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+    )
+)
+fig_cumul = style_hover(fig_cumul)
 
 for year in range(
     df_dates["Date de début de l'opération"].dt.year.min(), df_dates["Date de début de l'opération"].dt.year.max() + 1
@@ -272,12 +296,29 @@ if region in DEPT_TO_REGION.values():
         f"Rattachement département : {coverage['opération']:.0%} via la donnée pipeline (fiable), "
         f"{coverage['approximé']:.0%} approximé via le code postal du bénéficiaire (siège du "
         f"bénéficiaire, pas nécessairement le lieu de réalisation du projet), "
-        f"{coverage['inconnu']:.0%} non rattaché (exclu de la carte et du tableau ci-dessous). "
+        f"{coverage['nom du bénéficiaire']:.0%} déduit du nom du bénéficiaire (mention explicite "
+        f"d'une ville ou du département), {coverage['inconnu']:.0%} non rattaché (absent de la "
+        "carte, faute de département identifié, mais comptabilisé dans le tableau ci-dessous). "
         f"{part_hors_region:.0%} des opérations pointent vers un département situé hors de {region} — "
         "voir la section dédiée plus bas ; elles restent comptées dans les totaux de la région "
         "(Fonds, objectifs, courbe...) puisque leur rattachement régional reste fiable, seul le "
         "département est en cause."
     )
+    if region == "Corse":
+        st.caption(
+            "⚠️ Point de vigilance spécifique à la Corse : l'approximation par code postal du "
+            "bénéficiaire ne s'applique pas ici (un code postal débutant par 20 ne permet pas de "
+            "distinguer 2A/2B), d'où un recours plus fréquent à la déduction par nom du bénéficiaire "
+            "et une part de données non rattachées plus élevée que dans les autres régions."
+        )
+
+    non_reparti = df_region_dept[df_region_dept["dept"].isna()]
+    non_reparti_montant = non_reparti["Montant UE"].sum()
+    non_reparti_count = len(non_reparti)
+    if non_reparti_count:
+        kpi_col1, kpi_col2 = st.columns(2)
+        kpi_col1.metric("Montant non rattaché à un département", f"{non_reparti_montant / 1e6:,.2f} M€".replace(",", " "))
+        kpi_col2.metric("Opérations non rattachées", f"{non_reparti_count}")
 
     st.plotly_chart(build_department_choropleth(df_region_dept, region), use_container_width=True)
 
@@ -289,6 +330,16 @@ if region in DEPT_TO_REGION.values():
         .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
         .sort_values("Montant UE total", ascending=False)
     )
+    if non_reparti_count:
+        dept_table = pd.concat(
+            [
+                dept_table,
+                pd.DataFrame(
+                    [{"Département": "Non réparti (région entière)", "Montant UE total": non_reparti_montant, "Nb projets": non_reparti_count}]
+                ),
+            ],
+            ignore_index=True,
+        )
     st.dataframe(
         dept_table,
         hide_index=True,
