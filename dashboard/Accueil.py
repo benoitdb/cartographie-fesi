@@ -13,6 +13,8 @@ from utils.stats import (
     detect_cofinancement_outliers,
     detect_outliers,
 )
+from utils.plot_style import style_hover, style_map_background
+from utils.themes import OBJECTIF_STRATEGIQUE_COLORS
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)"
@@ -68,11 +70,15 @@ with map_col:
         featureidkey="properties.nom",
         color="montant_ue_total",
         color_continuous_scale="Blues",
-        hover_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)", "count": "Nb projets"},
+        custom_data=["count"],
+        labels={"montant_ue_total": "Montant UE (€)"},
+    )
+    fig.update_traces(
+        hovertemplate="<b>%{location}</b><br>Montant UE : %{z:,.0f} €<br>Nb projets : %{customdata[0]}<extra></extra>"
     )
     fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+    fig = style_map_background(style_hover(fig))
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -114,6 +120,12 @@ fig_fonds = px.bar(
 )
 fig_fonds.update_layout(height=250, showlegend=False)
 fig_fonds.update_traces(width=0.5)
+fig_fonds.for_each_trace(
+    lambda t: t.update(
+        hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{x:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
+    )
+)
+fig_fonds = style_hover(fig_fonds)
 
 st.plotly_chart(fig_fonds, use_container_width=True)
 
@@ -188,6 +200,14 @@ with box_col_fonds:
     st.plotly_chart(
         build_boxplot(df_national_ops, "Fonds", log_y=echelle_box == "Logarithmique"), use_container_width=True
     )
+
+st.markdown("**Distribution par objectif stratégique**")
+st.plotly_chart(
+    build_boxplot(
+        df_national_ops, LEVEL1, log_y=echelle_box == "Logarithmique", color_map=OBJECTIF_STRATEGIQUE_COLORS
+    ),
+    use_container_width=True,
+)
 
 st.markdown("**Médiane, écart-type et concentration par région**")
 stats_region = compute_stats_table(df_mono_region, "Région").rename(
@@ -278,6 +298,12 @@ else:
     )
     fig_national_fonds.update_layout(height=200, showlegend=False)
     fig_national_fonds.update_traces(width=0.5)
+    fig_national_fonds.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{x:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
+        )
+    )
+    fig_national_fonds = style_hover(fig_national_fonds)
 
     st.plotly_chart(fig_national_fonds, use_container_width=True)
 
@@ -307,6 +333,12 @@ else:
         labels={"Date de début de l'opération": "Date", "cumule": "Montant UE cumulé (€)"},
     )
     fig_national_cumul.update_traces(line=dict(width=2))
+    fig_national_cumul.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+        )
+    )
+    fig_national_cumul = style_hover(fig_national_cumul)
 
     for year in range(
         df_national_dates["Date de début de l'opération"].dt.year.min(),

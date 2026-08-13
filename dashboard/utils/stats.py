@@ -2,6 +2,10 @@ import math
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+from utils.plot_style import format_montant, style_hover, wrap_label
 
 
 def _concentration_top10(montants):
@@ -71,25 +75,35 @@ def build_histogram(df, amount_col="Montant UE", nbins=50, log_x=False, color_co
             ticktext=[f"{10**v:,.0f} €".replace(",", " ") for v in tickvals],
         )
     fig.update_layout(yaxis_title="Nombre d'opérations", bargap=0.05)
-    return fig
+    fig.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=f"<b>{wrap_label(t.name) if t.name else 'Opérations'}</b><br>Nb opérations : %{{y:,.0f}}<extra></extra>"
+        )
+    )
+    return style_hover(fig)
 
 
-def build_boxplot(df, group_col, amount_col="Montant UE", log_y=False):
+def build_boxplot(df, group_col, amount_col="Montant UE", log_y=False, color_map=None):
     """Box plot (médiane, quartiles/IQR, outliers) des montants par groupe — visualisation
     directe de ce que présente compute_stats_table. Échelle log recommandée vu l'asymétrie
-    des montants (sinon les boîtes des groupes à petits montants sont écrasées par les outliers)."""
+    des montants (sinon les boîtes des groupes à petits montants sont écrasées par les outliers).
+    color_map (optionnel) fixe la couleur par catégorie plutôt que la palette par défaut."""
     fig = px.box(
         df,
         x=group_col,
         y=amount_col,
         color=group_col,
+        color_discrete_map=color_map,
         points="outliers",
         labels={amount_col: "Montant UE (€)"},
     )
     fig.update_layout(showlegend=False)
     if log_y:
         fig.update_yaxes(type="log")
-    return fig
+    fig.for_each_trace(
+        lambda t: t.update(hovertemplate=f"<b>{wrap_label(t.name)}</b><br>Montant UE : %{{y:,.0f}} €<extra></extra>")
+    )
+    return style_hover(fig)
 
 
 def build_portfolio_scatter(df, group_col, amount_col="Montant UE"):
@@ -107,7 +121,84 @@ def build_portfolio_scatter(df, group_col, amount_col="Montant UE"):
         labels={"count": "Nombre de projets", "montant_moyen": "Montant UE moyen (€)", "montant_total": "Montant UE total (€)"},
     )
     fig.update_layout(showlegend=False)
-    return fig
+    fig.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=(
+                f"<b>{wrap_label(t.name)}</b><br>Nombre de projets : %{{x}}<br>"
+                "Montant UE moyen : %{y:,.0f} €<br>Montant UE total : %{marker.size:,.0f} €<extra></extra>"
+            )
+        )
+    )
+    return style_hover(fig)
+
+
+def build_portfolio_scatter_comparison(df, group_col, theme_col, amount_col="Montant UE", color_map=None):
+    """Deux scatterplots (montant UE moyen | montant UE total) côte à côte dans une seule figure,
+    avec une légende unique horizontale en bas (les deux graphiques partagent la même dimension
+    couleur). Chaque bulle est une combinaison (group_col, theme_col), dimensionnée par montant UE
+    total, colorée par theme_col (objectif stratégique) — pour repérer si une thématique concentre
+    l'essentiel de la valeur sur certains groupes."""
+    agg = df.groupby([group_col, theme_col])[amount_col].agg(count="count", montant_moyen="mean", montant_total="sum").reset_index()
+    themes = sorted(agg[theme_col].unique())
+    max_total = agg["montant_total"].max()
+    sizeref = 2.0 * max_total / (40.0**2) if max_total else 1.0
+
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("Montant UE moyen", "Montant UE total"))
+    for theme in themes:
+        sub = agg[agg[theme_col] == theme]
+        marker = dict(
+            size=sub["montant_total"],
+            sizemode="area",
+            sizeref=sizeref,
+            sizemin=4,
+            color=(color_map or {}).get(theme),
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=sub["count"],
+                y=sub["montant_moyen"],
+                mode="markers",
+                marker=marker,
+                name=theme,
+                legendgroup=theme,
+                showlegend=True,
+                text=sub[group_col].apply(wrap_label),
+                hovertemplate=(
+                    f"<b>%{{text}}</b><br>{wrap_label(theme)}<br>"
+                    "Nb projets : %{x}<br>Montant UE moyen : %{y:,.0f} €<extra></extra>"
+                ),
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=sub["count"],
+                y=sub["montant_total"],
+                mode="markers",
+                marker=marker,
+                name=theme,
+                legendgroup=theme,
+                showlegend=False,
+                text=sub[group_col].apply(wrap_label),
+                hovertemplate=(
+                    f"<b>%{{text}}</b><br>{wrap_label(theme)}<br>"
+                    "Nb projets : %{x}<br>Montant UE total : %{y:,.0f} €<extra></extra>"
+                ),
+            ),
+            row=1,
+            col=2,
+        )
+
+    fig.update_xaxes(title_text="Nombre de projets", row=1, col=1)
+    fig.update_xaxes(title_text="Nombre de projets", row=1, col=2)
+    fig.update_yaxes(title_text="Montant UE moyen (€)", row=1, col=1)
+    fig.update_yaxes(title_text="Montant UE total (€)", row=1, col=2)
+    fig.update_layout(
+        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title_text=theme_col),
+        margin=dict(b=100),
+    )
+    return style_hover(fig)
 
 
 def compute_cofinancement_table(df, group_col, taux_col="Taux de cofinancement"):

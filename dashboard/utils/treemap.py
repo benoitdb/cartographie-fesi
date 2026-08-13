@@ -1,23 +1,17 @@
-import textwrap
-
 import plotly.express as px
 import plotly.graph_objects as go
+
+from utils.plot_style import format_montant, style_hover, wrap_label
 
 SEP = "|||"  # séparateur d'id peu susceptible d'apparaître dans les libellés (contrairement à "/")
 
 
-def format_montant(x):
-    return f"{x:,.0f} €".replace(",", " ")
-
-
-def wrap_label(text, width=40):
-    return "<br>".join(textwrap.wrap(text, width=width, break_long_words=False))
-
-
-def build_hierarchy_treemap(df, level_cols, amount_col="Montant UE"):
+def build_hierarchy_treemap(df, level_cols, amount_col="Montant UE", color_map=None):
     """Treemap N niveaux avec agrégats explicites à chaque niveau (nécessaire pour
     un hover correct sur les nœuds parents, que px.treemap ne calcule pas nativement).
     Couleur attribuée par catégorie du niveau racine (level_cols[0]), propagée aux descendants.
+    Si color_map est fourni, ces couleurs priment (catégories absentes du mapping : palette
+    de repli) — pour une identité visuelle fixe (ex. thèmes des objectifs stratégiques).
     """
     ids, labels, parents, values, montants_affiches, counts, hover_labels = [], [], [], [], [], [], []
 
@@ -38,8 +32,9 @@ def build_hierarchy_treemap(df, level_cols, amount_col="Montant UE"):
 
     top_level_values = df[level_cols[0]].unique()
     palette = px.colors.qualitative.Plotly
-    color_map = {cat: palette[i % len(palette)] for i, cat in enumerate(top_level_values)}
-    colors = [color_map[node_id.split(SEP)[0]] for node_id in ids]
+    fallback_map = {cat: palette[i % len(palette)] for i, cat in enumerate(top_level_values)}
+    resolved_map = {cat: (color_map or {}).get(cat, fallback_map[cat]) for cat in top_level_values}
+    colors = [resolved_map[node_id.split(SEP)[0]] for node_id in ids]
 
     fig = go.Figure(
         go.Treemap(
@@ -54,5 +49,4 @@ def build_hierarchy_treemap(df, level_cols, amount_col="Montant UE"):
             hovertemplate="<b>%{customdata[2]}</b><br>Montant UE : %{customdata[0]}<br>Nb projets : %{customdata[1]}<extra></extra>",
         )
     )
-    fig.update_layout(hoverlabel=dict(align="left", font=dict(size=13, color="#1a1a1a"), bgcolor="white"))
-    return fig
+    return style_hover(fig)
