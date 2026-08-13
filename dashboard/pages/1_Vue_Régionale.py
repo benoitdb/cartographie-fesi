@@ -54,6 +54,10 @@ if not region_ops:
 
 if filtre_actif:
     region_data = summarize_ops(region_ops)
+elif region == "Volet national":
+    # "Volet national" n'est pas une clé de by_region (ce n'est pas une région géographique) :
+    # agrégat national pré-calculé dédié.
+    region_data = data["aggregates"]["national"]
 else:
     # Fonds par défaut (tous sélectionnés) : agrégat pré-calculé du pipeline, comportement inchangé
     region_data = by_region[region]
@@ -66,13 +70,25 @@ col3.metric("Montant UE moyen", f"{region_data['montant_ue_moyen'] / 1e3:,.0f} k
 # Répartition par fonds
 st.subheader("Répartition par fonds")
 
-df_region_fonds = pd.DataFrame(
-    [
-        {"fonds": v["fonds"], "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
-        for key, v in by_region_fonds.items()
-        if v["region"] == region and v["fonds"] in selected_fonds
-    ]
-).sort_values("montant_ue_total")
+if region == "Volet national":
+    # "Volet national" absent de l'agrégat pré-calculé by_region_fonds (pas une région
+    # géographique) : recalculé depuis region_ops, déjà filtré plus haut.
+    df_region_fonds = (
+        pd.DataFrame(region_ops)
+        .groupby("Fonds")
+        .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
+        .reset_index()
+        .rename(columns={"Fonds": "fonds"})
+        .sort_values("montant_ue_total")
+    )
+else:
+    df_region_fonds = pd.DataFrame(
+        [
+            {"fonds": v["fonds"], "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
+            for key, v in by_region_fonds.items()
+            if v["region"] == region and v["fonds"] in selected_fonds
+        ]
+    ).sort_values("montant_ue_total")
 
 fig_region_fonds = px.bar(
     df_region_fonds,

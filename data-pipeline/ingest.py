@@ -2,7 +2,7 @@ import pandas as pd
 import json
 from pathlib import Path
 from datetime import datetime
-from region_mapping import harmonize_region
+from region_mapping import harmonize_region, get_unresolved, reset_unresolved
 
 # Chemins
 XLSX_PATH = Path(__file__).parent.parent / "data" / "raw" / "20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx"
@@ -55,6 +55,7 @@ for col in df.columns:
 
 # Harmoniser les régions avec la fonction de mapping
 print("🌍 Harmonisation des régions (pré-2016 → modernes)...")
+reset_unresolved()
 def apply_harmonize(row):
     regions_modernes, is_interregional, is_national = harmonize_region(
         row[COLS['region']],
@@ -69,6 +70,15 @@ def apply_harmonize(row):
 
 harmonization = df.apply(apply_harmonize, axis=1)
 df = pd.concat([df, harmonization], axis=1)
+
+unresolved = get_unresolved()
+if unresolved:
+    from collections import Counter
+    print(f"⚠️  {len(unresolved)} fragment(s) région non résolu(s) par code ni par nom (repli sur le nom brut) :")
+    for fragment, count in Counter(unresolved).most_common():
+        print(f"     - {fragment!r} (x{count})")
+else:
+    print("✅ Tous les fragments région résolus (code ou nom reconnu).")
 
 # Préparer les données pour JSON
 def prepare_for_json(df):

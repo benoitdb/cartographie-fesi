@@ -2,15 +2,38 @@
 Harmonisation des régions : mapping pré-2016 → modernes (loi NOTRE).
 
 Tables de référence pour normaliser les valeurs hétérogènes du fichier source :
-- codes INSEE régions anciennes → noms modernes
+- codes INSEE régions anciennes → noms modernes (uniquement les codes confirmés
+  contre les données réelles — voir OLD_NAME_TO_MODERN pour le filet de sécurité)
+- noms d'anciennes régions → noms modernes (filet de sécurité par nom : le champ
+  source associe toujours un nom à son code, "CODE/Nom", donc un code jamais vu
+  jusqu'ici reste résolu correctement via son nom)
 - libellés mal orthographiés → formes canoniques
 - programmes régionaux → région unique (fallback quand région manquante)
+
+Le fichier source provient à chaque export du même système national et présente
+des particularités récurrentes (codes anciens ET modernes mélangés, libellés à
+variantes, valeur sentinelle "Volet national" au lieu d'un champ vide) : la
+fonction harmonize_region est conçue pour rester correcte même face à un code
+jamais rencontré, et pour signaler explicitement (via UNRESOLVED_FRAGMENTS) tout
+fragment qu'elle n'a pas pu résoudre, plutôt que de le laisser passer en silence.
 """
 
-# Code INSEE région (pré-2016) → nom région moderne (post-2016)
-# Couvre la totalité de la fusion officielle pour rester robuste aux futures publications
+# Régions modernes valides (13 métropole + DOM + Saint-Martin) — sert à repérer les
+# fragments bruts déjà "modernes" et à valider les résolutions par nom.
+MODERN_REGIONS = {
+    'Auvergne-Rhône-Alpes', 'Bourgogne-Franche-Comté', 'Bretagne', 'Centre-Val de Loire', 'Corse',
+    'Grand Est', 'Hauts-de-France', 'Île-de-France', 'Normandie', 'Nouvelle-Aquitaine', 'Occitanie',
+    'Pays de la Loire', 'Provence-Alpes-Côte d\'Azur',
+    'Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte', 'Saint-Martin',
+}
+
+# Code INSEE région (pré ou post-2016, format "CODE/Nom" du champ source) → nom région
+# moderne. Volontairement restreint aux codes confirmés en croisant ce dictionnaire
+# avec l'intégralité des valeurs réellement présentes dans le fichier source (aucune
+# entrée "au cas où" non vérifiable) — les codes 06 excepté (Mayotte, DOM absent des
+# données actuelles mais suit la même série que 01-04, confirmés).
 OLD_TO_MODERN = {
-    # DOM inchangés
+    # DOM
     '01': 'Guadeloupe',
     '02': 'Martinique',
     '03': 'Guyane',
@@ -18,36 +41,67 @@ OLD_TO_MODERN = {
     '06': 'Mayotte',
 
     # Métropole
-    '11': 'Île-de-France',                      # inchangé
-    '24': 'Centre-Val de Loire',                # inchangé
-    '28': 'Normandie',                          # ex-25 Basse-Normandie
-    '25': 'Normandie',                          # ex-Basse-Normandie
-    '23': 'Normandie',                          # ex-Haute-Normandie
-    '53': 'Bretagne',                           # inchangé
-    '52': 'Pays de la Loire',                   # inchangé
-    '72': 'Nouvelle-Aquitaine',                 # ex-Poitou-Charentes
-    '54': 'Nouvelle-Aquitaine',                 # ex-Limousin
-    '75': 'Nouvelle-Aquitaine',                 # ex-Aquitaine
-    '74': 'Nouvelle-Aquitaine',                 # ex-variante Aquitaine
-    '26': 'Bourgogne-Franche-Comté',            # ex-Bourgogne
-    '27': 'Bourgogne-Franche-Comté',            # ex-moderne Bourgogne-Franche-Comté
-    '43': 'Bourgogne-Franche-Comté',            # ex-Franche-Comté
-    '21': 'Grand Est',                          # ex-Champagne-Ardenne
-    '22': 'Hauts-de-France',                    # ex-Picardie
-    '23': 'Hauts-de-France',                    # ex-Haute-Normandie (aussi dans Normandie — voir logique)
-    '31': 'Hauts-de-France',                    # ex-Nord-Pas-de-Calais
-    '32': 'Hauts-de-France',                    # ex-moderne Hauts-de-France
-    '41': 'Grand Est',                          # ex-Lorraine
-    '42': 'Grand Est',                          # ex-Alsace
-    '44': 'Grand Est',                          # ex-moderne Grand Est
-    '73': 'Occitanie',                          # ex-Midi-Pyrénées
-    '76': 'Occitanie',                          # ex-Languedoc-Roussillon
-    '91': 'Occitanie',                          # ex-variante
-    '82': 'Auvergne-Rhône-Alpes',               # ex-Rhône-Alpes
-    '83': 'Auvergne-Rhône-Alpes',               # ex-Auvergne
-    '84': 'Auvergne-Rhône-Alpes',               # ex-moderne Auvergne-Rhône-Alpes
-    '93': 'Provence-Alpes-Côte d\'Azur',        # inchangé
-    '94': 'Corse',                              # inchangé
+    '11': 'Île-de-France',
+    '21': 'Grand Est',                    # ex-Champagne-Ardenne
+    '22': 'Hauts-de-France',              # ex-Picardie
+    '24': 'Centre-Val de Loire',
+    '26': 'Bourgogne-Franche-Comté',      # ex-Bourgogne
+    '27': 'Bourgogne-Franche-Comté',
+    '28': 'Normandie',
+    '31': 'Hauts-de-France',              # ex-Nord-Pas-de-Calais
+    '32': 'Hauts-de-France',
+    '41': 'Grand Est',                    # ex-Lorraine
+    '42': 'Grand Est',                    # ex-Alsace
+    '43': 'Bourgogne-Franche-Comté',      # ex-Franche-Comté
+    '44': 'Grand Est',
+    '52': 'Pays de la Loire',
+    '53': 'Bretagne',
+    '73': 'Occitanie',                    # ex-Midi-Pyrénées
+    '76': 'Occitanie',
+    '82': 'Auvergne-Rhône-Alpes',         # ex-Rhône-Alpes
+    '83': 'Auvergne-Rhône-Alpes',         # ex-Auvergne
+    '84': 'Auvergne-Rhône-Alpes',
+    '93': 'Provence-Alpes-Côte d\'Azur',
+    '94': 'Corse',
+}
+
+# Filet de sécurité par nom : noms d'anciennes régions (réforme territoriale de 2016,
+# fait public bien établi) → région moderne, plus une identité pour les régions
+# inchangées. Utilisé quand le code du fragment "CODE/Nom" n'est pas (ou pas encore)
+# dans OLD_TO_MODERN — le nom associé au code dans la donnée source permet de
+# résoudre correctement sans dépendre d'un code jamais vérifié.
+OLD_NAME_TO_MODERN = {
+    'Alsace': 'Grand Est',
+    'Champagne-Ardenne': 'Grand Est',
+    'Lorraine': 'Grand Est',
+    'Aquitaine': 'Nouvelle-Aquitaine',
+    'Limousin': 'Nouvelle-Aquitaine',
+    'Poitou-Charentes': 'Nouvelle-Aquitaine',
+    'Bourgogne': 'Bourgogne-Franche-Comté',
+    'Franche-Comté': 'Bourgogne-Franche-Comté',
+    'Basse-Normandie': 'Normandie',
+    'Haute-Normandie': 'Normandie',
+    'Languedoc-Roussillon': 'Occitanie',
+    'Midi-Pyrénées': 'Occitanie',
+    'Nord-Pas-de-Calais': 'Hauts-de-France',
+    'Picardie': 'Hauts-de-France',
+    'Auvergne': 'Auvergne-Rhône-Alpes',
+    'Rhône-Alpes': 'Auvergne-Rhône-Alpes',
+    # Régions inchangées par la réforme (identité, pour homogénéiser la résolution par nom)
+    'Bretagne': 'Bretagne',
+    'Centre': 'Centre-Val de Loire',
+    'Centre-Val de Loire': 'Centre-Val de Loire',
+    'Corse': 'Corse',
+    'Île-de-France': 'Île-de-France',
+    'Ile-de-France': 'Île-de-France',
+    'Pays de la Loire': 'Pays de la Loire',
+    'Provence-Alpes-Côte d\'Azur': 'Provence-Alpes-Côte d\'Azur',
+    'Guadeloupe': 'Guadeloupe',
+    'Martinique': 'Martinique',
+    'Guyane': 'Guyane',
+    'Réunion': 'La Réunion',
+    'La Réunion': 'La Réunion',
+    'Mayotte': 'Mayotte',
 }
 
 # Libellés déjà "modernes" mais mal orthographiés → forme canonique (pour GeoJSON matching)
@@ -56,6 +110,10 @@ NORMALIZE_BARE = {
     'Provence - Alpes - Côte d\'azur': 'Provence-Alpes-Côte d\'Azur',
     'Provence-Alpes-Cote d\'Azur': 'Provence-Alpes-Côte d\'Azur',
 }
+
+# Valeur sentinelle observée dans le champ source à la place d'un champ vide : à traiter
+# comme "pas de région" (national), pas comme un nom de région à part entière.
+VOLET_NATIONAL_LABEL = 'volet national'
 
 # Programmes régionaux : libellé exact → région unique
 # Vérifié exhaustif vs. les 21 programmes réellement présents
@@ -81,6 +139,32 @@ PROGRAMME_TO_REGION = {
     'Programme Saint Martin FEDER 2021-2027': 'Saint-Martin',
     # Programmes nationaux sont volontairement absents — pas de fallback région unique
 }
+
+# Fragments bruts que ni le code, ni le nom, ni la normalisation n'ont su résoudre avec
+# certitude (résolus quand même via le nom brut, en dernier recours, pour ne pas faire
+# planter le pipeline) — à examiner après chaque ingestion : reset_unresolved() puis
+# get_unresolved() une fois le pipeline passé sur tout le fichier.
+UNRESOLVED_FRAGMENTS = []
+
+
+def reset_unresolved():
+    UNRESOLVED_FRAGMENTS.clear()
+
+
+def get_unresolved():
+    return list(UNRESOLVED_FRAGMENTS)
+
+
+def _resolve_named_fragment(code, name):
+    """Résout un fragment "CODE/Nom" : priorité au code (rapide, vérifié), repli sur le
+    nom (toujours fiable, fait public) si le code est inconnu. Retourne (region, résolu)."""
+    region = OLD_TO_MODERN.get(code)
+    if region:
+        return region, True
+    region = OLD_NAME_TO_MODERN.get(name)
+    if region:
+        return region, True
+    return name, False
 
 
 def harmonize_region(raw_region, libelle_programme):
@@ -115,22 +199,40 @@ def harmonize_region(raw_region, libelle_programme):
     fragments = [f for f in fragments if f]  # retirer les fragments vides
 
     regions_modernes = set()
+    had_volet_national = False
 
     for fragment in fragments:
+        if fragment.lower() == VOLET_NATIONAL_LABEL:
+            # Valeur sentinelle : pas une région, traité après la boucle
+            had_volet_national = True
+            continue
+
         if '/' in fragment:
-            # Format "CODE/Nom" → extraire le code et mapper
+            # Format "CODE/Nom" → extraire le code, résoudre (code puis nom)
             code, name = fragment.split('/', 1)
             code = code.strip()
-            region = OLD_TO_MODERN.get(code)
-            if region:
-                regions_modernes.add(region)
-            else:
-                # Code inconnu, garder le nom brut (fallback gracieux)
-                regions_modernes.add(name.strip())
+            name = name.strip()
+            region, resolved = _resolve_named_fragment(code, name)
+            if not resolved:
+                UNRESOLVED_FRAGMENTS.append(fragment)
+            regions_modernes.add(region)
         else:
             # Format bare "Nom" → normaliser orthographe
             normalized = NORMALIZE_BARE.get(fragment, fragment)
+            if normalized not in MODERN_REGIONS:
+                # Nom bare non reconnu : tenter la résolution par ancien nom, sinon signaler
+                resolved_name = OLD_NAME_TO_MODERN.get(normalized)
+                if resolved_name:
+                    normalized = resolved_name
+                else:
+                    UNRESOLVED_FRAGMENTS.append(fragment)
             regions_modernes.add(normalized)
+
+    # Une opération dont tous les fragments sont "Volet national" est nationale, pas
+    # régionale ; combinée à de vraies régions (cas non observé à ce jour mais possible),
+    # on garde les régions et on ignore juste la mention "Volet national".
+    if had_volet_national and not regions_modernes:
+        return ([], False, True)
 
     regions_modernes = sorted(regions_modernes)
 
