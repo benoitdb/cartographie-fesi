@@ -1,0 +1,86 @@
+{
+  "Île-de-France": {
+    "FEDER": 183944856,
+    "FSE+": 245106248
+  },
+  "national": {
+    "FTJ": 308985780,
+    "FSE+": 4589233748
+  },
+  "Provence-Alpes-Côte d'Azur": {
+    "FEDER": 351275069,
+    "FSE+": 138920526,
+    "FTJ": 147798198
+  },
+  "La Réunion": {
+    "FEDER": 1236356560,
+    "FSE+": 173350261
+  },
+  "Pays de la Loire": {
+    "FEDER": 301215318,
+    "FSE+": 64532857,
+    "FTJ": 48304777
+  },
+  "Occitanie": {
+    "FEDER": 666057162,
+    "FSE+": 163629196
+  },
+  "Nouvelle-Aquitaine": {
+    "FEDER": 735539606,
+    "FSE+": 140130727
+  },
+  "Normandie": {
+    "FEDER": 401531295,
+    "FSE+": 88505825,
+    "FTJ": 106703089
+  },
+  "Martinique": {
+    "FEDER": 481751471,
+    "FSE+": 118846552
+  },
+  "Hauts-de-France": {
+    "FEDER": 897423853,
+    "FSE+": 232447433,
+    "FTJ": 227825515
+  },
+  "Centre-Val de Loire": {
+    "FEDER": 309088386,
+    "FSE+": 103277468
+  },
+  "Guyane": {
+    "FEDER": 410494589,
+    "FSE+": 82716168
+  },
+  "Guadeloupe": {
+    "FEDER": 558748176,
+    "FSE+": 79508817
+  },
+  "Grand Est": {
+    "FEDER": 631482796,
+    "FSE+": 155217122,
+    "FTJ": 112470824
+  },
+  "Corse": {
+    "FEDER": 105147777,
+    "FSE+": 12668842
+  },
+  "Bretagne": {
+    "FEDER": 332934921,
+    "FSE+": 59955955
+  },
+  "Bourgogne-Franche-Comté": {
+    "FEDER": 401454687,
+    "FSE+": 83571311
+  },
+  "Auvergne-Rhône-Alpes": {
+    "FEDER": 659900049,
+    "FSE+": 143089602,
+    "FTJ": 77864416
+  },
+  "Saint-Martin": {
+    "FEDER": 58837100
+  },
+  "Mayotte": {
+    "FEDER": 347202540
+  }
+}

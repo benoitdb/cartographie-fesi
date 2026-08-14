@@ -5,7 +5,8 @@
     "population_year": "2023",
     "superficie_km2": 69711.0,
     "chef_lieu": "Lyon",
-    "categorie_ue": "mixte (Rhône-Alpes : plus développée / Auvergne : en transition)"
+    "categorie_ue": "Mixte : 57% Plus développée / 43% En transition (FEDER)",
+    "ultraperipherique": false
   },
   "Bourgogne-Franche-Comté": {
     "wikidata_id": "Q18578267",
@@ -13,7 +14,8 @@
     "population_year": "2023",
     "superficie_km2": 47784.0,
     "chef_lieu": "Dijon",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Bretagne": {
     "wikidata_id": "Q12130",
@@ -21,7 +23,8 @@
     "population_year": "2023",
     "superficie_km2": 27208.0,
     "chef_lieu": "Rennes",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Centre-Val de Loire": {
     "wikidata_id": "Q13947",
@@ -29,7 +32,8 @@
     "population_year": "2023",
     "superficie_km2": 39151.0,
     "chef_lieu": "Orléans",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Corse": {
     "wikidata_id": "Q14112",
@@ -37,7 +41,8 @@
     "population_year": "2023",
     "superficie_km2": 8680.0,
     "chef_lieu": "Ajaccio",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Grand Est": {
     "wikidata_id": "Q18677983",
@@ -45,7 +50,8 @@
     "population_year": "2023",
     "superficie_km2": 57433.0,
     "chef_lieu": "Strasbourg",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Hauts-de-France": {
     "wikidata_id": "Q18677767",
@@ -53,7 +59,8 @@
     "population_year": "2023",
     "superficie_km2": 31813.0,
     "chef_lieu": "Lille",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Île-de-France": {
     "wikidata_id": "Q13917",
@@ -61,7 +68,8 @@
     "population_year": "2023",
     "superficie_km2": 12012.0,
     "chef_lieu": "Paris",
-    "categorie_ue": "plus développée"
+    "categorie_ue": "plus développée",
+    "ultraperipherique": false
   },
   "Normandie": {
     "wikidata_id": "Q18677875",
@@ -69,7 +77,8 @@
     "population_year": "2023",
     "superficie_km2": 29906.0,
     "chef_lieu": "Rouen",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Nouvelle-Aquitaine": {
     "wikidata_id": "Q18678082",
@@ -77,7 +86,8 @@
     "population_year": "2023",
     "superficie_km2": 84061.0,
     "chef_lieu": "Bordeaux",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Occitanie": {
     "wikidata_id": "Q18678265",
@@ -85,7 +95,8 @@
     "population_year": "2023",
     "superficie_km2": 72724.0,
     "chef_lieu": "Toulouse",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Pays de la Loire": {
     "wikidata_id": "Q16994",
@@ -93,7 +104,8 @@
     "population_year": "2023",
     "superficie_km2": 32082.0,
     "chef_lieu": "Nantes",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Provence-Alpes-Côte d'Azur": {
     "wikidata_id": "Q15104",
@@ -101,7 +113,8 @@
     "population_year": "2023",
     "superficie_km2": 31400.0,
     "chef_lieu": "Marseille",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": false
   },
   "Guadeloupe": {
     "wikidata_id": "Q17012",
@@ -109,7 +122,8 @@
     "population_year": "2023",
     "superficie_km2": 1628.0,
     "chef_lieu": "Basse-Terre",
-    "categorie_ue": "moins développée"
+    "categorie_ue": "moins développée",
+    "ultraperipherique": true
   },
   "Martinique": {
     "wikidata_id": "Q17054",
@@ -117,7 +131,8 @@
     "population_year": "2023",
     "superficie_km2": 1128.0,
     "chef_lieu": "Fort-de-France",
-    "categorie_ue": "en transition"
+    "categorie_ue": "en transition",
+    "ultraperipherique": true
   },
   "Guyane": {
     "wikidata_id": "Q3769",
@@ -125,7 +140,8 @@
     "population_year": "2023",
     "superficie_km2": 83534.0,
     "chef_lieu": "Cayenne",
-    "categorie_ue": "moins développée"
+    "categorie_ue": "moins développée",
+    "ultraperipherique": true
   },
   "La Réunion": {
     "wikidata_id": "Q17070",
@@ -133,7 +149,8 @@
     "population_year": "2023",
     "superficie_km2": 2512.0,
     "chef_lieu": "Saint-Denis",
-    "categorie_ue": "moins développée"
+    "categorie_ue": "moins développée",
+    "ultraperipherique": true
   },
   "Mayotte": {
     "wikidata_id": "Q17063",
@@ -141,7 +158,8 @@
     "population_year": "2024",
     "superficie_km2": 374.0,
     "chef_lieu": "Mamoudzou",
-    "categorie_ue": "moins développée"
+    "categorie_ue": "moins développée",
+    "ultraperipherique": true
   },
   "Saint-Martin": {
     "wikidata_id": "Q126125",
@@ -149,6 +167,7 @@
     "population_year": "2020",
     "superficie_km2": 53.2,
     "chef_lieu": "Marigot",
-    "categorie_ue": null
+    "categorie_ue": "moins développée",
+    "ultraperipherique": true
   }
 }

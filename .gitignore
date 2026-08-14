@@ -7,6 +7,9 @@ data/processed/**
 # chaque ingest.py, stable dans le temps et nécessite un accès réseau — committé pour que
 # le dashboard tourne sans dépendance externe.
 !data/processed/region_metadata.json
+# Totaux programmés (Tableau 9B, reference/programmes_2021_2027.py) : dérivé uniquement de
+# fichiers déjà committés, aucun appel réseau — committé pour la même raison.
+!data/processed/programme_totals.json
 
 # Python
 __pycache__/

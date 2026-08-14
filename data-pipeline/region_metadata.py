@@ -17,6 +17,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from reference.cohesion_ue import REGION_CATEGORIE_UE, REGION_ULTRAPERIPHERIQUE
+
 OUTPUT_PATH = Path(__file__).parent.parent / "data" / "processed" / "region_metadata.json"
 
 REGION_QID = {
@@ -39,41 +41,6 @@ REGION_QID = {
     "La Réunion": "Q17070",
     "Mayotte": "Q17063",
     "Saint-Martin": "Q126125",
-}
-
-# Catégorie de région au sens de la politique de cohésion UE 2021-2027 (détermine le taux
-# de cofinancement FEDER/FSE+ : 85% moins développée, 60% transition, 50% plus développée).
-# Source : Commission Implementing Decision (EU) 2021/1130, Annexes I/II/III (liste des
-# régions NUTS2, au niveau des anciennes régions pré-2016 — voir note ci-dessous pour le
-# seul cas où l'agrégation vers les régions modernes n'est pas univoque).
-#
-# Auvergne-Rhône-Alpes est un cas particulier : l'ancienne région Rhône-Alpes (Annexe III,
-# plus développée) et l'ancienne région Auvergne (Annexe II, en transition) ont fusionné en
-# une seule région moderne à cheval sur deux catégories — signalé explicitement plutôt que
-# résolu arbitrairement vers l'une des deux.
-#
-# Saint-Martin n'apparaît dans aucune des trois annexes (hors périmètre NUTS pour ce
-# classement) : catégorie laissée à None plutôt que devinée.
-REGION_CATEGORIE_UE = {
-    "Île-de-France": "plus développée",
-    "Auvergne-Rhône-Alpes": "mixte (Rhône-Alpes : plus développée / Auvergne : en transition)",
-    "Bourgogne-Franche-Comté": "en transition",
-    "Bretagne": "en transition",
-    "Centre-Val de Loire": "en transition",
-    "Corse": "en transition",
-    "Grand Est": "en transition",
-    "Hauts-de-France": "en transition",
-    "Normandie": "en transition",
-    "Nouvelle-Aquitaine": "en transition",
-    "Occitanie": "en transition",
-    "Pays de la Loire": "en transition",
-    "Provence-Alpes-Côte d'Azur": "en transition",
-    "Martinique": "en transition",
-    "Guadeloupe": "moins développée",
-    "Guyane": "moins développée",
-    "La Réunion": "moins développée",
-    "Mayotte": "moins développée",
-    "Saint-Martin": None,
 }
 
 SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
@@ -139,6 +106,7 @@ def main():
             "superficie_km2": float(area) if area else None,
             "chef_lieu": capital,
             "categorie_ue": REGION_CATEGORIE_UE[region],
+            "ultraperipherique": region in REGION_ULTRAPERIPHERIQUE,
         }
         print(f"  {region}: {population:,} hab. ({population_year}), {area} km², {capital}".replace(",", " "))
 
