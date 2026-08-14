@@ -2,12 +2,15 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.data_loader import load_data, load_geojson, load_region_metadata
+from utils.data_loader import load_data, load_geojson, load_programme_totals, load_region_metadata
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
+from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage
 from utils.stats import (
     build_boxplot,
     build_cumulative_curve,
     build_histogram,
+    build_lorenz_beneficiaires,
+    build_pareto_beneficiaires,
     build_portfolio_scatter,
     compute_cofinancement_table,
     compute_stats_table,
@@ -17,8 +20,8 @@ from utils.stats import (
     detect_outliers,
     detect_regroupements_beneficiaire,
 )
-from utils.plot_style import style_hover, style_map_background
-from utils.themes import OBJECTIF_STRATEGIQUE_COLORS
+from utils.plot_style import MAP_CONFIG, disable_map_interaction, style_hover, style_map_background
+from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)"
@@ -82,9 +85,9 @@ with map_col:
     )
     fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-    fig = style_map_background(style_hover(fig))
+    fig = disable_map_interaction(style_map_background(style_hover(fig)))
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=MAP_CONFIG)
 
 with domtom_col:
     st.subheader("DOM-TOM")
@@ -104,40 +107,88 @@ with domtom_col:
 # Montant FESI par habitant
 st.subheader("Montant FESI par habitant")
 st.caption(
-    "Rapporte le montant UE engagé à la population de chaque région (source : Wikidata) — "
-    "permet de comparer des régions de tailles très différentes sans que le poids "
-    "démographique ne domine la lecture."
+    "Rapporte le montant UE engagé à la population de chaque région (source : Wikidata), "
+    "décomposé par fonds — permet de comparer des régions de tailles très différentes sans "
+    "que le poids démographique ne domine la lecture, et de voir quel fonds pèse le plus "
+    "dans chaque région."
 )
 
 region_metadata = load_region_metadata()
-rows_par_habitant = [
-    {
-        "region": region,
-        "montant_par_habitant": values["montant_ue_total"] / region_metadata[region]["population"],
-        "montant_ue_total": values["montant_ue_total"],
-    }
-    for region, values in by_region.items()
-    if region in region_metadata and region_metadata[region]["population"]
+ops_par_habitant = [
+    op
+    for op in data["operations"]
+    if op.get("Fonds") in selected_fonds
+    and isinstance(op.get("regions_modernes"), list)
+    and len(op["regions_modernes"]) == 1
+    and not op.get("is_interregional")
+    and not op.get("is_national")
 ]
-df_par_habitant = pd.DataFrame(rows_par_habitant).sort_values("montant_par_habitant")
+df_ops_par_habitant = pd.DataFrame(ops_par_habitant)
+df_ops_par_habitant["region"] = df_ops_par_habitant["regions_modernes"].apply(lambda r: r[0])
+
+df_par_habitant = (
+    df_ops_par_habitant.groupby(["region", "Fonds"])["Montant UE"]
+    .sum()
+    .reset_index()
+    .rename(columns={"Montant UE": "montant_ue_total"})
+)
+df_par_habitant = df_par_habitant[
+    df_par_habitant["region"].map(lambda r: bool(region_metadata.get(r, {}).get("population")))
+]
+df_par_habitant["population"] = df_par_habitant["region"].map(lambda r: region_metadata[r]["population"])
+df_par_habitant["montant_par_habitant"] = df_par_habitant["montant_ue_total"] / df_par_habitant["population"]
+
+total_par_habitant_par_region = df_par_habitant.groupby("region")["montant_par_habitant"].sum()
+df_par_habitant["total_region_par_habitant"] = df_par_habitant["region"].map(total_par_habitant_par_region)
+region_order = total_par_habitant_par_region.sort_values().index.tolist()
 
 fig_par_habitant = px.bar(
     df_par_habitant,
     x="montant_par_habitant",
     y="region",
+    color="Fonds",
+    color_discrete_map=FONDS_COLORS,
     orientation="h",
-    hover_data=["montant_ue_total"],
-    labels={"montant_par_habitant": "Montant UE par habitant (€)", "region": "", "montant_ue_total": "Montant UE total (€)"},
+    category_orders={"region": region_order},
+    hover_data=["montant_ue_total", "total_region_par_habitant"],
+    labels={"montant_par_habitant": "Montant UE par habitant (€)", "region": "", "montant_ue_total": "Montant UE total (€)", "Fonds": "Fonds"},
 )
-fig_par_habitant.update_layout(height=550, showlegend=False)
+fig_par_habitant.update_layout(height=550, barmode="stack")
 fig_par_habitant.for_each_trace(
     lambda t: t.update(
-        hovertemplate="<b>%{y}</b><br>Montant UE / habitant : %{x:,.0f} €<br>Montant UE total : %{customdata[0]:,.0f} €<extra></extra>"
+        hovertemplate=(
+            f"<b>%{{y}}</b><br>{t.name} : %{{x:,.0f}} €/hab. (%{{customdata[0]:,.0f}} € au total)"
+            "<br>Total FESI : %{customdata[1]:,.0f} €/hab.<extra></extra>"
+        )
     )
 )
 fig_par_habitant = style_hover(fig_par_habitant)
 
 st.plotly_chart(fig_par_habitant, use_container_width=True)
+
+# Taux de consommation par région (programmé Tableau 9B vs engagé)
+st.subheader("Taux de consommation par région (estimation)")
+st.caption(
+    "Montant engagé rapporté à l'enveloppe programmée 2021-2027 (Accord de partenariat, "
+    "Tableau 9B, tous fonds sélectionnés confondus). " + RESERVE_METHODO
+)
+
+programme_totals = load_programme_totals()
+rows_consommation = [
+    {
+        "region": region,
+        "engage": values["montant_ue_total"],
+        "programme": sum(v for f, v in programme_totals[region].items() if f in selected_fonds),
+    }
+    for region, values in by_region.items()
+    if region in programme_totals
+]
+df_consommation = pd.DataFrame(rows_consommation)
+df_consommation = df_consommation[df_consommation["programme"] > 0]
+
+fig_consommation = build_ranking_programme_vs_engage(df_consommation, "region", "engage", "programme")
+
+st.plotly_chart(fig_consommation, use_container_width=True)
 
 df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
 df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
@@ -161,6 +212,7 @@ fig_fonds = px.bar(
     y="fonds",
     orientation="h",
     color="fonds",
+    color_discrete_map=FONDS_COLORS,
     hover_data=["count"],
     labels={"montant_ue_total": "Montant UE (€)", "fonds": "Fonds", "count": "Nb projets"},
 )
@@ -183,7 +235,7 @@ with progress_col:
         "précise), d'où des paliers plutôt qu'une progression lissée. Cliquer sur un fonds dans la "
         "légende pour l'isoler ou le masquer."
     )
-    st.plotly_chart(build_cumulative_curve(df_national_ops), use_container_width=True)
+    st.plotly_chart(build_cumulative_curve(df_national_ops, color_map=FONDS_COLORS), use_container_width=True)
 
 # Fonds, objectifs stratégiques et spécifiques
 st.subheader("Fonds, objectifs stratégiques et spécifiques")
@@ -207,11 +259,11 @@ st.caption(
 )
 echelle_hist = st.radio("Échelle", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_hist_national")
 st.plotly_chart(
-    build_histogram(df_national_ops, log_x=echelle_hist == "Logarithmique", color_col="Fonds"),
+    build_histogram(df_national_ops, log_x=echelle_hist == "Logarithmique", color_col="Fonds", color_map=FONDS_COLORS),
     use_container_width=True,
 )
 
-montant_col_config = st.column_config.NumberColumn(format="%d €")
+montant_col_config = st.column_config.NumberColumn(format="%,d €")
 cv_col_config = st.column_config.NumberColumn(
     "Coeff. de variation", help="Écart-type / médiane — dispersion relative, comparable entre groupes de tailles différentes"
 )
@@ -291,6 +343,15 @@ st.caption(
     "Bénéficiaires cumulant le plus de montant UE, tous projets confondus — vue d'ensemble des "
     "acteurs les plus représentés dans le portefeuille."
 )
+st.plotly_chart(build_pareto_beneficiaires(df_national_ops), use_container_width=True)
+with st.expander("Courbe de Lorenz (détail statistique de la concentration)"):
+    st.caption(
+        "Autre lecture de la même concentration : % cumulé de bénéficiaires (du plus petit au "
+        "plus gros) vs % cumulé du montant — plus la courbe s'éloigne de la diagonale "
+        "(égalité parfaite), plus le montant est concentré sur peu de bénéficiaires."
+    )
+    st.plotly_chart(build_lorenz_beneficiaires(df_national_ops), use_container_width=True)
+
 top_beneficiaires = compute_top_beneficiaires(df_national_ops).rename(
     columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
 )
@@ -422,42 +483,5 @@ else:
     col1, col2 = st.columns(2)
     col1.metric("Montant UE total", f"{national['montant_ue_total'] / 1e6:,.1f} M€".replace(",", " "))
     col2.metric("Nombre de projets", f"{national['count']:,}".replace(",", " "))
-
-    df_national_fonds = (
-        pd.DataFrame(national_ops)
-        .groupby("Fonds")
-        .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
-        .reset_index()
-        .sort_values("montant_ue_total")
-    )
-
-    fig_national_fonds = px.bar(
-        df_national_fonds,
-        x="montant_ue_total",
-        y="Fonds",
-        orientation="h",
-        color="Fonds",
-        hover_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)", "count": "Nb projets"},
-    )
-    fig_national_fonds.update_layout(height=200, showlegend=False)
-    fig_national_fonds.update_traces(width=0.5)
-    fig_national_fonds.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{x:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
-        )
-    )
-    fig_national_fonds = style_hover(fig_national_fonds)
-
-    st.plotly_chart(fig_national_fonds, use_container_width=True)
-
-    # Courbe cumulée d'engagement UE dans le temps (Volet national)
-    st.subheader("Engagement UE cumulé dans le temps")
-    st.caption(
-        "Basé sur la date de début de l'opération. Environ 60% des dates sont arrondies au 1ᵉʳ janvier "
-        "(date administrative/programmatique plutôt qu'une date de démarrage individuelle précise) : "
-        "la courbe présente donc des paliers plutôt qu'une progression lissée."
-    )
-    st.caption("Cliquer sur un fonds dans la légende pour l'isoler ou le masquer.")
-
-    st.plotly_chart(build_cumulative_curve(pd.DataFrame(national_ops)), use_container_width=True)
+    st.caption("Opérations non rattachées à une région (ex. programmes nationaux France Travail pour l'emploi).")
+    st.page_link("pages/2_Volet_National.py", label="Voir l'analyse complète du Volet national", icon="➡️")

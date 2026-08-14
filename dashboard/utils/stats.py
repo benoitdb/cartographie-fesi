@@ -48,11 +48,12 @@ def detect_outliers(df, amount_col="Montant UE"):
     )
 
 
-def build_histogram(df, amount_col="Montant UE", nbins=50, log_x=False, color_col=None):
+def build_histogram(df, amount_col="Montant UE", nbins=50, log_x=False, color_col=None, color_map=None):
     """Histogramme des montants, empilé par color_col si fourni. En échelle logarithmique
     (recommandé pour ces données, fortement asymétriques : une majorité de petites opérations
     et une minorité de très gros projets), les bins sont calculés en espace log pour rester
-    réguliers à l'affichage."""
+    réguliers à l'affichage. color_map (optionnel) fixe la couleur par catégorie plutôt que
+    la palette par défaut."""
     plot_df = df
     x_col = amount_col
     if log_x:
@@ -64,6 +65,7 @@ def build_histogram(df, amount_col="Montant UE", nbins=50, log_x=False, color_co
         plot_df,
         x=x_col,
         color=color_col,
+        color_discrete_map=color_map,
         barmode="stack",
         nbins=nbins,
         labels={x_col: "Montant UE (€)"},
@@ -201,9 +203,10 @@ def build_portfolio_scatter_comparison(df, group_col, theme_col, amount_col="Mon
     return style_hover(fig)
 
 
-def build_cumulative_curve(df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds"):
+def build_cumulative_curve(df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds", color_map=None):
     """Courbe d'engagement UE cumulé dans le temps, par color_col, avec repères verticaux à
-    chaque 1ᵉʳ janvier pour situer les années."""
+    chaque 1ᵉʳ janvier pour situer les années. color_map (optionnel) fixe la couleur par
+    catégorie plutôt que la palette par défaut."""
     plot_df = df[[date_col, amount_col, color_col]].copy()
     plot_df[date_col] = pd.to_datetime(plot_df[date_col])
     plot_df = (
@@ -218,6 +221,7 @@ def build_cumulative_curve(df, date_col="Date de début de l'opération", amount
         x=date_col,
         y="cumule",
         color=color_col,
+        color_discrete_map=color_map,
         labels={date_col: "Date", "cumule": "Montant UE cumulé (€)"},
     )
     fig.update_traces(line=dict(width=2))
@@ -260,6 +264,72 @@ def compute_top_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col=
     complémentaire à la concentration par opération (compute_stats_table)."""
     agg = df.groupby(group_col)[amount_col].agg(montant_ue_total="sum", count="count").reset_index()
     return agg.sort_values("montant_ue_total", ascending=False).head(top_n)
+
+
+def build_pareto_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col="Montant UE", top_n=15):
+    """Diagramme de Pareto : barres des top_n bénéficiaires par montant UE, avec une courbe de
+    % cumulé (calculé sur l'ensemble des bénéficiaires du périmètre, pas seulement le top
+    affiché) en axe secondaire — répond à "combien de bénéficiaires portent quelle part du
+    total", plus immédiatement lisible que la courbe de Lorenz pour un public non technique."""
+    agg = df.groupby(group_col)[amount_col].sum().sort_values(ascending=False).reset_index()
+    agg.columns = [group_col, "montant_ue_total"]
+    total = agg["montant_ue_total"].sum()
+    agg["cumule_pct"] = agg["montant_ue_total"].cumsum() / total
+    top = agg.head(top_n)
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_bar(
+        x=top[group_col],
+        y=top["montant_ue_total"],
+        name="Montant UE",
+        hovertemplate="<b>%{x}</b><br>Montant UE : %{y:,.0f} €<extra></extra>",
+    )
+    fig.add_scatter(
+        x=top[group_col],
+        y=top["cumule_pct"],
+        name="% cumulé du montant total",
+        mode="lines+markers",
+        line=dict(width=2),
+        secondary_y=True,
+        hovertemplate="<b>%{x}</b><br>% cumulé du montant total : %{y:.1%}<extra></extra>",
+    )
+    fig.update_yaxes(title_text="Montant UE (€)", secondary_y=False)
+    fig.update_yaxes(title_text="% cumulé du montant total", tickformat=".0%", range=[0, 1], secondary_y=True)
+    fig.update_xaxes(tickangle=-30)
+    fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02))
+    return style_hover(fig)
+
+
+def build_lorenz_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col="Montant UE"):
+    """Courbe de Lorenz : % cumulé de bénéficiaires (triés du plus petit au plus grand montant)
+    vs % cumulé du montant UE, avec la diagonale d'égalité parfaite en référence — plus la
+    courbe s'écarte de la diagonale, plus le montant est concentré sur peu de bénéficiaires.
+    Cohérent avec le coefficient concentration_top10 déjà calculé dans compute_stats_table."""
+    agg = df.groupby(group_col)[amount_col].sum().sort_values(ascending=True).reset_index()
+    n = len(agg)
+    total = agg[amount_col].sum()
+    agg["cumule_pct_montant"] = agg[amount_col].cumsum() / total
+    agg["cumule_pct_beneficiaires"] = pd.RangeIndex(1, n + 1) / n
+
+    x = [0] + agg["cumule_pct_beneficiaires"].tolist()
+    y = [0] + agg["cumule_pct_montant"].tolist()
+
+    fig = go.Figure()
+    fig.add_scatter(
+        x=x,
+        y=y,
+        mode="lines",
+        name="Courbe de Lorenz",
+        line=dict(width=2),
+        hovertemplate="%{x:.0%} des bénéficiaires portent %{y:.0%} du montant<extra></extra>",
+    )
+    fig.add_scatter(
+        x=[0, 1], y=[0, 1], mode="lines", name="Égalité parfaite", line=dict(width=1, dash="dot", color="gray"), hoverinfo="skip"
+    )
+    fig.update_xaxes(title_text="% cumulé des bénéficiaires", tickformat=".0%", range=[0, 1])
+    fig.update_yaxes(title_text="% cumulé du montant UE", tickformat=".0%", range=[0, 1])
+    fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02))
+    return style_hover(fig)
 
 
 def _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_days, max_relative_diff):

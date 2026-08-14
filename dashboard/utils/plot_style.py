@@ -26,3 +26,17 @@ def style_map_background(fig):
     fig.update_geos(bgcolor="rgba(0,0,0,0)", lakecolor="rgba(0,0,0,0)")
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
     return fig
+
+
+def disable_map_interaction(fig):
+    """Désactive le pan (glisser-déposer) sur une carte choropleth — gênant en usage normal
+    (la carte n'a pas besoin d'être déplacée, toujours cadrée sur ses features via fitbounds).
+    À utiliser avec MAP_CONFIG (scroll-to-zoom, molette qui interfère avec le défilement de la
+    page) passé au paramètre config de st.plotly_chart pour ce même graphique."""
+    fig.update_layout(dragmode=False)
+    return fig
+
+
+# À passer explicitement au paramètre config= de st.plotly_chart pour toute carte choropleth
+# (config n'est pas un réglage de la figure, donc ne peut pas être fixé dans le builder).
+MAP_CONFIG = {"scrollZoom": False}

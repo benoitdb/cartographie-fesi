@@ -7,7 +7,7 @@ import json
 
 import plotly.express as px
 
-from utils.plot_style import style_hover, style_map_background
+from utils.plot_style import disable_map_interaction, style_hover, style_map_background
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEPARTEMENTS_GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "departements.geojson"
@@ -217,4 +217,4 @@ def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE
     )
     fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-    return style_map_background(style_hover(fig))
+    return disable_map_interaction(style_map_background(style_hover(fig)))
