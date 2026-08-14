@@ -1,0 +1,154 @@
+{
+  "Auvergne-Rhône-Alpes": {
+    "wikidata_id": "Q18338206",
+    "population": 8205557,
+    "population_year": "2023",
+    "superficie_km2": 69711.0,
+    "chef_lieu": "Lyon",
+    "categorie_ue": "mixte (Rhône-Alpes : plus développée / Auvergne : en transition)"
+  },
+  "Bourgogne-Franche-Comté": {
+    "wikidata_id": "Q18578267",
+    "population": 2802670,
+    "population_year": "2023",
+    "superficie_km2": 47784.0,
+    "chef_lieu": "Dijon",
+    "categorie_ue": "en transition"
+  },
+  "Bretagne": {
+    "wikidata_id": "Q12130",
+    "population": 3449370,
+    "population_year": "2023",
+    "superficie_km2": 27208.0,
+    "chef_lieu": "Rennes",
+    "categorie_ue": "en transition"
+  },
+  "Centre-Val de Loire": {
+    "wikidata_id": "Q13947",
+    "population": 2587031,
+    "population_year": "2023",
+    "superficie_km2": 39151.0,
+    "chef_lieu": "Orléans",
+    "categorie_ue": "en transition"
+  },
+  "Corse": {
+    "wikidata_id": "Q14112",
+    "population": 355486,
+    "population_year": "2023",
+    "superficie_km2": 8680.0,
+    "chef_lieu": "Ajaccio",
+    "categorie_ue": "en transition"
+  },
+  "Grand Est": {
+    "wikidata_id": "Q18677983",
+    "population": 5563378,
+    "population_year": "2023",
+    "superficie_km2": 57433.0,
+    "chef_lieu": "Strasbourg",
+    "categorie_ue": "en transition"
+  },
+  "Hauts-de-France": {
+    "wikidata_id": "Q18677767",
+    "population": 5992194,
+    "population_year": "2023",
+    "superficie_km2": 31813.0,
+    "chef_lieu": "Lille",
+    "categorie_ue": "en transition"
+  },
+  "Île-de-France": {
+    "wikidata_id": "Q13917",
+    "population": 12463067,
+    "population_year": "2023",
+    "superficie_km2": 12012.0,
+    "chef_lieu": "Paris",
+    "categorie_ue": "plus développée"
+  },
+  "Normandie": {
+    "wikidata_id": "Q18677875",
+    "population": 3345842,
+    "population_year": "2023",
+    "superficie_km2": 29906.0,
+    "chef_lieu": "Rouen",
+    "categorie_ue": "en transition"
+  },
+  "Nouvelle-Aquitaine": {
+    "wikidata_id": "Q18678082",
+    "population": 6150451,
+    "population_year": "2023",
+    "superficie_km2": 84061.0,
+    "chef_lieu": "Bordeaux",
+    "categorie_ue": "en transition"
+  },
+  "Occitanie": {
+    "wikidata_id": "Q18678265",
+    "population": 6124653,
+    "population_year": "2023",
+    "superficie_km2": 72724.0,
+    "chef_lieu": "Toulouse",
+    "categorie_ue": "en transition"
+  },
+  "Pays de la Loire": {
+    "wikidata_id": "Q16994",
+    "population": 3907156,
+    "population_year": "2023",
+    "superficie_km2": 32082.0,
+    "chef_lieu": "Nantes",
+    "categorie_ue": "en transition"
+  },
+  "Provence-Alpes-Côte d'Azur": {
+    "wikidata_id": "Q15104",
+    "population": 5218960,
+    "population_year": "2023",
+    "superficie_km2": 31400.0,
+    "chef_lieu": "Marseille",
+    "categorie_ue": "en transition"
+  },
+  "Guadeloupe": {
+    "wikidata_id": "Q17012",
+    "population": 384160,
+    "population_year": "2023",
+    "superficie_km2": 1628.0,
+    "chef_lieu": "Basse-Terre",
+    "categorie_ue": "moins développée"
+  },
+  "Martinique": {
+    "wikidata_id": "Q17054",
+    "population": 360630,
+    "population_year": "2023",
+    "superficie_km2": 1128.0,
+    "chef_lieu": "Fort-de-France",
+    "categorie_ue": "en transition"
+  },
+  "Guyane": {
+    "wikidata_id": "Q3769",
+    "population": 293996,
+    "population_year": "2023",
+    "superficie_km2": 83534.0,
+    "chef_lieu": "Cayenne",
+    "categorie_ue": "moins développée"
+  },
+  "La Réunion": {
+    "wikidata_id": "Q17070",
+    "population": 889679,
+    "population_year": "2023",
+    "superficie_km2": 2512.0,
+    "chef_lieu": "Saint-Denis",
+    "categorie_ue": "moins développée"
+  },
+  "Mayotte": {
+    "wikidata_id": "Q17063",
+    "population": 320901,
+    "population_year": "2024",
+    "superficie_km2": 374.0,
+    "chef_lieu": "Mamoudzou",
+    "categorie_ue": "moins développée"
+  },
+  "Saint-Martin": {
+    "wikidata_id": "Q126125",
+    "population": 32358,
+    "population_year": "2020",
+    "superficie_km2": 53.2,
+    "chef_lieu": "Marigot",
+    "categorie_ue": null
+  }
+}

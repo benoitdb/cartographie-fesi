@@ -3,6 +3,10 @@ data/raw/**
 data/processed/**
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+# Enrichissement Wikidata (region_metadata.py) : contrairement à data.json, pas régénéré à
+# chaque ingest.py, stable dans le temps et nécessite un accès réseau — committé pour que
+# le dashboard tourne sans dépendance externe.
+!data/processed/region_metadata.json
 
 # Python
 __pycache__/

@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.data_loader import load_data
+from utils.data_loader import load_data, load_region_metadata
 from utils.departments import DEPT_TO_REGION, assign_departments_df, build_department_choropleth, department_coverage_summary
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.plot_style import style_hover
@@ -40,6 +40,21 @@ region = st.selectbox("Région", regions)
 
 st.title(f"Vue Régionale - {region}")
 
+if region != "Volet national":
+    region_meta = load_region_metadata().get(region)
+    if region_meta:
+        meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
+        meta_col1.metric("Population", f"{region_meta['population']:,}".replace(",", " ") + f" ({region_meta['population_year']})")
+        meta_col2.metric("Superficie", f"{region_meta['superficie_km2']:,.0f} km²".replace(",", " "))
+        meta_col3.metric("Chef-lieu", region_meta["chef_lieu"])
+        meta_col4.metric("Catégorie UE (2021-2027)", region_meta["categorie_ue"] or "Non classifiée")
+        st.caption(
+            "Catégorie de région au sens de la politique de cohésion européenne 2021-2027 "
+            "(PIB/habitant vs. moyenne UE) : détermine le taux de cofinancement FEDER/FSE+ "
+            "applicable (jusqu'à 85% en région moins développée, 60% en transition, 50% en "
+            "région plus développée). Source : décision d'exécution (UE) 2021/1130."
+        )
+
 if region == "Volet national":
     region_ops = [op for op in data["operations"] if op.get("is_national") and op.get("Fonds") in selected_fonds]
 else:
@@ -66,10 +81,18 @@ else:
     # Fonds par défaut (tous sélectionnés) : agrégat pré-calculé du pipeline, comportement inchangé
     region_data = by_region[region]
 
-col1, col2, col3 = st.columns(3)
+region_meta_for_ratio = None if region == "Volet national" else load_region_metadata().get(region)
+
+if region_meta_for_ratio:
+    col1, col2, col3, col4 = st.columns(4)
+else:
+    col1, col2, col3 = st.columns(3)
 col1.metric("Montant UE total", f"{region_data['montant_ue_total'] / 1e6:,.1f} M€".replace(",", " "))
 col2.metric("Nombre de projets", f"{region_data['count']:,}".replace(",", " "))
 col3.metric("Montant UE moyen", f"{region_data['montant_ue_moyen'] / 1e3:,.0f} k€".replace(",", " "))
+if region_meta_for_ratio:
+    montant_par_habitant = region_data["montant_ue_total"] / region_meta_for_ratio["population"]
+    col4.metric("Montant UE par habitant", f"{montant_par_habitant:,.0f} €".replace(",", " "))
 
 # Répartition par fonds
 st.subheader("Répartition par fonds")

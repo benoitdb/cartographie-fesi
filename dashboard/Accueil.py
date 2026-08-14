@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.data_loader import load_data, load_geojson
+from utils.data_loader import load_data, load_geojson, load_region_metadata
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
 from utils.stats import (
     build_boxplot,
@@ -100,6 +100,44 @@ with domtom_col:
                         st.caption(f"{values['montant_ue_total'] / 1e6:,.1f} M€ · {values['count']} projets".replace(",", " "))
                     else:
                         st.caption("Aucun projet")
+
+# Montant FESI par habitant
+st.subheader("Montant FESI par habitant")
+st.caption(
+    "Rapporte le montant UE engagé à la population de chaque région (source : Wikidata) — "
+    "permet de comparer des régions de tailles très différentes sans que le poids "
+    "démographique ne domine la lecture."
+)
+
+region_metadata = load_region_metadata()
+rows_par_habitant = [
+    {
+        "region": region,
+        "montant_par_habitant": values["montant_ue_total"] / region_metadata[region]["population"],
+        "montant_ue_total": values["montant_ue_total"],
+    }
+    for region, values in by_region.items()
+    if region in region_metadata and region_metadata[region]["population"]
+]
+df_par_habitant = pd.DataFrame(rows_par_habitant).sort_values("montant_par_habitant")
+
+fig_par_habitant = px.bar(
+    df_par_habitant,
+    x="montant_par_habitant",
+    y="region",
+    orientation="h",
+    hover_data=["montant_ue_total"],
+    labels={"montant_par_habitant": "Montant UE par habitant (€)", "region": "", "montant_ue_total": "Montant UE total (€)"},
+)
+fig_par_habitant.update_layout(height=550, showlegend=False)
+fig_par_habitant.for_each_trace(
+    lambda t: t.update(
+        hovertemplate="<b>%{y}</b><br>Montant UE / habitant : %{x:,.0f} €<br>Montant UE total : %{customdata[0]:,.0f} €<extra></extra>"
+    )
+)
+fig_par_habitant = style_hover(fig_par_habitant)
+
+st.plotly_chart(fig_par_habitant, use_container_width=True)
 
 df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
 df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
