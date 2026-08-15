@@ -4,7 +4,7 @@ import streamlit as st
 from utils.data_loader import load_data, load_programme_totals, load_region_metadata
 from utils.departments import DEPT_TO_REGION, assign_departments_df, build_department_choropleth, department_coverage_summary
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
-from utils.pilotage import FSE_DEPASSEMENT_DETAIL, build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
+from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.plot_style import MAP_CONFIG
 from utils.region_analysis import FONDS, render_region_analysis
 
@@ -35,7 +35,7 @@ if not region_ops:
     st.stop()
 
 # Aperçu général : infos de base (une case, 4 lignes) à côté de la carte des départements
-# (régions métropole uniquement : les régions DOM-TOM correspondent chacune à un département
+# (régions métropole uniquement : les régions DROM correspondent chacune à un département
 # unique, pas de découpage pertinent). Carte calculée ici, réutilisée plus bas dans "Détail
 # par département" plutôt que reconstruite deux fois.
 region_meta = load_region_metadata().get(region)
@@ -117,8 +117,6 @@ programme_totals_region = load_programme_totals().get(region, {})
 montant_programme_region = sum(v for f, v in programme_totals_region.items() if f in selected_fonds)
 
 if montant_programme_region:
-    render_kpi_pilotage(region_data["montant_ue_total"], montant_programme_region)
-
     engage_by_fonds = pd.DataFrame(region_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
     df_fonds_pilotage = pd.DataFrame(
         [
@@ -127,6 +125,7 @@ if montant_programme_region:
             if f in programme_totals_region
         ]
     )
+    render_kpi_pilotage(df_fonds_pilotage, montant_programme_region, region_data["montant_ue_total"])
 
     traj_col, bullet_col = st.columns(2)
     with traj_col:
@@ -137,8 +136,6 @@ if montant_programme_region:
                 build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
                 use_container_width=True,
             )
-            if "FSE+" in df_fonds_pilotage["fonds"].values:
-                st.caption(FSE_DEPASSEMENT_DETAIL)
 else:
     st.info("Pas de donnée programmée (Tableau 9B) pour cette région avec les fonds sélectionnés.")
 
@@ -149,7 +146,7 @@ df_region_ops = render_region_analysis(
     programme_totals={f: v for f, v in programme_totals_region.items() if f in selected_fonds},
 )
 
-# Détail par département (régions métropole uniquement : les régions DOM-TOM
+# Détail par département (régions métropole uniquement : les régions DROM
 # correspondent chacune à un département unique, pas de découpage pertinent)
 if region in DEPT_TO_REGION.values():
     st.subheader("Détail par département")

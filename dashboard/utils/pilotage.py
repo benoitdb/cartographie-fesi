@@ -23,16 +23,23 @@ FSE_DEPASSEMENT_DETAIL = (
 )
 
 
-def render_kpi_pilotage(montant_engage, montant_programme):
-    """Bloc A : % consommé global (tous fonds) + reste à engager. N'affiche rien si aucune
-    donnée programmée pour ce périmètre (ex. fonds sélectionnés absents du Tableau 9B)."""
-    if not montant_programme:
+def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage):
+    """Bloc A : montants agrégés (programmé, engagé, reste à engager) + une card par fonds
+    avec sa propre barre de progression. N'affiche rien si aucune donnée programmée pour ce
+    périmètre (ex. fonds sélectionnés absents du Tableau 9B).
+
+    Le reste à engager agrégé est la somme des restes PAR FONDS (chacun plancher à 0), pas
+    programme_total - engage_total : un fonds en dépassement (ex. FSE+, voir
+    FSE_DEPASSEMENT_DETAIL) ne doit jamais "rogner" sur le reste d'un autre fonds dans ce
+    total — sinon un dépassement FSE+ peut faire disparaître un vrai reliquat FEDER du total
+    affiché (cas constaté : Auvergne-Rhône-Alpes affichait 94% consommé au global alors qu'il
+    restait ~150M€ de FEDER, le dépassement FSE+ masquant ce reliquat dans l'agrégat)."""
+    if not montant_programme or df_fonds_pilotage.empty:
         return
 
-    taux = montant_engage / montant_programme
-    reste = max(montant_programme - montant_engage, 0)
+    reste = (df_fonds_pilotage["programme"] - df_fonds_pilotage["engage"]).clip(lower=0).sum()
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     with col1:
         with st.container(border=True):
             st.markdown(f"**Programmé 2021-2027 :** {montant_programme / 1e6:,.1f} M€".replace(",", " "))
@@ -41,12 +48,60 @@ def render_kpi_pilotage(montant_engage, montant_programme):
             st.markdown(f"**Engagé :** {montant_engage / 1e6:,.1f} M€".replace(",", " "))
     with col3:
         with st.container(border=True):
-            st.markdown(f"**% consommé :** {taux:.0%}")
-    with col4:
-        with st.container(border=True):
             st.markdown(f"**Reste à engager (est.) :** {reste / 1e6:,.1f} M€".replace(",", " "))
-    st.progress(min(taux, 1.0))
     st.caption(RESERVE_METHODO)
+
+    depassement_present = False
+    fonds_cols = st.columns(len(df_fonds_pilotage))
+    for col, row in zip(fonds_cols, df_fonds_pilotage.itertuples()):
+        taux_fonds = row.engage / row.programme if row.programme else 0
+        depassement = taux_fonds > 1
+        depassement_present = depassement_present or depassement
+        with col:
+            with st.container(border=True):
+                st.markdown(
+                    f"**{row.fonds} :** {row.engage / 1e6:,.1f} / {row.programme / 1e6:,.1f} M€".replace(",", " ")
+                )
+                st.plotly_chart(
+                    build_fonds_mini_bar(row.engage, row.programme),
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                )
+                st.caption(f"⚠️ {taux_fonds:.0%} — dépassement" if depassement else f"{taux_fonds:.0%} consommé")
+    if depassement_present:
+        st.caption(FSE_DEPASSEMENT_DETAIL)
+
+
+def build_fonds_mini_bar(engage, programme):
+    """Mini barre de progression (une card = un fonds, dans render_kpi_pilotage) : st.progress
+    plafonne visuellement à 100% et ne peut pas se colorer, donc barre Plotly custom à la
+    place — la barre engagée dépasse visuellement le repère "Programmé" (ligne pointillée
+    verticale) en cas de dépassement, colorée en rouge plutôt que tronquée à 100%, pour que le
+    dépassement (voir FSE_DEPASSEMENT_DETAIL) reste visible plutôt que caché par le plafond."""
+    taux = engage / programme if programme else 0
+    depassement = taux > 1
+    color = "#e34948" if depassement else "#4C78A8"
+    x_max = max(engage, programme) * 1.15 if programme else engage * 1.15
+
+    fig = go.Figure()
+    fig.add_bar(
+        x=[engage],
+        y=[""],
+        orientation="h",
+        marker_color=color,
+        text=[f"{taux:.0%} ⚠️" if depassement else f"{taux:.0%}"],
+        textposition="outside",
+        hovertemplate=f"Engagé : {engage:,.0f} €<br>Programmé : {programme:,.0f} €<extra></extra>".replace(",", " "),
+        showlegend=False,
+    )
+    fig.add_vline(x=programme, line_dash="dash", line_color="#555", line_width=2)
+    fig.update_layout(
+        height=70,
+        margin=dict(l=0, r=45, t=10, b=0),
+        xaxis=dict(range=[0, x_max], visible=False),
+        yaxis=dict(visible=False),
+    )
+    return style_hover(fig)
 
 
 def build_trajectoire(df_ops, montant_programme, amount_col="Montant UE", date_col="Date de début de l'opération"):

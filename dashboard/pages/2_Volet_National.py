@@ -3,7 +3,7 @@ import streamlit as st
 
 from utils.data_loader import load_data, load_programme_totals, load_region_metadata
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
-from utils.pilotage import FSE_DEPASSEMENT_DETAIL, build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
+from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.region_analysis import render_region_analysis
 
 st.set_page_config(page_title="Volet National - Cartographie FESI", layout="wide")
@@ -76,8 +76,6 @@ programme_totals_national = load_programme_totals().get("national", {})
 montant_programme_national = sum(v for f, v in programme_totals_national.items() if f in selected_fonds)
 
 if montant_programme_national:
-    render_kpi_pilotage(national_data["montant_ue_total"], montant_programme_national)
-
     engage_by_fonds_national = pd.DataFrame(national_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
     df_fonds_pilotage_national = pd.DataFrame(
         [
@@ -86,6 +84,7 @@ if montant_programme_national:
             if f in programme_totals_national
         ]
     )
+    render_kpi_pilotage(df_fonds_pilotage_national, montant_programme_national, national_data["montant_ue_total"])
 
     traj_col_national, bullet_col_national = st.columns(2)
     with traj_col_national:
@@ -96,8 +95,6 @@ if montant_programme_national:
                 build_ranking_programme_vs_engage(df_fonds_pilotage_national, "fonds", "engage", "programme", height=400),
                 use_container_width=True,
             )
-            if "FSE+" in df_fonds_pilotage_national["fonds"].values:
-                st.caption(FSE_DEPASSEMENT_DETAIL)
 else:
     st.info("Pas de donnée programmée (Tableau 9B) pour le Volet national avec les fonds sélectionnés.")
 
