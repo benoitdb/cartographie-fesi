@@ -1,0 +1,824 @@
+{
+  "97100": {
+    "commune": "Basse-Terre",
+    "lat": 16.0004645662,
+    "lon": -61.7281032959,
+    "territoire": "Guadeloupe"
+  },
+  "97110": {
+    "commune": "Pointe-à-Pitre",
+    "lat": 16.2386006963,
+    "lon": -61.5357180881,
+    "territoire": "Guadeloupe"
+  },
+  "97111": {
+    "commune": "Morne-à-l'Eau",
+    "lat": 16.3240215714,
+    "lon": -61.470417696,
+    "territoire": "Guadeloupe"
+  },
+  "97112": {
+    "commune": "Grand-Bourg",
+    "lat": 15.9060600751,
+    "lon": -61.2943821122,
+    "territoire": "Guadeloupe"
+  },
+  "97113": {
+    "commune": "Gourbeyre",
+    "lat": 15.9939024439,
+    "lon": -61.6864178604,
+    "territoire": "Guadeloupe"
+  },
+  "97114": {
+    "commune": "Trois-Rivières",
+    "lat": 15.9908100557,
+    "lon": -61.6479632247,
+    "territoire": "Guadeloupe"
+  },
+  "97115": {
+    "commune": "Sainte-Rose",
+    "lat": 16.2939779294,
+    "lon": -61.7100293031,
+    "territoire": "Guadeloupe"
+  },
+  "97116": {
+    "commune": "Pointe-Noire",
+    "lat": 16.227093809,
+    "lon": -61.7632677647,
+    "territoire": "Guadeloupe"
+  },
+  "97117": {
+    "commune": "Port-Louis",
+    "lat": 16.4263736562,
+    "lon": -61.4965320062,
+    "territoire": "Guadeloupe"
+  },
+  "97118": {
+    "commune": "Saint-François",
+    "lat": 16.2732452923,
+    "lon": -61.2816382728,
+    "territoire": "Guadeloupe"
+  },
+  "97119": {
+    "commune": "Vieux-Habitants",
+    "lat": 16.0870945547,
+    "lon": -61.7257229749,
+    "territoire": "Guadeloupe"
+  },
+  "97120": {
+    "commune": "Saint-Claude",
+    "lat": 16.033779046,
+    "lon": -61.690101603,
+    "territoire": "Guadeloupe"
+  },
+  "97121": {
+    "commune": "Anse-Bertrand",
+    "lat": 16.4655608425,
+    "lon": -61.4616707348,
+    "territoire": "Guadeloupe"
+  },
+  "97122": {
+    "commune": "Baie-Mahault",
+    "lat": 16.251171116,
+    "lon": -61.5929355877,
+    "territoire": "Guadeloupe"
+  },
+  "97123": {
+    "commune": "Baillif",
+    "lat": 16.0455136353,
+    "lon": -61.7192956906,
+    "territoire": "Guadeloupe"
+  },
+  "97125": {
+    "commune": "Bouillante",
+    "lat": 16.1437220237,
+    "lon": -61.754179331,
+    "territoire": "Guadeloupe"
+  },
+  "97126": {
+    "commune": "Deshaies",
+    "lat": 16.3037984071,
+    "lon": -61.7795787226,
+    "territoire": "Guadeloupe"
+  },
+  "97127": {
+    "commune": "Désirade",
+    "lat": 16.311751596,
+    "lon": -61.0526890523,
+    "territoire": "Guadeloupe"
+  },
+  "97128": {
+    "commune": "Goyave",
+    "lat": 16.1216759478,
+    "lon": -61.6138081813,
+    "territoire": "Guadeloupe"
+  },
+  "97129": {
+    "commune": "Lamentin",
+    "lat": 16.2413995875,
+    "lon": -61.6685299192,
+    "territoire": "Guadeloupe"
+  },
+  "97130": {
+    "commune": "Capesterre-Belle-Eau",
+    "lat": 16.0553416101,
+    "lon": -61.6117007507,
+    "territoire": "Guadeloupe"
+  },
+  "97131": {
+    "commune": "Petit-Canal",
+    "lat": 16.3893559546,
+    "lon": -61.4497634927,
+    "territoire": "Guadeloupe"
+  },
+  "97134": {
+    "commune": "Saint-Louis",
+    "lat": 15.9659560448,
+    "lon": -61.275417015,
+    "territoire": "Guadeloupe"
+  },
+  "97136": {
+    "commune": "Terre-de-Bas",
+    "lat": 15.8543976309,
+    "lon": -61.6341060684,
+    "territoire": "Guadeloupe"
+  },
+  "97137": {
+    "commune": "Terre-de-Haut",
+    "lat": 15.8653892358,
+    "lon": -61.5842592994,
+    "territoire": "Guadeloupe"
+  },
+  "97139": {
+    "commune": "Abymes",
+    "lat": 16.2727794035,
+    "lon": -61.5017044974,
+    "territoire": "Guadeloupe"
+  },
+  "97140": {
+    "commune": "Capesterre-de-Marie-Galante",
+    "lat": 15.9200251247,
+    "lon": -61.2299898097,
+    "territoire": "Guadeloupe"
+  },
+  "97141": {
+    "commune": "Vieux-Fort",
+    "lat": 15.9602228219,
+    "lon": -61.6945194162,
+    "territoire": "Guadeloupe"
+  },
+  "97142": {
+    "commune": "Abymes",
+    "lat": 16.2727794035,
+    "lon": -61.5017044974,
+    "territoire": "Guadeloupe"
+  },
+  "97150": {
+    "commune": "Marigot",
+    "lat": 18.0731,
+    "lon": -63.0822,
+    "territoire": "Saint-Martin"
+  },
+  "97160": {
+    "commune": "Moule",
+    "lat": 16.3204595682,
+    "lon": -61.3718985191,
+    "territoire": "Guadeloupe"
+  },
+  "97170": {
+    "commune": "Petit-Bourg",
+    "lat": 16.1716063795,
+    "lon": -61.657244347,
+    "territoire": "Guadeloupe"
+  },
+  "97180": {
+    "commune": "Sainte-Anne",
+    "lat": 16.2572300868,
+    "lon": -61.3874730054,
+    "territoire": "Guadeloupe"
+  },
+  "97190": {
+    "commune": "Gosier",
+    "lat": 16.2252192032,
+    "lon": -61.4698776652,
+    "territoire": "Guadeloupe"
+  },
+  "97200": {
+    "commune": "Fort-de-France",
+    "lat": 14.6411114389,
+    "lon": -61.0691889244,
+    "territoire": "Martinique"
+  },
+  "97211": {
+    "commune": "Rivière-Pilote",
+    "lat": 14.5088319879,
+    "lon": -60.8978478666,
+    "territoire": "Martinique"
+  },
+  "97212": {
+    "commune": "Saint-Joseph",
+    "lat": 14.6764143687,
+    "lon": -61.0439024925,
+    "territoire": "Martinique"
+  },
+  "97213": {
+    "commune": "Gros-Morne",
+    "lat": 14.7121020202,
+    "lon": -61.0260573879,
+    "territoire": "Martinique"
+  },
+  "97214": {
+    "commune": "Lorrain",
+    "lat": 14.801120487,
+    "lon": -61.0765081422,
+    "territoire": "Martinique"
+  },
+  "97215": {
+    "commune": "Rivière-Salée",
+    "lat": 14.5261192696,
+    "lon": -60.9652129464,
+    "territoire": "Martinique"
+  },
+  "97216": {
+    "commune": "Ajoupa-Bouillon",
+    "lat": 14.8142832959,
+    "lon": -61.1230843265,
+    "territoire": "Martinique"
+  },
+  "97217": {
+    "commune": "Anses-d'Arlet",
+    "lat": 14.4993591112,
+    "lon": -61.0720993976,
+    "territoire": "Martinique"
+  },
+  "97218": {
+    "commune": "Basse-Pointe / Grand'Rivière / Macouba",
+    "lat": 14.848859921366667,
+    "lon": -61.15140397353334,
+    "territoire": "Martinique"
+  },
+  "97220": {
+    "commune": "Trinité",
+    "lat": 14.7386362443,
+    "lon": -60.9496306893,
+    "territoire": "Martinique"
+  },
+  "97221": {
+    "commune": "Carbet",
+    "lat": 14.7110039815,
+    "lon": -61.1647565483,
+    "territoire": "Martinique"
+  },
+  "97222": {
+    "commune": "Bellefontaine / Case-Pilote",
+    "lat": 14.667517427300002,
+    "lon": -61.13618755585,
+    "territoire": "Martinique"
+  },
+  "97223": {
+    "commune": "Diamant",
+    "lat": 14.4890909775,
+    "lon": -61.0210620105,
+    "territoire": "Martinique"
+  },
+  "97224": {
+    "commune": "Ducos",
+    "lat": 14.5777851381,
+    "lon": -60.9676704441,
+    "territoire": "Martinique"
+  },
+  "97225": {
+    "commune": "Marigot",
+    "lat": 14.7808848923,
+    "lon": -61.0507940924,
+    "territoire": "Martinique"
+  },
+  "97226": {
+    "commune": "Morne-Vert",
+    "lat": 14.7038196531,
+    "lon": -61.1353176501,
+    "territoire": "Martinique"
+  },
+  "97227": {
+    "commune": "Sainte-Anne",
+    "lat": 14.4366363772,
+    "lon": -60.8550865047,
+    "territoire": "Martinique"
+  },
+  "97228": {
+    "commune": "Sainte-Luce",
+    "lat": 14.4855423973,
+    "lon": -60.9451190973,
+    "territoire": "Martinique"
+  },
+  "97229": {
+    "commune": "Trois-Îlets",
+    "lat": 14.5272688928,
+    "lon": -61.0370896934,
+    "territoire": "Martinique"
+  },
+  "97230": {
+    "commune": "Sainte-Marie",
+    "lat": 14.7689902687,
+    "lon": -61.0169082223,
+    "territoire": "Martinique"
+  },
+  "97231": {
+    "commune": "Robert",
+    "lat": 14.6752109401,
+    "lon": -60.9429518756,
+    "territoire": "Martinique"
+  },
+  "97232": {
+    "commune": "Lamentin",
+    "lat": 14.6247600105,
+    "lon": -60.9933549815,
+    "territoire": "Martinique"
+  },
+  "97233": {
+    "commune": "Schœlcher",
+    "lat": 14.6449217661,
+    "lon": -61.100038609,
+    "territoire": "Martinique"
+  },
+  "97234": {
+    "commune": "Fort-de-France",
+    "lat": 14.6411114389,
+    "lon": -61.0691889244,
+    "territoire": "Martinique"
+  },
+  "97240": {
+    "commune": "François",
+    "lat": 14.6060564718,
+    "lon": -60.9057158214,
+    "territoire": "Martinique"
+  },
+  "97250": {
+    "commune": "Fonds-Saint-Denis / Prêcheur / Saint-Pierre",
+    "lat": 14.773902610066665,
+    "lon": -61.16368077906666,
+    "territoire": "Martinique"
+  },
+  "97260": {
+    "commune": "Morne-Rouge",
+    "lat": 14.7694146135,
+    "lon": -61.1206407775,
+    "territoire": "Martinique"
+  },
+  "97270": {
+    "commune": "Saint-Esprit",
+    "lat": 14.5588947803,
+    "lon": -60.9216071826,
+    "territoire": "Martinique"
+  },
+  "97280": {
+    "commune": "Vauclin",
+    "lat": 14.5436764866,
+    "lon": -60.8571906355,
+    "territoire": "Martinique"
+  },
+  "97290": {
+    "commune": "Marin",
+    "lat": 14.4840254458,
+    "lon": -60.8579380107,
+    "territoire": "Martinique"
+  },
+  "97300": {
+    "commune": "Cayenne",
+    "lat": 5.02173742828,
+    "lon": -52.5012511113,
+    "territoire": "Guyane"
+  },
+  "97310": {
+    "commune": "Kourou",
+    "lat": 4.93360677012,
+    "lon": -52.7663314416,
+    "territoire": "Guyane"
+  },
+  "97311": {
+    "commune": "Roura",
+    "lat": 4.46468598944,
+    "lon": -52.5128388412,
+    "territoire": "Guyane"
+  },
+  "97312": {
+    "commune": "Saint-Élie",
+    "lat": 4.52922646237,
+    "lon": -53.1006779669,
+    "territoire": "Guyane"
+  },
+  "97313": {
+    "commune": "Saint-Georges",
+    "lat": 3.74201791735,
+    "lon": -52.1323737516,
+    "territoire": "Guyane"
+  },
+  "97314": {
+    "commune": "Saül",
+    "lat": 3.91592827293,
+    "lon": -53.3990290604,
+    "territoire": "Guyane"
+  },
+  "97315": {
+    "commune": "Sinnamary",
+    "lat": 5.23199544843,
+    "lon": -53.01314648,
+    "territoire": "Guyane"
+  },
+  "97316": {
+    "commune": "Papaichton",
+    "lat": 4.04155401384,
+    "lon": -54.044235852,
+    "territoire": "Guyane"
+  },
+  "97317": {
+    "commune": "Apatou",
+    "lat": 4.83044768998,
+    "lon": -54.2705505503,
+    "territoire": "Guyane"
+  },
+  "97318": {
+    "commune": "Mana",
+    "lat": 4.98285747902,
+    "lon": -53.6480364932,
+    "territoire": "Guyane"
+  },
+  "97319": {
+    "commune": "Awala-Yalimapo",
+    "lat": 5.68354192071,
+    "lon": -53.9162639219,
+    "territoire": "Guyane"
+  },
+  "97320": {
+    "commune": "Saint-Laurent-du-Maroni",
+    "lat": 4.96474398632,
+    "lon": -53.9832113662,
+    "territoire": "Guyane"
+  },
+  "97330": {
+    "commune": "Camopi",
+    "lat": 2.83799126092,
+    "lon": -52.796516306,
+    "territoire": "Guyane"
+  },
+  "97340": {
+    "commune": "Grand-Santi",
+    "lat": 4.3843431186,
+    "lon": -54.1716818959,
+    "territoire": "Guyane"
+  },
+  "97350": {
+    "commune": "Iracoubo",
+    "lat": 5.27291181428,
+    "lon": -53.3208385984,
+    "territoire": "Guyane"
+  },
+  "97351": {
+    "commune": "Matoury",
+    "lat": 4.83179351032,
+    "lon": -52.3435609813,
+    "territoire": "Guyane"
+  },
+  "97352": {
+    "commune": "Roura",
+    "lat": 4.46468598944,
+    "lon": -52.5128388412,
+    "territoire": "Guyane"
+  },
+  "97353": {
+    "commune": "Régina",
+    "lat": 3.94091776652,
+    "lon": -52.5199269871,
+    "territoire": "Guyane"
+  },
+  "97354": {
+    "commune": "Remire-Montjoly",
+    "lat": 4.88437128593,
+    "lon": -52.2788402688,
+    "territoire": "Guyane"
+  },
+  "97355": {
+    "commune": "Macouria",
+    "lat": 4.98238462171,
+    "lon": -52.5084392425,
+    "territoire": "Guyane"
+  },
+  "97356": {
+    "commune": "Montsinéry-Tonnegrande",
+    "lat": 4.80953892931,
+    "lon": -52.5098116892,
+    "territoire": "Guyane"
+  },
+  "97360": {
+    "commune": "Mana",
+    "lat": 4.98285747902,
+    "lon": -53.6480364932,
+    "territoire": "Guyane"
+  },
+  "97370": {
+    "commune": "Maripasoula",
+    "lat": 2.97088417594,
+    "lon": -53.7584193112,
+    "territoire": "Guyane"
+  },
+  "97380": {
+    "commune": "Ouanary",
+    "lat": 4.19095709482,
+    "lon": -51.8100673748,
+    "territoire": "Guyane"
+  },
+  "97390": {
+    "commune": "Régina",
+    "lat": 3.94091776652,
+    "lon": -52.5199269871,
+    "territoire": "Guyane"
+  },
+  "97400": {
+    "commune": "Saint-Denis",
+    "lat": -20.932970819199998,
+    "lon": 55.446867167,
+    "territoire": "La Réunion"
+  },
+  "97410": {
+    "commune": "Saint-Pierre",
+    "lat": -21.3123242427,
+    "lon": 55.49361551639999,
+    "territoire": "La Réunion"
+  },
+  "97411": {
+    "commune": "Saint-Paul",
+    "lat": -21.0445317522,
+    "lon": 55.3223334298,
+    "territoire": "La Réunion"
+  },
+  "97412": {
+    "commune": "Bras-Panon",
+    "lat": -21.0233281862,
+    "lon": 55.6195846061,
+    "territoire": "La Réunion"
+  },
+  "97413": {
+    "commune": "Cilaos",
+    "lat": -21.1441659144,
+    "lon": 55.4586035944,
+    "territoire": "La Réunion"
+  },
+  "97414": {
+    "commune": "Entre-Deux",
+    "lat": -21.2042397201,
+    "lon": 55.4922992792,
+    "territoire": "La Réunion"
+  },
+  "97416": {
+    "commune": "Saint-Leu",
+    "lat": -21.1665966424,
+    "lon": 55.3331335776,
+    "territoire": "La Réunion"
+  },
+  "97417": {
+    "commune": "Saint-Denis",
+    "lat": -20.9329708192,
+    "lon": 55.446867167,
+    "territoire": "La Réunion"
+  },
+  "97418": {
+    "commune": "Tampon",
+    "lat": -21.223274585,
+    "lon": 55.5584875266,
+    "territoire": "La Réunion"
+  },
+  "97419": {
+    "commune": "Possession",
+    "lat": -20.9940292693,
+    "lon": 55.3975084985,
+    "territoire": "La Réunion"
+  },
+  "97420": {
+    "commune": "Port",
+    "lat": -20.9448851377,
+    "lon": 55.305326715,
+    "territoire": "La Réunion"
+  },
+  "97421": {
+    "commune": "Saint-Louis",
+    "lat": -21.2339268494,
+    "lon": 55.4213388686,
+    "territoire": "La Réunion"
+  },
+  "97422": {
+    "commune": "Saint-Paul",
+    "lat": -21.0445317522,
+    "lon": 55.3223334298,
+    "territoire": "La Réunion"
+  },
+  "97423": {
+    "commune": "Saint-Paul",
+    "lat": -21.0445317522,
+    "lon": 55.3223334298,
+    "territoire": "La Réunion"
+  },
+  "97424": {
+    "commune": "Saint-Leu",
+    "lat": -21.1665966424,
+    "lon": 55.3331335776,
+    "territoire": "La Réunion"
+  },
+  "97425": {
+    "commune": "Avirons",
+    "lat": -21.2089994294,
+    "lon": 55.3591485447,
+    "territoire": "La Réunion"
+  },
+  "97426": {
+    "commune": "Trois-Bassins",
+    "lat": -21.1104753596,
+    "lon": 55.3297522865,
+    "territoire": "La Réunion"
+  },
+  "97427": {
+    "commune": "Étang-Salé",
+    "lat": -21.2494246287,
+    "lon": 55.3667927801,
+    "territoire": "La Réunion"
+  },
+  "97429": {
+    "commune": "Petite-Île",
+    "lat": -21.3401068981,
+    "lon": 55.5687050843,
+    "territoire": "La Réunion"
+  },
+  "97430": {
+    "commune": "Tampon",
+    "lat": -21.223274585,
+    "lon": 55.5584875266,
+    "territoire": "La Réunion"
+  },
+  "97431": {
+    "commune": "Plaine-des-Palmistes",
+    "lat": -21.1521762495,
+    "lon": 55.6445268962,
+    "territoire": "La Réunion"
+  },
+  "97432": {
+    "commune": "Saint-Pierre",
+    "lat": -21.3123242427,
+    "lon": 55.4936155164,
+    "territoire": "La Réunion"
+  },
+  "97433": {
+    "commune": "Salazie",
+    "lat": -21.0469188863,
+    "lon": 55.5082381926,
+    "territoire": "La Réunion"
+  },
+  "97434": {
+    "commune": "Saint-Paul",
+    "lat": -21.0445317522,
+    "lon": 55.3223334298,
+    "territoire": "La Réunion"
+  },
+  "97435": {
+    "commune": "Saint-Paul",
+    "lat": -21.0445317522,
+    "lon": 55.322333429800004,
+    "territoire": "La Réunion"
+  },
+  "97436": {
+    "commune": "Saint-Leu",
+    "lat": -21.1665966424,
+    "lon": 55.3331335776,
+    "territoire": "La Réunion"
+  },
+  "97437": {
+    "commune": "Saint-Benoît",
+    "lat": -21.0918662796,
+    "lon": 55.6494168586,
+    "territoire": "La Réunion"
+  },
+  "97438": {
+    "commune": "Sainte-Marie",
+    "lat": -20.9470588515,
+    "lon": 55.5303555863,
+    "territoire": "La Réunion"
+  },
+  "97439": {
+    "commune": "Sainte-Rose",
+    "lat": -21.1925353922,
+    "lon": 55.7545224725,
+    "territoire": "La Réunion"
+  },
+  "97440": {
+    "commune": "Saint-André",
+    "lat": -20.9630406732,
+    "lon": 55.64273287860001,
+    "territoire": "La Réunion"
+  },
+  "97441": {
+    "commune": "Sainte-Suzanne",
+    "lat": -20.9457340523,
+    "lon": 55.5927790824,
+    "territoire": "La Réunion"
+  },
+  "97442": {
+    "commune": "Saint-Philippe",
+    "lat": -21.3040005374,
+    "lon": 55.7454668204,
+    "territoire": "La Réunion"
+  },
+  "97450": {
+    "commune": "Saint-Louis",
+    "lat": -21.2339268494,
+    "lon": 55.4213388686,
+    "territoire": "La Réunion"
+  },
+  "97460": {
+    "commune": "Saint-Paul",
+    "lat": -21.0445317522,
+    "lon": 55.322333429800004,
+    "territoire": "La Réunion"
+  },
+  "97470": {
+    "commune": "Saint-Benoît",
+    "lat": -21.0918662796,
+    "lon": 55.6494168586,
+    "territoire": "La Réunion"
+  },
+  "97480": {
+    "commune": "Saint-Joseph",
+    "lat": -21.3063550443,
+    "lon": 55.6420686506,
+    "territoire": "La Réunion"
+  },
+  "97490": {
+    "commune": "Saint-Denis",
+    "lat": -20.9329708192,
+    "lon": 55.44686716700001,
+    "territoire": "La Réunion"
+  },
+  "97600": {
+    "commune": "Koungou / Mamoudzou",
+    "lat": -12.775518787966666,
+    "lon": 45.191163465500004,
+    "territoire": "Mayotte"
+  },
+  "97605": {
+    "commune": "Mamoudzou",
+    "lat": -12.7899979586,
+    "lon": 45.1932456026,
+    "territoire": "Mayotte"
+  },
+  "97615": {
+    "commune": "Dzaoudzi / Pamandzi",
+    "lat": -12.784822867299999,
+    "lon": 45.28291199393333,
+    "territoire": "Mayotte"
+  },
+  "97620": {
+    "commune": "Bouéni / Chirongui",
+    "lat": -12.92210851095,
+    "lon": 45.123450023800004,
+    "territoire": "Mayotte"
+  },
+  "97625": {
+    "commune": "Kani-Kéli",
+    "lat": -12.9717285854,
+    "lon": 45.1251508512,
+    "territoire": "Mayotte"
+  },
+  "97630": {
+    "commune": "Acoua / Mtsamboro",
+    "lat": -12.7056993675,
+    "lon": 45.07119347965,
+    "territoire": "Mayotte"
+  },
+  "97640": {
+    "commune": "Sada",
+    "lat": -12.8611649609,
+    "lon": 45.1185503145,
+    "territoire": "Mayotte"
+  },
+  "97650": {
+    "commune": "Bandraboua / M'Tsangamouji / Mamoudzou",
+    "lat": -12.754845714066667,
+    "lon": 45.13284550349999,
+    "territoire": "Mayotte"
+  },
+  "97660": {
+    "commune": "Bandrele / Dembeni",
+    "lat": -12.8919846158,
+    "lon": 45.17655020265,
+    "territoire": "Mayotte"
+  },
+  "97670": {
+    "commune": "Chiconi / Ouangani",
+    "lat": -12.831904424066666,
+    "lon": 45.129705376400004,
+    "territoire": "Mayotte"
+  },
+  "97680": {
+    "commune": "Mamoudzou / Tsingoni",
+    "lat": -12.7860823161,
+    "lon": 45.16383675545,
+    "territoire": "Mayotte"
+  }
+}

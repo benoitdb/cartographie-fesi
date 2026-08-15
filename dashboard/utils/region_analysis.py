@@ -18,7 +18,7 @@ from utils.stats import (
     detect_outliers,
     detect_regroupements_beneficiaire,
 )
-from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS
+from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
@@ -162,7 +162,17 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
     stats_fonds_region = compute_stats_table(df_region_ops, FONDS).rename(
         columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
     )
-    st.dataframe(stats_fonds_region, hide_index=True, use_container_width=True, column_config=stats_col_config)
+    st.dataframe(
+        style_categorical_columns(stats_fonds_region, {FONDS: FONDS_COLORS}),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            **stats_col_config,
+            "Médiane": st.column_config.ProgressColumn(
+                format="%,d €", min_value=0, max_value=int(stats_fonds_region["Médiane"].max())
+            ),
+        },
+    )
 
     st.markdown("**Visualisation (boîtes à moustaches)**")
     st.caption(
@@ -185,17 +195,25 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
 
     st.markdown("**Opérations à montant atypique**")
     st.caption(
-        "Opérations dont le montant s'écarte fortement de la distribution habituelle du groupe "
-        "(méthode IQR) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
+        "Opérations dont le montant s'écarte fortement de la distribution habituelle de son fonds "
+        "(méthode IQR, calculée séparément par Fonds — FEDER, FSE+ et FTJ n'ont pas la même échelle "
+        "de montants) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
         "correspondre à un projet structurant légitime."
     )
-    outliers_region = detect_outliers(df_region_ops)
+    outliers_region = detect_outliers(df_region_ops, group_col=FONDS)
     st.caption(f"{len(outliers_region)} opération(s) hors de l'intervalle interquartile habituel.")
+    outliers_region_table = outliers_region[["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Montant UE"]].head(50)
     st.dataframe(
-        outliers_region[["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Montant UE"]].head(50),
+        style_categorical_columns(outliers_region_table, {FONDS: FONDS_COLORS}),
         hide_index=True,
         use_container_width=True,
-        column_config={"Montant UE": montant_col_config},
+        column_config={
+            "Montant UE": st.column_config.ProgressColumn(
+                format="%,d €",
+                min_value=0,
+                max_value=int(outliers_region_table["Montant UE"].max()) if len(outliers_region_table) else 1,
+            )
+        },
     )
 
     st.markdown("**Concentration par bénéficiaire**")
@@ -282,34 +300,46 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
         columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
     )
     st.dataframe(
-        cofinancement_fonds_region,
+        style_categorical_columns(cofinancement_fonds_region, {FONDS: FONDS_COLORS}),
         hide_index=True,
         use_container_width=True,
-        column_config={"Taux moyen": taux_col_config, "Taux médian": taux_col_config},
+        column_config={
+            "Taux moyen": st.column_config.ProgressColumn(
+                format="percent", min_value=0, max_value=max(1.0, cofinancement_fonds_region["Taux moyen"].max())
+            ),
+            "Taux médian": taux_col_config,
+        },
     )
 
     cofinancement_outliers_region = detect_cofinancement_outliers(df_region_ops).assign(
         **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}
     )
     st.caption(f"{len(cofinancement_outliers_region)} opération(s) à taux de cofinancement atypique (méthode IQR).")
+    cofinancement_outliers_region_table = cofinancement_outliers_region[
+        [
+            "Intitulé du projet",
+            "Nom du bénéficiaire",
+            FONDS,
+            "Total des dépenses éligibles",
+            "Montant UE",
+            "Montant hors UE",
+            "Taux de cofinancement",
+        ]
+    ].head(50)
     st.dataframe(
-        cofinancement_outliers_region[
-            [
-                "Intitulé du projet",
-                "Nom du bénéficiaire",
-                FONDS,
-                "Total des dépenses éligibles",
-                "Montant UE",
-                "Montant hors UE",
-                "Taux de cofinancement",
-            ]
-        ].head(50),
+        style_categorical_columns(cofinancement_outliers_region_table, {FONDS: FONDS_COLORS}),
         hide_index=True,
         use_container_width=True,
         column_config={
             "Taux de cofinancement": taux_col_config,
             "Total des dépenses éligibles": montant_col_config,
-            "Montant UE": montant_col_config,
+            "Montant UE": st.column_config.ProgressColumn(
+                format="%,d €",
+                min_value=0,
+                max_value=int(cofinancement_outliers_region_table["Montant UE"].max())
+                if len(cofinancement_outliers_region_table)
+                else 1,
+            ),
             "Montant hors UE": montant_col_config,
         },
     )
@@ -323,15 +353,18 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
     incoherentes_region = detect_incoherent_cofinancement(df_region_ops)
     st.caption(f"{len(incoherentes_region)} opération(s) où le montant UE dépasse le total des dépenses éligibles.")
     if len(incoherentes_region):
+        incoherentes_region_table = incoherentes_region[
+            ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Total des dépenses éligibles", "Montant UE", "Taux de cofinancement"]
+        ].head(50)
         st.dataframe(
-            incoherentes_region[
-                ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Total des dépenses éligibles", "Montant UE", "Taux de cofinancement"]
-            ].head(50),
+            style_categorical_columns(incoherentes_region_table, {FONDS: FONDS_COLORS}),
             hide_index=True,
             use_container_width=True,
             column_config={
                 "Total des dépenses éligibles": montant_col_config,
-                "Montant UE": montant_col_config,
+                "Montant UE": st.column_config.ProgressColumn(
+                    format="%,d €", min_value=0, max_value=int(incoherentes_region_table["Montant UE"].max())
+                ),
                 "Taux de cofinancement": taux_col_config,
             },
         )

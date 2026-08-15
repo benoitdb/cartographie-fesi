@@ -5,6 +5,7 @@ n'est pas modifié, cette normalisation est propre à l'affichage du dashboard."
 from pathlib import Path
 import json
 
+import pandas as pd
 import plotly.express as px
 
 from utils.plot_style import disable_map_interaction, style_hover, style_map_background
@@ -185,9 +186,12 @@ def assign_departement(op):
     return None, "inconnu"
 
 
-def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE"):
+def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE", show_colorbar=True):
     """Carte des départements d'une région métropolitaine, colorée par montant UE total.
-    df_dept_assigned doit déjà porter les colonnes 'dept'/'dept_source' (assign_departments_df)."""
+    df_dept_assigned doit déjà porter les colonnes 'dept'/'dept_source' (assign_departments_df).
+    show_colorbar=False désactive la légende intégrée à la carte — à utiliser quand la carte est
+    affichée à côté d'une légende autonome (build_standalone_colorbar) dans une colonne séparée,
+    même principe que la carte nationale d'Accueil.py."""
     depts_region = [code for code, r in DEPT_TO_REGION.items() if r == region]
     geojson = load_departements_geojson()
     features = [f for f in geojson["features"] if f["properties"]["code"] in depts_region]
@@ -216,5 +220,72 @@ def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE
         hovertemplate="<b>%{customdata[0]}</b><br>Montant UE : %{z:,.0f} €<br>Nb projets : %{customdata[1]}<extra></extra>"
     )
     fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, coloraxis_showscale=show_colorbar)
+    return disable_map_interaction(style_map_background(style_hover(fig)))
+
+
+def build_dromcom_outline(territory, geojson, fill_color="#2a78d6"):
+    """Contour réel d'un territoire DROM-COM unique, remplissage uni — pour la Vue Régionale
+    d'un DROM-COM, où build_department_choropleth ne s'applique pas (chaque DROM-COM
+    correspond à un département/collectivité unique, pas de découpage pertinent en dessous).
+    Pas d'échelle de couleur par montant : un seul territoire affiché sur cette page, rien à
+    comparer (contrairement aux vignettes DROM-COM d'Accueil.py, qui partagent une échelle
+    nationale commune entre plusieurs territoires)."""
+    fig = px.choropleth(
+        pd.DataFrame([{"region": territory, "valeur": "valeur"}]),
+        geojson=geojson,
+        locations="region",
+        featureidkey="properties.nom",
+        color="valeur",
+        color_discrete_map={"valeur": fill_color},
+    )
+    fig.update_traces(hovertemplate=f"<b>{territory}</b><extra></extra>")
+    fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, showlegend=False)
+    return disable_map_interaction(style_map_background(style_hover(fig)))
+
+
+def build_dromcom_projects_map(territory, geojson, bubbles_df, amount_col="Montant UE", fill_color="#c9d9ec", bubble_color="#0ea5e9"):
+    """Contour du territoire (rempli d'une couleur pâle, cf. build_dromcom_outline — Choropleth
+    n'accepte pas de réglage d'opacité par trace, d'où une couleur claire plutôt qu'un fond
+    foncé rendu transparent) avec une bulle par code postal regroupant les opérations qui s'y
+    rattachent — taille proportionnelle au
+    montant UE cumulé du groupe. Une seule couleur de bulle : la distinction opération réelle
+    vs. bénéficiaire approximé est expliquée en caption (taux de couverture par source), pas
+    encodée visuellement — un territoire DROM-COM est déjà petit à l'écran, une deuxième
+    dimension de couleur surchargerait plus qu'elle n'informerait."""
+    fig = px.choropleth(
+        pd.DataFrame([{"region": territory, "valeur": "valeur"}]),
+        geojson=geojson,
+        locations="region",
+        featureidkey="properties.nom",
+        color="valeur",
+        color_discrete_map={"valeur": fill_color},
+    )
+    fig.update_traces(hovertemplate=f"<b>{territory}</b><extra></extra>")
+    fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
+
+    if len(bubbles_df):
+        montant_max = bubbles_df[amount_col].max()
+        fig.add_scattergeo(
+            lon=bubbles_df["lon"],
+            lat=bubbles_df["lat"],
+            text=bubbles_df["commune"],
+            customdata=bubbles_df[["code_postal", "count", amount_col]],
+            mode="markers",
+            marker=dict(
+                size=bubbles_df[amount_col],
+                sizemode="area",
+                sizeref=2.0 * montant_max / (40.0**2) if montant_max else 1,
+                color=bubble_color,
+                opacity=0.8,
+                line=dict(width=1, color="white"),
+            ),
+            hovertemplate=(
+                "<b>%{text}</b> (%{customdata[0]})<br>%{customdata[1]} projet(s)<br>"
+                "Montant UE : %{customdata[2]:,.0f} €<extra></extra>"
+            ),
+        )
+
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, showlegend=False)
     return disable_map_interaction(style_map_background(style_hover(fig)))

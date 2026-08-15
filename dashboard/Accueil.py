@@ -21,7 +21,7 @@ from utils.stats import (
     detect_regroupements_beneficiaire,
 )
 from utils.plot_style import MAP_CONFIG, build_standalone_colorbar, disable_map_interaction, style_hover, style_map_background
-from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS
+from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)"
@@ -334,7 +334,15 @@ with col_fonds:
     stats_fonds = compute_stats_table(df_national_ops, "Fonds").rename(
         columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
     )
-    st.dataframe(stats_fonds, hide_index=True, use_container_width=True, column_config=stats_col_config)
+    st.dataframe(
+        style_categorical_columns(stats_fonds, {"Fonds": FONDS_COLORS}),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            **stats_col_config,
+            "Médiane": st.column_config.ProgressColumn(format="%,d €", min_value=0, max_value=int(stats_fonds["Médiane"].max())),
+        },
+    )
 with box_col_fonds:
     st.plotly_chart(
         build_boxplot(df_national_ops, "Fonds", log_y=echelle_box == "Logarithmique"), use_container_width=True
@@ -360,17 +368,23 @@ st.plotly_chart(
 
 st.markdown("**Opérations à montant atypique**")
 st.caption(
-    "Opérations dont le montant s'écarte fortement de la distribution habituelle du groupe "
-    "(méthode IQR) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
+    "Opérations dont le montant s'écarte fortement de la distribution habituelle de son fonds "
+    "(méthode IQR, calculée séparément par Fonds — FEDER, FSE+ et FTJ n'ont pas la même échelle "
+    "de montants) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
     "correspondre à un projet structurant légitime."
 )
-outliers = detect_outliers(df_national_ops)
+outliers = detect_outliers(df_national_ops, group_col="Fonds")
 st.caption(f"{len(outliers)} opération(s) hors de l'intervalle interquartile habituel.")
+outliers_table = outliers[["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Région de l'opération", "Montant UE"]].head(50)
 st.dataframe(
-    outliers[["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Région de l'opération", "Montant UE"]].head(50),
+    style_categorical_columns(outliers_table, {"Fonds": FONDS_COLORS}),
     hide_index=True,
     use_container_width=True,
-    column_config={"Montant UE": montant_col_config},
+    column_config={
+        "Montant UE": st.column_config.ProgressColumn(
+            format="%,d €", min_value=0, max_value=int(outliers_table["Montant UE"].max()) if len(outliers_table) else 1
+        )
+    },
 )
 
 st.markdown("**Concentration par bénéficiaire**")
@@ -451,35 +465,45 @@ cofinancement_fonds = compute_cofinancement_table(df_national_ops, "Fonds").rena
     columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
 )
 st.dataframe(
-    cofinancement_fonds,
+    style_categorical_columns(cofinancement_fonds, {"Fonds": FONDS_COLORS}),
     hide_index=True,
     use_container_width=True,
-    column_config={"Taux moyen": taux_col_config, "Taux médian": taux_col_config},
+    column_config={
+        "Taux moyen": st.column_config.ProgressColumn(
+            format="percent", min_value=0, max_value=max(1.0, cofinancement_fonds["Taux moyen"].max())
+        ),
+        "Taux médian": taux_col_config,
+    },
 )
 
 cofinancement_outliers = detect_cofinancement_outliers(df_national_ops).assign(
     **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}
 )
 st.caption(f"{len(cofinancement_outliers)} opération(s) à taux de cofinancement atypique (méthode IQR).")
+cofinancement_outliers_table = cofinancement_outliers[
+    [
+        "Intitulé du projet",
+        "Nom du bénéficiaire",
+        "Fonds",
+        "Région de l'opération",
+        "Total des dépenses éligibles",
+        "Montant UE",
+        "Montant hors UE",
+        "Taux de cofinancement",
+    ]
+].head(50)
 st.dataframe(
-    cofinancement_outliers[
-        [
-            "Intitulé du projet",
-            "Nom du bénéficiaire",
-            "Fonds",
-            "Région de l'opération",
-            "Total des dépenses éligibles",
-            "Montant UE",
-            "Montant hors UE",
-            "Taux de cofinancement",
-        ]
-    ].head(50),
+    style_categorical_columns(cofinancement_outliers_table, {"Fonds": FONDS_COLORS}),
     hide_index=True,
     use_container_width=True,
     column_config={
         "Taux de cofinancement": taux_col_config,
         "Total des dépenses éligibles": montant_col_config,
-        "Montant UE": montant_col_config,
+        "Montant UE": st.column_config.ProgressColumn(
+            format="%,d €",
+            min_value=0,
+            max_value=int(cofinancement_outliers_table["Montant UE"].max()) if len(cofinancement_outliers_table) else 1,
+        ),
         "Montant hors UE": montant_col_config,
     },
 )
@@ -493,15 +517,18 @@ st.caption(
 incoherentes = detect_incoherent_cofinancement(df_national_ops)
 st.caption(f"{len(incoherentes)} opération(s) où le montant UE dépasse le total des dépenses éligibles.")
 if len(incoherentes):
+    incoherentes_table = incoherentes[
+        ["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Total des dépenses éligibles", "Montant UE", "Taux de cofinancement"]
+    ].head(50)
     st.dataframe(
-        incoherentes[
-            ["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Total des dépenses éligibles", "Montant UE", "Taux de cofinancement"]
-        ].head(50),
+        style_categorical_columns(incoherentes_table, {"Fonds": FONDS_COLORS}),
         hide_index=True,
         use_container_width=True,
         column_config={
             "Total des dépenses éligibles": montant_col_config,
-            "Montant UE": montant_col_config,
+            "Montant UE": st.column_config.ProgressColumn(
+                format="%,d €", min_value=0, max_value=int(incoherentes_table["Montant UE"].max())
+            ),
             "Taux de cofinancement": taux_col_config,
         },
     )

@@ -21,3 +21,23 @@ FONDS_COLORS = {
     "FSE+": "#eb6834",  # orange
     "FTJ": "#1baf7a",  # aqua
 }
+
+
+def style_categorical_columns(df, columns_colormaps):
+    """Renvoie un Styler pandas avec un fond de cellule légèrement teinté par catégorie, pour
+    les colonnes indiquées (ex. Fonds, Objectif stratégique) — réutilise les couleurs standard
+    du dashboard (FONDS_COLORS / OBJECTIF_STRATEGIQUE_COLORS) pour rester cohérent avec les
+    graphiques plutôt qu'une palette recalculée par tableau.
+
+    columns_colormaps : dict {nom de colonne: dict valeur -> couleur hex}. Une colonne absente
+    de df est ignorée silencieusement (tables partagées entre pages où toutes les colonnes ne
+    sont pas toujours présentes).
+    """
+    styler = df.style
+    for col, color_map in columns_colormaps.items():
+        if col not in df.columns:
+            continue
+        cell_styles = {valeur: f"background-color: {couleur}22" for valeur, couleur in color_map.items()}
+        fallback = cell_styles.get("Non spécifié", "")
+        styler = styler.map(lambda v, cs=cell_styles, fb=fallback: cs.get(v, fb), subset=[col])
+    return styler

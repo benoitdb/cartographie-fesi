@@ -1,14 +1,74 @@
 import pandas as pd
 import streamlit as st
 
-from utils.data_loader import load_data, load_programme_totals, load_region_metadata
-from utils.departments import DEPT_TO_REGION, assign_departments_df, build_department_choropleth, department_coverage_summary
+from utils.data_loader import (
+    load_data,
+    load_dromcom_codes_postaux,
+    load_dromcom_geojson,
+    load_programme_totals,
+    load_region_metadata,
+)
+from utils.departments import (
+    DEPT_TO_REGION,
+    assign_departments_df,
+    build_department_choropleth,
+    build_dromcom_outline,
+    build_dromcom_projects_map,
+    department_coverage_summary,
+)
+from utils.dromcom_localisation import build_bubbles_localisation
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
-from utils.plot_style import MAP_CONFIG
+from utils.plot_style import MAP_CONFIG, build_standalone_colorbar
 from utils.region_analysis import FONDS, render_region_analysis
+from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 
 st.set_page_config(page_title="Vue Régionale - Cartographie FESI", layout="wide")
+
+
+@st.fragment
+def render_liste_complete_projets(df_region_ops, region):
+    # Toutes régions (métropole en plus du détail par département déjà affiché, DROM-COM
+    # en l'absence de découpage départemental pertinent). Benchmarké sur Nouvelle-Aquitaine
+    # (2510 opérations, la plus grosse région) le 2026-08-15 : construction du Styler ~0.05s,
+    # rendu ~0.4s, filtrage recherche ~2ms — le tableau lui-même n'est pas un problème de
+    # volume. Isolé en st.fragment pour que chaque frappe dans la recherche ne relance QUE ce
+    # bloc, pas toute la page (treemaps, pilotage...) — sans ça, la saisie deviendrait
+    # perceptiblement saccadée sur les grosses régions métropole.
+    st.subheader("Liste complète des projets")
+
+    recherche_projet = st.text_input(
+        "Rechercher (intitulé du projet ou bénéficiaire)", key=f"recherche_projets_liste_complete_{region}"
+    )
+    df_projets = df_region_ops[
+        [
+            "Intitulé du projet",
+            "Nom du bénéficiaire",
+            FONDS,
+            "Objectif stratégique",
+            "Date première convention",
+            "Montant UE",
+        ]
+    ].sort_values("Montant UE", ascending=False)
+    if recherche_projet:
+        masque_recherche = df_projets["Intitulé du projet"].str.contains(
+            recherche_projet, case=False, na=False
+        ) | df_projets["Nom du bénéficiaire"].str.contains(recherche_projet, case=False, na=False)
+        df_projets = df_projets[masque_recherche]
+    st.caption(f"{len(df_projets):,}".replace(",", " ") + f" / {len(df_region_ops):,}".replace(",", " ") + " projet(s).")
+
+    st.dataframe(
+        style_categorical_columns(df_projets, {FONDS: FONDS_COLORS, "Objectif stratégique": OBJECTIF_STRATEGIQUE_COLORS}),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Montant UE": st.column_config.ProgressColumn(
+                format="%,d €",
+                min_value=0,
+                max_value=int(df_region_ops["Montant UE"].max()),
+            )
+        },
+    )
 
 data = load_data()
 by_region = data["aggregates"]["by_region"]
@@ -34,15 +94,20 @@ if not region_ops:
     st.info("Aucune opération pour cette région avec les fonds sélectionnés.")
     st.stop()
 
-# Aperçu général : infos de base (une case, 4 lignes) à côté de la carte des départements
-# (régions métropole uniquement : les régions DROM correspondent chacune à un département
-# unique, pas de découpage pertinent). Carte calculée ici, réutilisée plus bas dans "Détail
-# par département" plutôt que reconstruite deux fois.
+# Aperçu général : infos de base (une case, 4 lignes) à côté de la carte — carte des
+# départements en métropole (calculée ici, réutilisée plus bas dans "Détail par département"
+# plutôt que reconstruite deux fois), contour réel du territoire pour un DROM-COM (chaque
+# DROM-COM correspond à un département/collectivité unique, pas de découpage pertinent en
+# dessous, donc pas de "Détail par département" pour ces régions).
 region_meta = load_region_metadata().get(region)
 est_metropole = region in DEPT_TO_REGION.values()
 df_region_dept = assign_departments_df(pd.DataFrame(region_ops)) if est_metropole else None
 
-apercu_col1, apercu_col2 = st.columns([1, 2]) if est_metropole else (st.columns(1)[0], None)
+if not est_metropole:
+    bubbles_df, couverture_localisation = build_bubbles_localisation(region_ops, region, load_dromcom_codes_postaux())
+    total_localisation = sum(couverture_localisation.values())
+
+apercu_col1, apercu_col2 = st.columns([1, 2])
 with apercu_col1:
     if region_meta:
         categorie_affichee = region_meta["categorie_ue"] or "Non classifiée"
@@ -70,9 +135,28 @@ with apercu_col1:
                 "2021-2027, Tableau 9B."
             )
         st.caption(caption_categorie)
-if est_metropole:
-    with apercu_col2:
+with apercu_col2:
+    if est_metropole:
         st.plotly_chart(build_department_choropleth(df_region_dept, region), use_container_width=True, config=MAP_CONFIG)
+    elif total_localisation:
+        st.plotly_chart(
+            build_dromcom_projects_map(region, load_dromcom_geojson(), bubbles_df), use_container_width=True, config=MAP_CONFIG
+        )
+        st.caption(
+            f"{couverture_localisation['opération'] / total_localisation:.0%} localisées via le code "
+            "postal de l'opération elle-même (fiable), "
+            f"{couverture_localisation['bénéficiaire (approximé)'] / total_localisation:.0%} approximées "
+            "via le code postal du bénéficiaire (siège du porteur de projet, pas nécessairement le lieu "
+            "de réalisation du projet), "
+            f"{couverture_localisation['non localisable'] / total_localisation:.0%} non localisables. "
+            "Une bulle regroupe les opérations d'un même code postal, taille proportionnelle au montant "
+            "UE cumulé."
+        )
+    else:
+        st.plotly_chart(
+            build_dromcom_outline(region, load_dromcom_geojson()), use_container_width=True, config=MAP_CONFIG
+        )
+        st.info("Aucune opération localisable pour cette région avec les fonds sélectionnés.")
 
 if filtre_actif:
     region_data = summarize_ops(region_ops)
@@ -181,12 +265,6 @@ if region in DEPT_TO_REGION.values():
     non_reparti = df_region_dept[df_region_dept["dept"].isna()]
     non_reparti_montant = non_reparti["Montant UE"].sum()
     non_reparti_count = len(non_reparti)
-    if non_reparti_count:
-        kpi_col1, kpi_col2 = st.columns(2)
-        kpi_col1.metric("Montant non rattaché à un département", f"{non_reparti_montant / 1e6:,.2f} M€".replace(",", " "))
-        kpi_col2.metric("Opérations non rattachées", f"{non_reparti_count}")
-
-    st.plotly_chart(build_department_choropleth(df_region_dept, region), use_container_width=True)
 
     df_dept_connu = df_region_dept[df_region_dept["dept"].notna() & df_region_dept["dept"].isin(depts_region)]
     dept_table = (
@@ -196,6 +274,9 @@ if region in DEPT_TO_REGION.values():
         .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
         .sort_values("Montant UE total", ascending=False)
     )
+    # Échelle calée sur les seuls départements (avant l'ajout de la ligne "Non réparti" ci-dessous,
+    # qui ne correspond à aucun département sur la carte) — même échelle que la carte donc.
+    color_range_dept = [0, dept_table["Montant UE total"].max()] if len(dept_table) else [0, 1]
     if non_reparti_count:
         dept_table = pd.concat(
             [
@@ -206,12 +287,42 @@ if region in DEPT_TO_REGION.values():
             ],
             ignore_index=True,
         )
-    st.dataframe(
-        dept_table,
-        hide_index=True,
-        use_container_width=True,
-        column_config={"Montant UE total": st.column_config.NumberColumn(format="%,d €")},
-    )
+
+    # Légende + carte + tableau côte à côte (plutôt qu'empilés) : la carte d'une seule région est
+    # étroite, ce qui générait beaucoup de vide autour d'elle et du tableau en dessous. Même
+    # principe de légende autonome que la carte nationale (Accueil.py) : la carte désactive son
+    # colorbar intégré au profit d'une légende commune dans sa propre colonne.
+    col_legend_dept, col_map_dept, col_table_dept = st.columns([1, 4, 5])
+    with col_legend_dept:
+        st.plotly_chart(
+            build_standalone_colorbar(color_range_dept, "Montant UE (€)", height=420),
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )
+    with col_map_dept:
+        st.plotly_chart(
+            build_department_choropleth(df_region_dept, region, show_colorbar=False),
+            use_container_width=True,
+            config=MAP_CONFIG,
+        )
+    with col_table_dept:
+        st.dataframe(
+            dept_table,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Montant UE total": st.column_config.ProgressColumn(
+                    format="%,d €",
+                    min_value=0,
+                    max_value=int(dept_table["Montant UE total"].max()) if len(dept_table) else 1,
+                )
+            },
+        )
+
+    if non_reparti_count:
+        kpi_col1, kpi_col2 = st.columns(2)
+        kpi_col1.metric("Montant non rattaché à un département", f"{non_reparti_montant / 1e6:,.2f} M€".replace(",", " "))
+        kpi_col2.metric("Opérations non rattachées", f"{non_reparti_count}")
 
     # Opérations dont le département assigné sort du périmètre de la région
     st.subheader("Opérations rattachées à un département hors de la région")
@@ -226,11 +337,22 @@ if region in DEPT_TO_REGION.values():
     df_hors_region = df_region_dept[hors_region].copy()
     df_hors_region["Région du département"] = df_hors_region["dept"].map(DEPT_TO_REGION)
     st.caption(f"{len(df_hors_region)} opération(s) concernée(s).")
-    st.dataframe(
+    df_hors_region_table = (
         df_hors_region[
             ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "dept", "Région du département", "dept_source", "Montant UE"]
-        ].rename(columns={"dept": "Département", "dept_source": "Rattachement"}).sort_values("Montant UE", ascending=False),
+        ].rename(columns={"dept": "Département", "dept_source": "Rattachement"}).sort_values("Montant UE", ascending=False)
+    )
+    st.dataframe(
+        style_categorical_columns(df_hors_region_table, {FONDS: FONDS_COLORS}),
         hide_index=True,
         use_container_width=True,
-        column_config={"Montant UE": st.column_config.NumberColumn(format="%,d €")},
+        column_config={
+            "Montant UE": st.column_config.ProgressColumn(
+                format="%,d €",
+                min_value=0,
+                max_value=int(df_hors_region_table["Montant UE"].max()) if len(df_hors_region_table) else 1,
+            )
+        },
     )
+
+render_liste_complete_projets(df_region_ops, region)

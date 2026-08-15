@@ -38,14 +38,30 @@ def compute_stats_table(df, group_col, amount_col="Montant UE"):
     return agg.sort_values("mediane", ascending=False)
 
 
-def detect_outliers(df, amount_col="Montant UE"):
-    """Opérations dont le montant sort de [Q1 - 1.5*IQR, Q3 + 1.5*IQR]."""
+def _iqr_outlier_mask(df, amount_col):
     q1, q3 = df[amount_col].quantile(0.25), df[amount_col].quantile(0.75)
     iqr = q3 - q1
     borne_basse, borne_haute = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-    return df[(df[amount_col] < borne_basse) | (df[amount_col] > borne_haute)].sort_values(
-        amount_col, ascending=False
-    )
+    return (df[amount_col] < borne_basse) | (df[amount_col] > borne_haute)
+
+
+def detect_outliers(df, amount_col="Montant UE", group_col=None):
+    """Opérations dont le montant sort de [Q1 - 1.5*IQR, Q3 + 1.5*IQR].
+
+    group_col (optionnel, ex. "Fonds") : calcule les bornes séparément par groupe plutôt que sur
+    l'ensemble du périmètre passé. Sans ça, un fonds à plus grande échelle (FEDER, médiane ~250k€)
+    fait paraître ses projets normaux "atypiques" simplement parce qu'ils sont comparés à des
+    fonds à plus petite échelle (FSE+, médiane ~96k€) — confirmé sur les données nationales :
+    540 opérations (dont 502 FEDER) étaient signalées à tort par une borne unique, alors que
+    normales au sein de leur propre fonds.
+    """
+    if group_col is None:
+        mask = _iqr_outlier_mask(df, amount_col)
+    else:
+        mask = pd.Series(False, index=df.index)
+        for _, groupe in df.groupby(group_col):
+            mask.loc[groupe.index] = _iqr_outlier_mask(groupe, amount_col)
+    return df[mask].sort_values(amount_col, ascending=False)
 
 
 def build_histogram(df, amount_col="Montant UE", nbins=50, log_x=False, color_col=None, color_map=None):
