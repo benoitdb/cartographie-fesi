@@ -101,4 +101,9 @@ if montant_programme_national:
 else:
     st.info("Pas de donnée programmée (Tableau 9B) pour le Volet national avec les fonds sélectionnés.")
 
-render_region_analysis(national_ops, "le Volet national", key_suffix="_volet_national")
+render_region_analysis(
+    national_ops,
+    "le Volet national",
+    key_suffix="_volet_national",
+    programme_totals={f: v for f, v in programme_totals_national.items() if f in selected_fonds},
+)

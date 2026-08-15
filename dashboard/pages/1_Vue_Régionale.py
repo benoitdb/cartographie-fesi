@@ -142,7 +142,12 @@ if montant_programme_region:
 else:
     st.info("Pas de donnée programmée (Tableau 9B) pour cette région avec les fonds sélectionnés.")
 
-df_region_ops = render_region_analysis(region_ops, region, fonds_breakdown_df=fonds_breakdown_df)
+df_region_ops = render_region_analysis(
+    region_ops,
+    region,
+    fonds_breakdown_df=fonds_breakdown_df,
+    programme_totals={f: v for f, v in programme_totals_region.items() if f in selected_fonds},
+)
 
 # Détail par département (régions métropole uniquement : les régions DOM-TOM
 # correspondent chacune à un département unique, pas de découpage pertinent)

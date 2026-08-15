@@ -203,10 +203,15 @@ def build_portfolio_scatter_comparison(df, group_col, theme_col, amount_col="Mon
     return style_hover(fig)
 
 
-def build_cumulative_curve(df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds", color_map=None):
+def build_cumulative_curve(
+    df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds", color_map=None, totaux_ref=None
+):
     """Courbe d'engagement UE cumulé dans le temps, par color_col, avec repères verticaux à
     chaque 1ᵉʳ janvier pour situer les années. color_map (optionnel) fixe la couleur par
-    catégorie plutôt que la palette par défaut."""
+    catégorie plutôt que la palette par défaut. totaux_ref (optionnel, dict catégorie ->
+    montant) ajoute par catégorie un repère horizontal pointillé léger au niveau de son
+    montant **programmé** (Tableau 9B) — l'écart entre la courbe et ce repère est le reste à
+    consommer, aligné avec le barchart "Répartition par fonds" affiché à côté (mêmes couleurs)."""
     plot_df = df[[date_col, amount_col, color_col]].copy()
     plot_df[date_col] = pd.to_datetime(plot_df[date_col])
     plot_df = (
@@ -232,6 +237,10 @@ def build_cumulative_curve(df, date_col="Date de début de l'opération", amount
     )
     for year in range(plot_df[date_col].dt.year.min(), plot_df[date_col].dt.year.max() + 1):
         fig.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
+    if totaux_ref:
+        for categorie, total in totaux_ref.items():
+            couleur = (color_map or {}).get(categorie, "gray")
+            fig.add_hline(y=total, line_dash="dot", line_color=couleur, opacity=0.4)
     return style_hover(fig)
 
 

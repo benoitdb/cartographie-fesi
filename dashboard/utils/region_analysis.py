@@ -24,7 +24,7 @@ from utils.treemap import build_hierarchy_treemap
 FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
 
 
-def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, key_suffix=""):
+def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, key_suffix="", programme_totals=None):
     """Rend l'analyse complète d'un ensemble d'opérations déjà filtré : répartition par
     fonds, courbe cumulée, treemaps, statistiques (dispersion, concentration, outliers,
     cofinancement). Partagé entre Vue Régionale et Volet National — seule la sélection des
@@ -34,6 +34,11 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
     le graphe "Répartition par fonds", à la place du recalcul depuis region_ops — utilisé
     par Vue Régionale pour réutiliser l'agrégat pré-calculé du pipeline quand aucun filtre
     fonds n'est actif (comportement inchangé, léger gain de perf). None recalcule toujours.
+
+    programme_totals : dict fonds -> montant programmé (Tableau 9B, cf. `pilotage.py`), pour
+    tracer sur la courbe cumulée un repère horizontal par fonds au niveau de son enveloppe
+    programmée — l'écart entre la courbe et ce repère est le reste à consommer. None si pas
+    de donnée programmée pour ce périmètre (n'affiche alors aucun repère).
 
     key_suffix : rend uniques les clés des widgets Streamlit (st.radio) quand la fonction
     est appelée plusieurs fois dans la même session (une page par région/volet national,
@@ -55,28 +60,30 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
 
     fig_region_fonds = px.bar(
         df_region_fonds,
-        x="montant_ue_total",
-        y="fonds",
-        orientation="h",
+        x="fonds",
+        y="montant_ue_total",
         color="fonds",
         color_discrete_map=FONDS_COLORS,
         hover_data=["count"],
         labels={"montant_ue_total": "Montant UE (€)", "fonds": "Fonds", "count": "Nb projets"},
     )
-    fig_region_fonds.update_layout(height=250, showlegend=False)
+    fig_region_fonds.update_layout(height=400, showlegend=False, xaxis_title=None)
     fig_region_fonds.update_traces(width=0.5)
     fig_region_fonds.for_each_trace(
         lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{x:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
+            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
         )
     )
     fig_region_fonds = style_hover(fig_region_fonds)
 
-    fonds_col, progress_col = st.columns(2)
+    fonds_col, progress_col = st.columns([1, 3])
     with fonds_col:
         st.plotly_chart(fig_region_fonds, use_container_width=True)
     with progress_col:
-        st.plotly_chart(build_cumulative_curve(pd.DataFrame(region_ops), color_map=FONDS_COLORS), use_container_width=True)
+        st.plotly_chart(
+            build_cumulative_curve(pd.DataFrame(region_ops), color_map=FONDS_COLORS, totaux_ref=programme_totals),
+            use_container_width=True,
+        )
         st.caption(
             "Engagement UE cumulé dans le temps. Basé sur la date de début de l'opération — environ 60% "
             "des dates sont arrondies au 1ᵉʳ janvier (date administrative plutôt qu'une date de démarrage "
