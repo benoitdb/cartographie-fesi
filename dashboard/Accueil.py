@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.data_loader import load_data, load_geojson, load_programme_totals, load_region_metadata
+from utils.data_loader import load_data, load_dromcom_geojson, load_geojson, load_programme_totals, load_region_metadata
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
 from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage
 from utils.stats import (
@@ -20,7 +20,7 @@ from utils.stats import (
     detect_outliers,
     detect_regroupements_beneficiaire,
 )
-from utils.plot_style import MAP_CONFIG, disable_map_interaction, style_hover, style_map_background
+from utils.plot_style import MAP_CONFIG, build_standalone_colorbar, disable_map_interaction, style_hover, style_map_background
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS
 from utils.treemap import build_hierarchy_treemap
 
@@ -56,13 +56,33 @@ col1.metric("Montant UE total", f"{total_montant / 1e6:,.1f} M€".replace(",", 
 col2.metric("Nombre de projets", f"{total_count:,}".replace(",", " "))
 col3.metric("Régions", nb_regions)
 
-DOM_TOM = ["Guadeloupe", "Guyane", "Martinique", "Mayotte", "La Réunion", "Saint-Martin"]
-# TODO: remplacer par une icône contour réelle par territoire (pas de GeoJSON DOM-TOM disponible pour l'instant)
-DOM_TOM_ICON = "🏝️"
+DROM_COM = ["Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte", "Saint-Martin"]
 
-map_col, domtom_col = st.columns([2, 1])
+# Échelle de couleur partagée entre la carte métropole et les vignettes DROM-COM ci-dessous :
+# si chaque vignette se colorait sur sa propre échelle (son seul montant), un petit territoire
+# ressortirait aussi "foncé" qu'une grande région bien plus dotée — trompeur. Avec une échelle
+# commune, l'intensité de couleur reste comparable sur l'ensemble du territoire national.
+montants_nationaux = [values["montant_ue_total"] for region, values in by_region.items() if region in regions_metro or region in DROM_COM]
+color_range = [0, max(montants_nationaux)] if montants_nationaux else [0, 1]
 
-with map_col:
+st.subheader("Répartition géographique du montant UE")
+st.caption(
+    "Contour réel de chaque territoire, DROM-COM compris (et non un simple repère), sur une "
+    "échelle de couleur commune — malgré la distance et la taille très différentes de ces "
+    "territoires, l'intensité de bleu reste directement comparable partout."
+)
+
+col_legend, col_metro, col_dromcom = st.columns([1, 4, 6])
+
+with col_legend:
+    st.plotly_chart(
+        build_standalone_colorbar(color_range, "Montant UE (€)", height=480),
+        use_container_width=True,
+        config={"displayModeBar": False},
+    )
+
+with col_metro:
+    st.markdown("**France métropolitaine**")
     rows = [
         {"region": region, "montant_ue_total": values["montant_ue_total"], "count": values["count"]}
         for region, values in by_region.items()
@@ -77,6 +97,7 @@ with map_col:
         featureidkey="properties.nom",
         color="montant_ue_total",
         color_continuous_scale="Blues",
+        range_color=color_range,
         custom_data=["count"],
         labels={"montant_ue_total": "Montant UE (€)"},
     )
@@ -84,25 +105,39 @@ with map_col:
         hovertemplate="<b>%{location}</b><br>Montant UE : %{z:,.0f} €<br>Nb projets : %{customdata[0]}<extra></extra>"
     )
     fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
     fig = disable_map_interaction(style_map_background(style_hover(fig)))
 
     st.plotly_chart(fig, use_container_width=True, config=MAP_CONFIG)
 
-with domtom_col:
-    st.subheader("DOM-TOM")
-    for i in range(0, len(DOM_TOM), 2):
-        row_territories = DOM_TOM[i : i + 2]
-        cols = st.columns(2)
-        for col, territory in zip(cols, row_territories):
-            values = by_region.get(territory)
-            with col:
-                with st.container(border=True):
-                    st.markdown(f"**{DOM_TOM_ICON} {territory}**")
-                    if values:
-                        st.caption(f"{values['montant_ue_total'] / 1e6:,.1f} M€ · {values['count']} projets".replace(",", " "))
-                    else:
-                        st.caption("Aucun projet")
+with col_dromcom:
+    st.markdown("**DROM-COM**")
+    dromcom_geojson = load_dromcom_geojson()
+
+    dromcom_rows = st.columns(3), st.columns(3)
+    for territory, col in zip(DROM_COM, dromcom_rows[0] + dromcom_rows[1]):
+        values = by_region.get(territory, {"montant_ue_total": 0, "count": 0})
+        with col:
+            with st.container(border=True):
+                st.markdown(f"**{territory}**")
+                fig_dromcom = px.choropleth(
+                    pd.DataFrame([{"region": territory, "montant_ue_total": values["montant_ue_total"]}]),
+                    geojson=dromcom_geojson,
+                    locations="region",
+                    featureidkey="properties.nom",
+                    color="montant_ue_total",
+                    color_continuous_scale="Blues",
+                    range_color=color_range,
+                )
+                fig_dromcom.update_traces(hovertemplate=f"<b>{territory}</b><br>Montant UE : %{{z:,.0f}} €<extra></extra>")
+                fig_dromcom.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
+                fig_dromcom.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=135, coloraxis_showscale=False)
+                fig_dromcom = disable_map_interaction(style_map_background(style_hover(fig_dromcom)))
+                st.plotly_chart(fig_dromcom, use_container_width=True, config=MAP_CONFIG)
+                if values["count"]:
+                    st.caption(f"{values['montant_ue_total'] / 1e6:,.1f} M€ · {values['count']} projets".replace(",", " "))
+                else:
+                    st.caption("Aucun projet")
 
 # Montant FESI par habitant
 st.subheader("Montant FESI par habitant")
