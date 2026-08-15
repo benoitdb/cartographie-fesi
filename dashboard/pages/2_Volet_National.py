@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from utils.data_loader import load_data, load_programme_totals, load_region_metadata
+from utils.data_loader import load_data, load_programme_detail, load_programme_totals, load_region_metadata
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.region_analysis import render_region_analysis
@@ -84,7 +84,16 @@ if montant_programme_national:
             if f in programme_totals_national
         ]
     )
-    render_kpi_pilotage(df_fonds_pilotage_national, montant_programme_national, national_data["montant_ue_total"])
+    programme_detail_national = load_programme_detail()
+    render_kpi_pilotage(
+        df_fonds_pilotage_national,
+        montant_programme_national,
+        national_data["montant_ue_total"],
+        ftj_article=programme_detail_national["ftj_article"].get("national") if "FTJ" in selected_fonds else None,
+        assistance_technique={
+            f: v for f, v in programme_detail_national["assistance_technique"].get("national", {}).items() if f in selected_fonds
+        },
+    )
 
     traj_col_national, bullet_col_national = st.columns(2)
     with traj_col_national:

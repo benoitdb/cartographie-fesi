@@ -5,6 +5,7 @@ from utils.data_loader import (
     load_data,
     load_dromcom_codes_postaux,
     load_dromcom_geojson,
+    load_programme_detail,
     load_programme_totals,
     load_region_metadata,
 )
@@ -209,7 +210,16 @@ if montant_programme_region:
             if f in programme_totals_region
         ]
     )
-    render_kpi_pilotage(df_fonds_pilotage, montant_programme_region, region_data["montant_ue_total"])
+    programme_detail = load_programme_detail()
+    render_kpi_pilotage(
+        df_fonds_pilotage,
+        montant_programme_region,
+        region_data["montant_ue_total"],
+        ftj_article=programme_detail["ftj_article"].get(region) if "FTJ" in selected_fonds else None,
+        assistance_technique={
+            f: v for f, v in programme_detail["assistance_technique"].get(region, {}).items() if f in selected_fonds
+        },
+    )
 
     traj_col, bullet_col = st.columns(2)
     with traj_col:

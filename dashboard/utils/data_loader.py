@@ -10,6 +10,7 @@ GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-drom
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
 REGION_METADATA_PATH = REPO_ROOT / "data" / "processed" / "region_metadata.json"
 PROGRAMME_TOTALS_PATH = REPO_ROOT / "data" / "processed" / "programme_totals.json"
+PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.json"
 
 
 @st.cache_data
@@ -51,4 +52,14 @@ def load_region_metadata():
 @st.cache_data
 def load_programme_totals():
     with open(PROGRAMME_TOTALS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_programme_detail():
+    """Détail non couvert par load_programme_totals() : split FTJ Article 3/4 et enveloppes
+    d'assistance technique par fonds, par région (clé "national" pour les programmes
+    nationaux) — voir issues #20/#21. {"ftj_article": {région: {"Article 3": montant, ...}},
+    "assistance_technique": {région: {fonds: montant}}}."""
+    with open(PROGRAMME_DETAIL_PATH, encoding="utf-8") as f:
         return json.load(f)

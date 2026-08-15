@@ -23,7 +23,7 @@ FSE_DEPASSEMENT_DETAIL = (
 )
 
 
-def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage):
+def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ftj_article=None, assistance_technique=None):
     """Bloc A : montants agrégés (programmé, engagé, reste à engager) + une card par fonds
     avec sa propre barre de progression. N'affiche rien si aucune donnée programmée pour ce
     périmètre (ex. fonds sélectionnés absents du Tableau 9B).
@@ -33,7 +33,17 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage):
     FSE_DEPASSEMENT_DETAIL) ne doit jamais "rogner" sur le reste d'un autre fonds dans ce
     total — sinon un dépassement FSE+ peut faire disparaître un vrai reliquat FEDER du total
     affiché (cas constaté : Auvergne-Rhône-Alpes affichait 94% consommé au global alors qu'il
-    restait ~150M€ de FEDER, le dépassement FSE+ masquant ce reliquat dans l'agrégat)."""
+    restait ~150M€ de FEDER, le dépassement FSE+ masquant ce reliquat dans l'agrégat).
+
+    ftj_article (optionnel) : {"Article 3": montant, "Article 4": montant} programmés pour ce
+    périmètre — classification propre au FTJ (règlement FTJ), sans lien avec les 3 catégories
+    de cohésion FEDER/FSE+, affichée en complément sous la card FTJ (issues #20/#21).
+
+    assistance_technique (optionnel) : {fonds: montant} des enveloppes d'assistance technique
+    par fonds pour ce périmètre — budget de soutien à l'instruction/gestion des programmes,
+    distinct des montants programmés/engagés ci-dessus (ni programmé aux porteurs de projet,
+    ni comparable à un "engagé"), affiché à part pour ne pas fausser le taux de consommation
+    (issues #20/#21)."""
     if not montant_programme or df_fonds_pilotage.empty:
         return
 
@@ -68,8 +78,22 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage):
                     config={"displayModeBar": False},
                 )
                 st.caption(f"⚠️ {taux_fonds:.0%} — dépassement" if depassement else f"{taux_fonds:.0%} consommé")
+                # Ligne toujours présente (même vide) sur chaque card : le détail Article 3/4 ne
+                # concerne que le FTJ, mais laisser les autres cards sans cette ligne les rendait
+                # plus basses — un espace insécable réserve la même hauteur sans rien afficher.
+                if row.fonds == "FTJ" and ftj_article:
+                    art3, art4 = ftj_article.get("Article 3", 0), ftj_article.get("Article 4", 0)
+                    st.caption(f"dont Article 3 : {art3 / 1e6:,.1f} M€ · Article 4 : {art4 / 1e6:,.1f} M€".replace(",", " "))
+                else:
+                    st.caption(" ")
     if depassement_present:
         st.caption(FSE_DEPASSEMENT_DETAIL)
+    if assistance_technique:
+        detail_at = ", ".join(f"{f} {v / 1e6:,.1f} M€".replace(",", " ") for f, v in assistance_technique.items())
+        st.caption(
+            f"+ Assistance technique programmée (hors montants ci-dessus, budget de soutien à "
+            f"l'instruction/gestion des programmes) : {detail_at}."
+        )
 
 
 def build_fonds_mini_bar(engage, programme):
