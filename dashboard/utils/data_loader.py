@@ -11,6 +11,8 @@ DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromco
 REGION_METADATA_PATH = REPO_ROOT / "data" / "processed" / "region_metadata.json"
 PROGRAMME_TOTALS_PATH = REPO_ROOT / "data" / "processed" / "programme_totals.json"
 PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.json"
+BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuzzy.json"
+DOTATIONS_OS_PATH = REPO_ROOT / "data" / "processed" / "dotations_os.json"
 
 
 @st.cache_data
@@ -62,4 +64,22 @@ def load_programme_detail():
     nationaux) — voir issues #20/#21. {"ftj_article": {région: {"Article 3": montant, ...}},
     "assistance_technique": {région: {fonds: montant}}}."""
     with open(PROGRAMME_DETAIL_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_beneficiaires_fuzzy():
+    """Rapprochements approchés de noms de bénéficiaires entre régions disjointes (issue
+    #23) : {nom_de_bénéficiaire: cluster_id}, précalculé par
+    data-pipeline/beneficiaires_fuzzy.py — voir beneficiaire_matching.py pour la méthode."""
+    with open(BENEFICIAIRES_FUZZY_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_dotations_os():
+    """Dotations programmées par objectif stratégique, au niveau national uniquement (Tableau
+    8 de l'Accord de partenariat, voir data-pipeline/reference/dotations_os.py et issue #21).
+    {objectif_stratégique: {fonds: montant}}."""
+    with open(DOTATIONS_OS_PATH, encoding="utf-8") as f:
         return json.load(f)

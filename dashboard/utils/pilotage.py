@@ -23,7 +23,7 @@ FSE_DEPASSEMENT_DETAIL = (
 )
 
 
-def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ftj_article=None, assistance_technique=None):
+def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ftj_article=None, assistance_technique=None, color_map=None):
     """Bloc A : montants agrégés (programmé, engagé, reste à engager) + une card par fonds
     avec sa propre barre de progression. N'affiche rien si aucune donnée programmée pour ce
     périmètre (ex. fonds sélectionnés absents du Tableau 9B).
@@ -43,7 +43,13 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
     par fonds pour ce périmètre — budget de soutien à l'instruction/gestion des programmes,
     distinct des montants programmés/engagés ci-dessus (ni programmé aux porteurs de projet,
     ni comparable à un "engagé"), affiché à part pour ne pas fausser le taux de consommation
-    (issues #20/#21)."""
+    (issues #20/#21).
+
+    color_map (optionnel) : {valeur de df_fonds_pilotage["fonds"]: couleur}, ex. FONDS_COLORS
+    ou OBJECTIF_STRATEGIQUE_COLORS (themes.py) — réutilise cette fonction pour une dimension
+    autre que le Fonds (ex. pilotage par Objectif Stratégique, issue #21) avec des couleurs
+    cohérentes avec les autres graphes de la même dimension. None conserve la couleur par
+    défaut (bleu, rouge si dépassement)."""
     if not montant_programme or df_fonds_pilotage.empty:
         return
 
@@ -73,7 +79,7 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
                     f"**{row.fonds} :** {row.engage / 1e6:,.1f} / {row.programme / 1e6:,.1f} M€".replace(",", " ")
                 )
                 st.plotly_chart(
-                    build_fonds_mini_bar(row.engage, row.programme),
+                    build_fonds_mini_bar(row.engage, row.programme, color=(color_map or {}).get(row.fonds)),
                     use_container_width=True,
                     config={"displayModeBar": False},
                 )
@@ -96,15 +102,19 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
         )
 
 
-def build_fonds_mini_bar(engage, programme):
+def build_fonds_mini_bar(engage, programme, color=None):
     """Mini barre de progression (une card = un fonds, dans render_kpi_pilotage) : st.progress
     plafonne visuellement à 100% et ne peut pas se colorer, donc barre Plotly custom à la
     place — la barre engagée dépasse visuellement le repère "Programmé" (ligne pointillée
     verticale) en cas de dépassement, colorée en rouge plutôt que tronquée à 100%, pour que le
-    dépassement (voir FSE_DEPASSEMENT_DETAIL) reste visible plutôt que caché par le plafond."""
+    dépassement (voir FSE_DEPASSEMENT_DETAIL) reste visible plutôt que caché par le plafond.
+
+    color (optionnel) : couleur de la catégorie (ex. OBJECTIF_STRATEGIQUE_COLORS), pour rester
+    cohérent avec les autres graphes de la même dimension — le rouge de dépassement reste
+    toujours prioritaire dessus, c'est un signal d'alerte, pas une couleur de catégorie."""
     taux = engage / programme if programme else 0
     depassement = taux > 1
-    color = "#e34948" if depassement else "#4C78A8"
+    color = "#e34948" if depassement else (color or "#4C78A8")
     x_max = max(engage, programme) * 1.15 if programme else engage * 1.15
 
     fig = go.Figure()

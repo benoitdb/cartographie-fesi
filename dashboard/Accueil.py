@@ -2,9 +2,17 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.data_loader import load_data, load_dromcom_geojson, load_geojson, load_programme_totals, load_region_metadata
+from utils.data_loader import (
+    load_beneficiaires_fuzzy,
+    load_data,
+    load_dotations_os,
+    load_dromcom_geojson,
+    load_geojson,
+    load_programme_totals,
+    load_region_metadata,
+)
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
-from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage
+from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage, render_kpi_pilotage
 from utils.stats import (
     build_boxplot,
     build_cumulative_curve,
@@ -17,6 +25,7 @@ from utils.stats import (
     compute_top_beneficiaires,
     detect_cofinancement_outliers,
     detect_incoherent_cofinancement,
+    detect_beneficiaires_multi_region,
     detect_outliers,
     detect_regroupements_beneficiaire,
 )
@@ -42,19 +51,33 @@ regions_metro = {f["properties"]["nom"] for f in geojson["features"]}
 if filtre_actif:
     ops_selected = [op for op in data["operations"] if op.get("Fonds") in selected_fonds]
     by_region = compute_by_region(ops_selected)
+    national_summary = summarize_ops([op for op in ops_selected if op.get("is_national")])
+    interregional_summary = summarize_ops([op for op in ops_selected if op.get("is_interregional")])
 else:
     # Fonds par défaut (tous sélectionnés) : agrégats pré-calculés du pipeline, comportement inchangé
     by_region = data["aggregates"]["by_region"]
+    national_summary = data["aggregates"]["national"]
+    interregional_summary = data["aggregates"]["interregional"]
 
-# Bandeau KPI
-total_montant = sum(v["montant_ue_total"] for v in by_region.values())
-total_count = sum(v["count"] for v in by_region.values())
-nb_regions = len(by_region)
+# Bandeau KPI — le total doit couvrir toutes les opérations, pas seulement celles mono-région
+# de by_region : le volet national et les opérations interrégionales (montant/nombre de
+# projets) en étaient absents jusqu'ici, le total affiché sous-comptait ~700 opérations.
+total_montant_regional = sum(v["montant_ue_total"] for v in by_region.values())
+total_count_regional = sum(v["count"] for v in by_region.values())
+total_montant = total_montant_regional + national_summary["montant_ue_total"] + interregional_summary["montant_ue_total"]
+total_count = total_count_regional + national_summary["count"] + interregional_summary["count"]
+count_regions = total_count - national_summary["count"]  # projets en région (mono-région + interrégional)
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 col1.metric("Montant UE total", f"{total_montant / 1e6:,.1f} M€".replace(",", " "))
 col2.metric("Nombre de projets", f"{total_count:,}".replace(",", " "))
-col3.metric("Régions", nb_regions)
+col3.metric("Régions", f"{count_regions:,}".replace(",", " "))
+col4.metric("Volet national", f"{national_summary['count']:,}".replace(",", " "))
+if interregional_summary["count"]:
+    st.caption(
+        f"Dont {interregional_summary['count']} opération(s) interrégionale(s) (plusieurs régions à la "
+        "fois), incluses dans le total ci-dessus mais non ventilées par région ni dans le volet national."
+    )
 
 DROM_COM = ["Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte", "Saint-Martin"]
 
@@ -138,6 +161,28 @@ with col_dromcom:
                     st.caption(f"{values['montant_ue_total'] / 1e6:,.1f} M€ · {values['count']} projets".replace(",", " "))
                 else:
                     st.caption("Aucun projet")
+
+# Pilotage par Objectif Stratégique (national uniquement — voir issue #21/#28 : le Tableau 8 de
+# l'Accord de partenariat ne ventile pas les dotations par région nommée, contrairement au
+# Tableau 9B utilisé pour le pilotage par Fonds plus bas).
+df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
+df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
+df_national_ops[LEVEL2] = df_national_ops[LEVEL2].fillna("Non spécifié")
+
+st.subheader("Pilotage par Objectif Stratégique (national)")
+dotations_os = load_dotations_os()
+engage_par_os = df_national_ops.groupby(LEVEL1)["Montant UE"].sum()
+rows_os_pilotage = [
+    {
+        "fonds": os,
+        "programme": sum(v for f, v in fonds_montants.items() if f in selected_fonds),
+        "engage": engage_par_os.get(os, 0),
+    }
+    for os, fonds_montants in dotations_os.items()
+]
+df_os_pilotage = pd.DataFrame(rows_os_pilotage, columns=["fonds", "programme", "engage"])
+df_os_pilotage = df_os_pilotage[df_os_pilotage["programme"] > 0]
+render_kpi_pilotage(df_os_pilotage, df_os_pilotage["programme"].sum(), df_os_pilotage["engage"].sum(), color_map=OBJECTIF_STRATEGIQUE_COLORS)
 
 # Montant FESI par habitant
 st.subheader("Montant FESI par habitant")
@@ -224,10 +269,6 @@ df_consommation = df_consommation[df_consommation["programme"] > 0]
 fig_consommation = build_ranking_programme_vs_engage(df_consommation, "region", "engage", "programme")
 
 st.plotly_chart(fig_consommation, use_container_width=True)
-
-df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
-df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
-df_national_ops[LEVEL2] = df_national_ops[LEVEL2].fillna("Non spécifié")
 
 # Répartition par fonds
 st.subheader("Répartition par fonds")
@@ -447,6 +488,33 @@ if len(grands_regroupements):
             "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
         },
     )
+
+st.markdown("**Bénéficiaires présents dans plusieurs régions**")
+st.caption(
+    "Un même bénéficiaire (ou une variante proche de saisie du même nom) apparaissant dans "
+    "plusieurs régions à la fois — à recouper, pas une preuve en soi : peut correspondre à "
+    "une organisation multi-sites tout à fait légitime comme à une saisie à vérifier."
+)
+beneficiaires_fuzzy = load_beneficiaires_fuzzy()
+multi_region = detect_beneficiaires_multi_region(df_national_ops, beneficiaires_fuzzy)
+if len(multi_region):
+    multi_region_table = multi_region.head(50)
+    st.dataframe(
+        multi_region_table,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Nom du bénéficiaire": st.column_config.TextColumn(width="medium"),
+            "Régions": st.column_config.TextColumn(width="medium"),
+            "Montant UE cumulé": st.column_config.ProgressColumn(
+                format="%,d €",
+                min_value=0,
+                max_value=int(multi_region_table["Montant UE cumulé"].max()) if len(multi_region_table) else 1,
+            ),
+        },
+    )
+else:
+    st.caption("Aucun cas détecté sur le périmètre actuel.")
 
 st.markdown("**Structure du portefeuille par région**")
 st.caption(

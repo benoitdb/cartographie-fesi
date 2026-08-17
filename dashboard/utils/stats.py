@@ -445,3 +445,46 @@ def detect_regroupements_beneficiaire(
         petits.sort_values("Montant UE cumulé", ascending=False),
         grands.sort_values("Montant UE cumulé", ascending=False),
     )
+
+
+def detect_beneficiaires_multi_region(
+    df,
+    fuzzy_clusters,
+    beneficiaire_col="Nom du bénéficiaire",
+    region_col="regions_modernes",
+    amount_col="Montant UE",
+):
+    """Repère les bénéficiaires (ou variantes de saisie rapprochées via fuzzy_clusters, voir
+    data-pipeline/beneficiaire_matching.py et issue #23) présents dans plusieurs régions à la
+    fois — signal à recouper pour un éventuel double financement, indépendamment de la
+    proximité montant/date (contrairement à detect_regroupements_beneficiaire, qui vise les
+    doublons proches dans le temps).
+
+    La clé de regroupement est le cluster fuzzy si le nom en fait partie, sinon le nom exact
+    tel quel — donc les doublons exacts entre régions (même nom saisi à l'identique) sont
+    aussi couverts, pas seulement les variantes approchées."""
+    work = df[[beneficiaire_col, region_col, "Fonds", "Numéro Opération", amount_col]].copy()
+    work["_cle"] = work[beneficiaire_col].map(lambda n: fuzzy_clusters.get(n, n))
+
+    rows = []
+    for cle, group in work.groupby("_cle"):
+        regions = set()
+        for r in group[region_col]:
+            regions.update(r or [])
+        if len(regions) < 2:
+            continue
+        noms = sorted(set(group[beneficiaire_col]))
+        rows.append(
+            {
+                beneficiaire_col: " / ".join(noms),
+                "Rapprochement": "approché (variantes de saisie)" if len(noms) > 1 else "exact",
+                "Régions": ", ".join(sorted(regions)),
+                "Fonds": ", ".join(sorted(set(group["Fonds"]))),
+                "Nb opérations": len(group),
+                "Montant UE cumulé": group[amount_col].sum(),
+            }
+        )
+
+    cols = [beneficiaire_col, "Rapprochement", "Régions", "Fonds", "Nb opérations", "Montant UE cumulé"]
+    result = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)
+    return result.sort_values("Montant UE cumulé", ascending=False)

@@ -96,6 +96,32 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
     df_region_ops[LEVEL2] = df_region_ops[LEVEL2].fillna("Non spécifié")
     df_region_ops[LEVEL3] = df_region_ops[LEVEL3].fillna("Non spécifié")
 
+    # Répartition par Objectif Stratégique — engagé seul, sans comparaison programmé : le
+    # Tableau 8 de l'Accord de partenariat (source du pilotage par Fonds ci-dessus) ne ventile
+    # les dotations programmées par OS qu'au niveau national, pas par région (voir issue #21,
+    # #28). Pas de dotation régionale par OS disponible à ce jour pour tracer un taux de
+    # consommation ici.
+    st.subheader("Répartition par Objectif Stratégique")
+    df_region_os = (
+        df_region_ops.groupby(LEVEL1).agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count")).reset_index()
+    )
+    fig_region_os = px.bar(
+        df_region_os,
+        x=LEVEL1,
+        y="montant_ue_total",
+        color=LEVEL1,
+        color_discrete_map=OBJECTIF_STRATEGIQUE_COLORS,
+        hover_data=["count"],
+        labels={"montant_ue_total": "Montant UE (€)", LEVEL1: "Objectif stratégique", "count": "Nb projets"},
+    )
+    fig_region_os.update_layout(height=400, showlegend=False, xaxis_title=None)
+    fig_region_os.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
+        )
+    )
+    st.plotly_chart(style_hover(fig_region_os), use_container_width=True)
+
     # Vue d'ensemble : fonds > objectif stratégique > objectif spécifique
     st.subheader("Fonds, objectifs stratégiques et spécifiques")
 
