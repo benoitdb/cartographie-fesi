@@ -13,6 +13,7 @@ PROGRAMME_TOTALS_PATH = REPO_ROOT / "data" / "processed" / "programme_totals.jso
 PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.json"
 BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuzzy.json"
 DOTATIONS_OS_PATH = REPO_ROOT / "data" / "processed" / "dotations_os.json"
+INTERREG_PATH = REPO_ROOT / "data" / "processed" / "interreg.json"
 
 
 @st.cache_data
@@ -82,4 +83,13 @@ def load_dotations_os():
     8 de l'Accord de partenariat, voir data-pipeline/reference/dotations_os.py et issue #21).
     {objectif_stratégique: {fonds: montant}}."""
     with open(DOTATIONS_OS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_interreg():
+    """Liste des 18 programmes Interreg auxquels la France participe (Tableau 10, aucune
+    donnée financière ni opération — voir data-pipeline/reference/interreg.py et issue #19).
+    [{"cci": str, "intitule": str, "type": "VI-A"|"VI-B"|"VI-D"}]."""
+    with open(INTERREG_PATH, encoding="utf-8") as f:
         return json.load(f)

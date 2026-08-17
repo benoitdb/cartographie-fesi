@@ -8,6 +8,7 @@ from utils.data_loader import (
     load_dotations_os,
     load_dromcom_geojson,
     load_geojson,
+    load_interreg,
     load_programme_totals,
     load_region_metadata,
 )
@@ -615,3 +616,28 @@ else:
     col2.metric("Nombre de projets", f"{national['count']:,}".replace(",", " "))
     st.caption("Opérations non rattachées à une région (ex. programmes nationaux France Travail pour l'emploi).")
     st.page_link("pages/2_Volet_National.py", label="Voir l'analyse complète du Volet national", icon="➡️")
+
+# Programmes Interreg — liste de référence uniquement (issue #19) : aucune opération Interreg
+# dans data.json (vérifié : les codes CCI présents suivent tous la série "2021FR...", série
+# distincte des codes Interreg "2021TC..." ci-dessous — absence structurelle des données, pas
+# un défaut d'étiquetage), et le Tableau 10 source ne donne aucun montant. Pas de KPI ni de
+# graphe ici, volontairement : rien à mesurer, seulement à recenser.
+st.subheader("Programmes Interreg (coopération territoriale européenne)")
+st.caption(
+    "La France participe à 18 programmes Interreg 2021-2027, pilotés par une autorité de "
+    "gestion transnationale (pas par la France seule) — aucune opération ni montant "
+    "disponible dans les données de ce dashboard, seulement la liste des programmes "
+    "(Accord de partenariat, Tableau 10)."
+)
+interreg_programmes = load_interreg()
+df_interreg = pd.DataFrame(interreg_programmes).rename(
+    columns={"cci": "Code CCI", "intitule": "Programme", "type": "Type"}
+)
+df_interreg["Type"] = df_interreg["Type"].map(
+    {"VI-A": "VI-A · Transfrontalier", "VI-B": "VI-B · Transnational", "VI-D": "VI-D · Régions ultrapériphériques"}
+)
+st.dataframe(
+    df_interreg[["Programme", "Type", "Code CCI"]].sort_values(["Type", "Programme"]),
+    hide_index=True,
+    use_container_width=True,
+)

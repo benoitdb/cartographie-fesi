@@ -16,6 +16,8 @@ data/processed/**
 # Dotations par objectif stratégique (Tableau 8, reference/dotations_os.py) : dérivé uniquement
 # de fichiers déjà committés, aucun appel réseau — committé pour la même raison.
 !data/processed/dotations_os.json
+# Liste des programmes Interreg (Tableau 10, reference/interreg.py) : même raison.
+!data/processed/interreg.json
 
 # Python
 __pycache__/

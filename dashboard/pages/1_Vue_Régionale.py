@@ -366,3 +366,42 @@ if region in DEPT_TO_REGION.values():
     )
 
 render_liste_complete_projets(df_region_ops, region)
+
+# Opérations interrégionales impliquant cette région — pour info uniquement, exclues de tous
+# les totaux/graphes ci-dessus (comme partout ailleurs dans le dashboard, is_interregional est
+# filtré des vues par région, voir filters.py). Concerne 6 régions au total : Auvergne-Rhône-
+# Alpes, Bourgogne-Franche-Comté, Grand Est, Île-de-France, Occitanie, Provence-Alpes-Côte
+# d'Azur — surtout des actions "massif"/"fleuve" (Rhône-Saône, massif des Alpes) à cheval sur
+# plusieurs régions au sein d'un même programme régional (voir issue #19, à ne pas confondre
+# avec Interreg).
+ops_interregionaux_region = [
+    op
+    for op in data["operations"]
+    if op.get("is_interregional") and op.get("Fonds") in selected_fonds and region in (op.get("regions_modernes") or [])
+]
+if ops_interregionaux_region:
+    st.subheader("Opérations interrégionales impliquant cette région")
+    st.caption(
+        f"{len(ops_interregionaux_region)} opération(s) dont le territoire couvre plusieurs régions à la "
+        "fois, dont celle-ci — pour information uniquement, non comptées dans les totaux et graphes "
+        "ci-dessus (déjà comptabilisées une fois au niveau national, voir Accueil)."
+    )
+    df_interregionaux_region = pd.DataFrame(ops_interregionaux_region)
+    df_interregionaux_region["Autres régions"] = df_interregionaux_region["regions_modernes"].apply(
+        lambda regions: ", ".join(r for r in regions if r != region)
+    )
+    df_interregionaux_table = df_interregionaux_region[
+        ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Autres régions", "Montant UE"]
+    ].sort_values("Montant UE", ascending=False)
+    st.dataframe(
+        style_categorical_columns(df_interregionaux_table, {FONDS: FONDS_COLORS}),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Montant UE": st.column_config.ProgressColumn(
+                format="%,d €",
+                min_value=0,
+                max_value=int(df_interregionaux_table["Montant UE"].max()),
+            )
+        },
+    )
