@@ -7,6 +7,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from utils.plot_style import format_montant, style_hover, wrap_label
+from utils.table_style import text_widths
 
 
 def _concentration_top10(montants):
@@ -391,7 +392,7 @@ def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="N
         top,
         hide_index=True,
         use_container_width=True,
-        column_config={"Montant UE cumulé": montant_col_config},
+        column_config={**text_widths(group_col), "Montant UE cumulé": montant_col_config},
     )
 
     beneficiaire = st.selectbox(
@@ -413,7 +414,10 @@ def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="N
         detail,
         hide_index=True,
         use_container_width=True,
-        column_config={amount_col: montant_col_config},
+        column_config={
+            **text_widths("Numéro Opération", "Intitulé du projet", "Libellé Programme", "Région de l'opération"),
+            amount_col: montant_col_config,
+        },
     )
 
 

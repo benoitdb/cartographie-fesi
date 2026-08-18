@@ -33,6 +33,7 @@ from utils.stats import (
     render_top_beneficiaires_drilldown,
 )
 from utils.plot_style import MAP_CONFIG, build_standalone_colorbar, disable_map_interaction, style_hover, style_map_background
+from utils.table_style import text_widths
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 from utils.treemap import build_hierarchy_treemap
 
@@ -307,6 +308,7 @@ with tab_ensemble:
         df_interreg[["Programme", "Type", "Code CCI"]].sort_values(["Type", "Programme"]),
         hide_index=True,
         use_container_width=True,
+        column_config=text_widths("Programme", "Type", "Code CCI"),
     )
 
 with tab_pilotage:
@@ -361,6 +363,7 @@ with tab_pilotage:
             hide_index=True,
             use_container_width=True,
             column_config={
+                **text_widths("Catégorie d'origine"),
                 "Montant transféré (2022-2027)": st.column_config.NumberColumn(format="%d €"),
                 "Part de la dotation initiale": st.column_config.NumberColumn(format="%.0f%%"),
             },
@@ -524,7 +527,9 @@ with tab_audit:
     stats_region = compute_stats_table(df_mono_region, "Région").rename(
         columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
     )
-    st.dataframe(stats_region, hide_index=True, use_container_width=True, column_config=stats_col_config)
+    st.dataframe(
+        stats_region, hide_index=True, use_container_width=True, column_config={**stats_col_config, **text_widths("Région")}
+    )
 
     st.plotly_chart(
         build_boxplot(df_mono_region, "Région", log_y=echelle_box == "Logarithmique"), use_container_width=True
@@ -545,9 +550,10 @@ with tab_audit:
         hide_index=True,
         use_container_width=True,
         column_config={
+            **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Région de l'opération"),
             "Montant UE": st.column_config.ProgressColumn(
                 format="%,d €", min_value=0, max_value=int(outliers_table["Montant UE"].max()) if len(outliers_table) else 1
-            )
+            ),
         },
     )
 
@@ -584,7 +590,7 @@ with tab_audit:
             proches.head(50),
             hide_index=True,
             use_container_width=True,
-            column_config={"Montant UE cumulé": montant_col_config},
+            column_config={**text_widths("Nom du bénéficiaire", "Opérations", "Programme(s)"), "Montant UE cumulé": montant_col_config},
         )
 
     st.caption(
@@ -599,6 +605,7 @@ with tab_audit:
             hide_index=True,
             use_container_width=True,
             column_config={
+                **text_widths("Nom du bénéficiaire"),
                 "Montant UE cumulé": montant_col_config,
                 "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
             },
@@ -616,7 +623,7 @@ with tab_audit:
             regroupements_inter_fonds,
             hide_index=True,
             use_container_width=True,
-            column_config={"Montant UE cumulé": montant_col_config},
+            column_config={**text_widths("Nom du bénéficiaire", "Programme(s)", "Opérations"), "Montant UE cumulé": montant_col_config},
         )
     else:
         st.caption("Aucun cas détecté sur le périmètre actuel.")
@@ -636,8 +643,7 @@ with tab_audit:
             hide_index=True,
             use_container_width=True,
             column_config={
-                "Nom du bénéficiaire": st.column_config.TextColumn(width="medium"),
-                "Régions": st.column_config.TextColumn(width="medium"),
+                **text_widths("Nom du bénéficiaire", "Régions"),
                 "Montant UE cumulé": st.column_config.ProgressColumn(
                     format="%,d €",
                     min_value=0,
@@ -689,6 +695,7 @@ with tab_audit:
         hide_index=True,
         use_container_width=True,
         column_config={
+            **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Région de l'opération"),
             "Taux de cofinancement": taux_col_config,
             "Total des dépenses éligibles": montant_col_config,
             "Montant UE": st.column_config.ProgressColumn(
@@ -717,6 +724,7 @@ with tab_audit:
             hide_index=True,
             use_container_width=True,
             column_config={
+                **text_widths("Intitulé du projet", "Nom du bénéficiaire"),
                 "Total des dépenses éligibles": montant_col_config,
                 "Montant UE": st.column_config.ProgressColumn(
                     format="%,d €", min_value=0, max_value=int(incoherentes_table["Montant UE"].max())
