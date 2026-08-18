@@ -11,6 +11,7 @@ from utils.data_loader import (
     load_interreg,
     load_programme_totals,
     load_region_metadata,
+    load_transferts_solidarite,
 )
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
 from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage, render_kpi_pilotage
@@ -338,6 +339,39 @@ with tab_pilotage:
     # bouton radio, rien de supprimé : les deux calculs restent complets, seul un est exécuté par
     # rerun (l'autre branche n'est simplement pas prise).
     st.subheader("Comparaison régionale")
+
+    with st.expander("ℹ️ Pourquoi les dotations diffèrent-elles entre catégories de région ?"):
+        st.caption(
+            "Au nom du principe de solidarité entre régions, une partie de la dotation initiale "
+            "des catégories \"Plus développées\" et \"En transition\" est reversée à la catégorie "
+            "\"Moins développées\" sur 2022-2027 (Accord de partenariat, Tableau 3A/3B). Ce "
+            "mécanisme est national et global — il n'est pas ventilé par région ni par opération, "
+            "donc non croisable avec les données ci-dessous, mais il explique en partie pourquoi "
+            "les enveloppes programmées (Tableau 9B, utilisées pour le taux de consommation) "
+            "dépassent la dotation initiale d'une région \"moins développée\"."
+        )
+        transferts_solidarite = load_transferts_solidarite()
+        df_transferts = pd.DataFrame(
+            [
+                {
+                    "Catégorie d'origine": t["categorie_origine"],
+                    "Montant transféré (2022-2027)": t["total_publie"],
+                    "Part de la dotation initiale": t["part_dotation_transferee"] * 100,
+                }
+                for t in transferts_solidarite["transferts"]
+            ]
+        )
+        st.dataframe(
+            df_transferts,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Montant transféré (2022-2027)": st.column_config.NumberColumn(format="%d €"),
+                "Part de la dotation initiale": st.column_config.NumberColumn(format="%.0f%%"),
+            },
+        )
+        st.caption("Transferts vers la catégorie \"Moins développées\", seule catégorie destinataire.")
+
     choix_comparaison = st.radio(
         "Indicateur",
         ["Montant par habitant", "Taux de consommation"],

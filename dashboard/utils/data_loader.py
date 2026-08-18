@@ -14,6 +14,7 @@ PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.jso
 BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuzzy.json"
 DOTATIONS_OS_PATH = REPO_ROOT / "data" / "processed" / "dotations_os.json"
 INTERREG_PATH = REPO_ROOT / "data" / "processed" / "interreg.json"
+TRANSFERTS_SOLIDARITE_PATH = REPO_ROOT / "data" / "processed" / "transferts_solidarite.json"
 
 
 @st.cache_data
@@ -92,4 +93,15 @@ def load_interreg():
     donnée financière ni opération — voir data-pipeline/reference/interreg.py et issue #19).
     [{"cci": str, "intitule": str, "type": "VI-A"|"VI-B"|"VI-D"}]."""
     with open(INTERREG_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_transferts_solidarite():
+    """Transferts de solidarité entre catégories de régions vers "Moins développées" (Tableau
+    3A/3B de l'Accord de partenariat, voir data-pipeline/reference/transferts_solidarite.py et
+    issue #30). Mécanisme national global, non croisable avec data.json — purement
+    informationnel. {"transferts": [{"categorie_origine": str, "montants_par_annee":
+    {année: montant}, "total_publie": montant, "part_dotation_transferee": float}]}."""
+    with open(TRANSFERTS_SOLIDARITE_PATH, encoding="utf-8") as f:
         return json.load(f)
