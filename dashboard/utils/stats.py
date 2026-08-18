@@ -364,7 +364,7 @@ def _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_
     sous-DataFrame des opérations concernées) — brique commune aux deux tables construites par
     detect_regroupements_beneficiaire, qui n'en diffèrent que par la taille du regroupement
     retenue."""
-    work = df[[beneficiaire_col, "Numéro Opération", "Intitulé du projet", "Libellé Programme", date_col, amount_col]].copy()
+    work = df[[beneficiaire_col, "Numéro Opération", "Intitulé du projet", "Libellé Programme", "Fonds", date_col, amount_col]].copy()
     work[date_col] = pd.to_datetime(work[date_col])
 
     clusters = []
@@ -402,20 +402,27 @@ def detect_regroupements_beneficiaire(
     max_group_size=3,
 ):
     """Pour chaque bénéficiaire, regroupe ses opérations dont le montant et la date de début sont
-    proches d'au moins une autre opération du même bénéficiaire. Retourne deux tables à partir du
-    même calcul (évite de le refaire deux fois, coûteux sur tout le périmètre national) :
+    proches d'au moins une autre opération du même bénéficiaire. Retourne trois tables à partir
+    du même calcul (évite de le refaire plusieurs fois, coûteux sur tout le périmètre national) :
 
     - petits_regroupements : bénéficiaires avec ≤ max_group_size opérations rapprochées (nombre
       d'opérations, montant cumulé)
     - grands_regroupements : au-delà de max_group_size (typiquement des programmes découpés en
       plusieurs lots), avec en plus le coefficient de variation des montants au sein du
       regroupement — une dispersion élevée indique des lots de taille très inégale, une
-      dispersion quasi nulle indique des lots de montant quasi identique."""
+      dispersion quasi nulle indique des lots de montant quasi identique.
+    - inter_fonds : sous-ensemble des regroupements ci-dessus (petits et grands confondus) dont
+      les opérations couvrent plus d'un Fonds (FEDER/FSE+/FTJ) pour ce bénéficiaire — signal plus
+      fort qu'un simple regroupement intra-programme (accord-cadre en plusieurs lots, même Fonds,
+      qui reste la lecture la plus fréquente d'un grand regroupement). Table dédiée plutôt qu'un
+      indicateur noyé dans les deux tables ci-dessus : le volume de cas inter-fonds est faible
+      (dizaines, pas centaines) et mérite sa propre vue plutôt qu'un tri en tête de liste."""
     clusters = _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_days, max_relative_diff)
 
-    petits_rows, grands_rows = [], []
+    petits_rows, grands_rows, inter_fonds_rows = [], [], []
     for beneficiaire, involved in clusters:
         montants = involved[amount_col]
+        fonds = sorted(set(involved["Fonds"]))
         row = {
             beneficiaire_col: beneficiaire,
             "Nb opérations rapprochées": len(involved),
@@ -435,15 +442,32 @@ def detect_regroupements_beneficiaire(
             moyenne = montants.mean()
             grands_rows.append({**row, "Coeff. de variation": (montants.std() / moyenne) if moyenne else 0})
 
+        if len(fonds) > 1:
+            inter_fonds_rows.append(
+                {
+                    **row,
+                    "Fonds": "; ".join(fonds),
+                    "Programme(s)": "; ".join(sorted(set(involved["Libellé Programme"]))),
+                    "Opérations": "; ".join(involved["Intitulé du projet"]),
+                }
+            )
+
     common_cols = [beneficiaire_col, "Nb opérations rapprochées", "Montant UE cumulé", "Première date", "Dernière date"]
     petits_cols = common_cols + ["Opérations", "Programme(s)"]
     grands_cols = common_cols[:3] + ["Coeff. de variation"] + common_cols[3:]
+    inter_fonds_cols = common_cols[:3] + ["Fonds", "Programme(s)", "Opérations"] + common_cols[3:]
 
     petits = pd.DataFrame(petits_rows, columns=petits_cols) if petits_rows else pd.DataFrame(columns=petits_cols)
     grands = pd.DataFrame(grands_rows, columns=grands_cols) if grands_rows else pd.DataFrame(columns=grands_cols)
+    inter_fonds = (
+        pd.DataFrame(inter_fonds_rows, columns=inter_fonds_cols)
+        if inter_fonds_rows
+        else pd.DataFrame(columns=inter_fonds_cols)
+    )
     return (
         petits.sort_values("Montant UE cumulé", ascending=False),
         grands.sort_values("Montant UE cumulé", ascending=False),
+        inter_fonds.sort_values("Montant UE cumulé", ascending=False),
     )
 
 

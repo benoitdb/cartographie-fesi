@@ -458,7 +458,7 @@ st.caption(
     "On regarde ici de près les opérations d'un même bénéficiaire dont le montant et la date de "
     "démarrage sont proches."
 )
-proches, grands_regroupements = detect_regroupements_beneficiaire(df_national_ops)
+proches, grands_regroupements, regroupements_inter_fonds = detect_regroupements_beneficiaire(df_national_ops)
 
 st.caption(
     f"Petits regroupements (2 à 3 opérations) : {len(proches)} bénéficiaire(s). Les programmes "
@@ -489,6 +489,23 @@ if len(grands_regroupements):
             "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
         },
     )
+
+st.markdown("**Regroupements inter-fonds**")
+st.caption(
+    f"{len(regroupements_inter_fonds)} bénéficiaire(s) avec des opérations rapprochées (montant et "
+    "date proches) couvrant plus d'un Fonds (ex. FEDER + FSE+) — signal plus fort qu'un regroupement "
+    "intra-programme (lots d'un même accord-cadre, cas le plus fréquent ci-dessus), à recouper, pas "
+    "une preuve en soi."
+)
+if len(regroupements_inter_fonds):
+    st.dataframe(
+        regroupements_inter_fonds,
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Montant UE cumulé": montant_col_config},
+    )
+else:
+    st.caption("Aucun cas détecté sur le périmètre actuel.")
 
 st.markdown("**Bénéficiaires présents dans plusieurs régions**")
 st.caption(

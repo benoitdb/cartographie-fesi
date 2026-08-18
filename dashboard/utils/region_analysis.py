@@ -271,7 +271,7 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
         "On regarde ici de près les opérations d'un même bénéficiaire dont le montant et la date de "
         "démarrage sont proches."
     )
-    proches_region, grands_regroupements_region = detect_regroupements_beneficiaire(df_region_ops)
+    proches_region, grands_regroupements_region, inter_fonds_region = detect_regroupements_beneficiaire(df_region_ops)
 
     st.caption(
         f"Petits regroupements (2 à 3 opérations) : {len(proches_region)} bénéficiaire(s). Les "
@@ -302,6 +302,23 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
                 "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
             },
         )
+
+    st.markdown("**Regroupements inter-fonds**")
+    st.caption(
+        f"{len(inter_fonds_region)} bénéficiaire(s) avec des opérations rapprochées (montant et date "
+        "proches) couvrant plus d'un Fonds (ex. FEDER + FSE+) — signal plus fort qu'un regroupement "
+        "intra-programme (lots d'un même accord-cadre, cas le plus fréquent ci-dessus), à recouper, "
+        "pas une preuve en soi."
+    )
+    if len(inter_fonds_region):
+        st.dataframe(
+            inter_fonds_region,
+            hide_index=True,
+            use_container_width=True,
+            column_config={"Montant UE cumulé": montant_col_config},
+        )
+    else:
+        st.caption("Aucun cas détecté sur le périmètre actuel.")
 
     st.markdown("**Structure du portefeuille par type d'intervention**")
     st.caption(
