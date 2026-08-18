@@ -377,7 +377,7 @@ def _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_
             for j in range(i + 1, len(records)):
                 a, b = records[i], records[j]
                 m1, m2 = a[amount_col], b[amount_col]
-                if not m1 or not m2:
+                if not isinstance(m1, (int, float)) or not isinstance(m2, (int, float)) or math.isnan(m1) or math.isnan(m2) or m1 == 0 or m2 == 0:
                     continue
                 if abs((a[date_col] - b[date_col]).days) > max_days:
                     continue
