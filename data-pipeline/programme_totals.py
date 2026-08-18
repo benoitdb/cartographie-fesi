@@ -3,7 +3,8 @@ Totaux programmés (Tableau 9B, reference/programmes_2021_2027.py) par région e
 tous catégories de région confondues (y compris l'allocation additionnelle
 "Ultrapériphériques" pour les DOM/Saint-Martin — comptée dans le même total que leur
 catégorie de base, car les opérations engagées de data.json ne distinguent pas de quelle
-enveloppe elles proviennent).
+enveloppe elles proviennent). Le détail de cette allocation RUP seule est exposé à part dans
+programme_detail.json (clé "rup") pour un affichage pédagogique (issue cofinancement/RUP).
 
 Écrit data/processed/programme_totals.json, lu par le dashboard (utils.data_loader) pour
 calculer un taux de consommation par région/fonds — voir issue #6 du backlog. Contrairement
@@ -30,6 +31,7 @@ def main():
     totals = defaultdict(lambda: defaultdict(int))
     ftj_article = defaultdict(lambda: defaultdict(int))
     assistance_technique = defaultdict(lambda: defaultdict(int))
+    rup = defaultdict(lambda: defaultdict(int))
     for p in PROGRAMMES:
         if p.fonds == "FEAMPA":
             continue
@@ -38,6 +40,8 @@ def main():
         assistance_technique[cle_region][p.fonds] += p.assistance_technique
         if p.fonds == "FTJ":
             ftj_article[cle_region][p.categorie] += p.contribution_ue
+        if p.categorie == "Ultrapériphériques":
+            rup[cle_region][p.fonds] += p.contribution_ue
 
     output = {region: dict(fonds_totals) for region, fonds_totals in totals.items()}
 
@@ -58,6 +62,10 @@ def main():
     detail_output = {
         "ftj_article": {region: dict(v) for region, v in ftj_article.items()},
         "assistance_technique": {region: dict(v) for region, v in assistance_technique.items()},
+        # Allocation additionnelle "Ultrapériphériques" (art. 349 TFUE), en plus de la
+        # dotation de catégorie de base (déjà incluse dans totals ci-dessus) — les 6
+        # programmes DOM/Saint-Martin uniquement (voir cohesion_ue.py REGION_ULTRAPERIPHERIQUE).
+        "rup": {region: dict(v) for region, v in rup.items()},
     }
     with open(DETAIL_OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(detail_output, f, ensure_ascii=False, indent=2)

@@ -114,5 +114,32 @@
     "Mayotte": {
       "FEDER": 14951304
     }
+  },
+  "rup": {
+    "national": {
+      "FSE+": 103603974
+    },
+    "La Réunion": {
+      "FEDER": 202855712,
+      "FSE+": 23176139
+    },
+    "Martinique": {
+      "FEDER": 88729627,
+      "FSE+": 19182574
+    },
+    "Guyane": {
+      "FEDER": 64794489,
+      "FSE+": 10857819
+    },
+    "Guadeloupe": {
+      "FEDER": 93800693,
+      "FSE+": 10920297
+    },
+    "Saint-Martin": {
+      "FEDER": 7605671
+    },
+    "Mayotte": {
+      "FEDER": 58202853
+    }
   }
 }

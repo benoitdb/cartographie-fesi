@@ -46,3 +46,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Documents de référence externes (guides, vademecum...) partagés en session : notes de
+# travail utiles localement, pas du contenu du dépôt à versionner.
+docs/sources/

@@ -351,6 +351,55 @@ def compute_cofinancement_table(df, group_col, taux_col="Taux de cofinancement")
     return agg.sort_values("taux_moyen", ascending=False)
 
 
+def build_cofinancement_categorie_chart(df, label_col="Catégorie", ue_col="montant_ue", total_col="total_depenses", plafond_col="plafond", height=None):
+    """Bullet chart : barre de fond = total des dépenses éligibles, barre superposée = montant
+    financé par l'UE, par catégorie de région (utils/cofinancement.bucket_categorie) — l'écart
+    visuel entre les deux extrémités de barre est le montant financé par ailleurs (national,
+    local, privé). Un repère en losange marque le plafond réglementaire de cofinancement UE de
+    la catégorie (utils/cofinancement.plafond_categorie), positionné à plafond * total des
+    dépenses éligibles : plus la barre UE s'en approche, plus la catégorie consomme sa marge
+    de cofinancement maximale autorisée."""
+    df = df.sort_values(total_col)
+    taux = df[ue_col] / df[total_col]
+    fig = go.Figure()
+    fig.add_bar(
+        x=df[total_col],
+        y=df[label_col],
+        orientation="h",
+        name="Total des dépenses éligibles",
+        marker_color="#c8d4e3",
+        hovertemplate="<b>%{y}</b><br>Total dépenses éligibles : %{x:,.0f} €<extra></extra>",
+    )
+    fig.add_bar(
+        x=df[ue_col],
+        y=df[label_col],
+        orientation="h",
+        name="Financé par l'UE",
+        marker_color="#4C78A8",
+        customdata=taux,
+        text=[f"{t:.0%}" for t in taux],
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Financé par l'UE : %{x:,.0f} €<br>Taux : %{customdata:.0%}<extra></extra>",
+    )
+    fig.add_scatter(
+        x=df[plafond_col] * df[total_col],
+        y=df[label_col],
+        mode="markers",
+        marker=dict(symbol="diamond", size=12, color="#e34948"),
+        name="Plafond réglementaire",
+        customdata=df[plafond_col],
+        hovertemplate="<b>%{y}</b><br>Plafond réglementaire : %{customdata:.0%} du total des dépenses éligibles<extra></extra>",
+    )
+    fig.update_layout(
+        barmode="overlay",
+        height=height if height else max(350, 45 * len(df)),
+        xaxis_title="Montant (€)",
+        yaxis_title=None,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+    return style_hover(fig)
+
+
 def detect_cofinancement_outliers(df, taux_col="Taux de cofinancement"):
     """Opérations dont le taux de cofinancement sort de [Q1 - 1.5*IQR, Q3 + 1.5*IQR]
     (à ne pas confondre avec un dépassement de plafond réglementaire, non modélisé ici)."""
@@ -358,6 +407,15 @@ def detect_cofinancement_outliers(df, taux_col="Taux de cofinancement"):
     iqr = q3 - q1
     borne_basse, borne_haute = q1 - 1.5 * iqr, q3 + 1.5 * iqr
     return df[(df[taux_col] < borne_basse) | (df[taux_col] > borne_haute)].sort_values(taux_col, ascending=False)
+
+
+def detect_cofinancement_superieur_plafond(df, plafond, taux_col="Taux de cofinancement"):
+    """Opérations dont le taux de cofinancement UE dépasse le plafond réglementaire de la
+    catégorie de région (voir utils/cofinancement.plafond_categorie) — à ne pas confondre
+    avec detect_cofinancement_outliers (taux statistiquement atypique par rapport aux autres
+    opérations du même fonds) : ici la référence est le taux maximal légal, pas une médiane,
+    donc un signal plus directement actionnable. plafond est un taux (0-1), pas un %."""
+    return df[df[taux_col] > plafond].sort_values(taux_col, ascending=False)
 
 
 def detect_incoherent_cofinancement(df, amount_col="Montant UE", depenses_col="Total des dépenses éligibles"):

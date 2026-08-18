@@ -405,6 +405,42 @@ with tab_pilotage:
             },
         )
 
+        # Allocation additionnelle ultrapériphérique (RUP, art. 349 TFUE) : distincte de la
+        # dotation de catégorie de région de base, jusqu'ici fusionnée dans programme_totals_region
+        # sans être exposée séparément (voir data-pipeline/programme_totals.py, clé "rup").
+        rup_region = programme_detail.get("rup", {}).get(region, {})
+        if region_meta and region_meta.get("ultraperipherique") and rup_region:
+            with st.expander(f"ℹ️ Allocation additionnelle ultrapériphérique (RUP) pour {region}"):
+                st.caption(
+                    f"En tant que région ultrapériphérique (art. 349 TFUE), {region} bénéficie d'une "
+                    "allocation additionnelle, en plus de sa dotation de catégorie de région de base, "
+                    "destinée à compenser un handicap structurel permanent (éloignement, insularité, "
+                    "relief, climat, dépendance économique à un petit nombre de produits — Accord de "
+                    "partenariat 2021-2027, Tableau 9B)."
+                )
+                rup_rows = [
+                    {
+                        "Fonds": f,
+                        "Dotation catégorie de base": programme_totals_region.get(f, 0) - montant_rup,
+                        "Allocation RUP additionnelle": montant_rup,
+                        "Total programmé": programme_totals_region.get(f, 0),
+                    }
+                    for f, montant_rup in rup_region.items()
+                    if f in selected_fonds
+                ]
+                if rup_rows:
+                    st.dataframe(
+                        pd.DataFrame(rup_rows),
+                        hide_index=True,
+                        use_container_width=True,
+                        column_config={
+                            col: st.column_config.NumberColumn(format="%,d €")
+                            for col in ("Dotation catégorie de base", "Allocation RUP additionnelle", "Total programmé")
+                        },
+                    )
+                else:
+                    st.caption("Aucune allocation RUP pour les fonds actuellement sélectionnés.")
+
         traj_col, bullet_col = st.columns(2)
         with traj_col:
             st.plotly_chart(build_trajectoire(pd.DataFrame(region_ops), montant_programme_region), use_container_width=True)
@@ -426,4 +462,4 @@ with tab_pilotage:
     )
 
 with tab_audit:
-    render_region_audit(df_region_ops, region)
+    render_region_audit(df_region_ops, region, region_meta=region_meta)
