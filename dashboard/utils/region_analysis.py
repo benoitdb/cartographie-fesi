@@ -19,6 +19,7 @@ from utils.stats import (
     detect_regroupements_beneficiaire,
     render_top_beneficiaires_drilldown,
 )
+from utils.table_style import text_widths
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 from utils.treemap import build_hierarchy_treemap
 
@@ -251,11 +252,12 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
         hide_index=True,
         use_container_width=True,
         column_config={
+            **text_widths("Intitulé du projet", "Nom du bénéficiaire"),
             "Montant UE": st.column_config.ProgressColumn(
                 format="%,d €",
                 min_value=0,
                 max_value=int(outliers_region_table["Montant UE"].max()) if len(outliers_region_table) else 1,
-            )
+            ),
         },
     )
 
@@ -292,7 +294,7 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
             proches_region.head(50),
             hide_index=True,
             use_container_width=True,
-            column_config={"Montant UE cumulé": montant_col_config},
+            column_config={**text_widths("Nom du bénéficiaire", "Opérations", "Programme(s)"), "Montant UE cumulé": montant_col_config},
         )
 
     st.caption(
@@ -307,6 +309,7 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
             hide_index=True,
             use_container_width=True,
             column_config={
+                **text_widths("Nom du bénéficiaire"),
                 "Montant UE cumulé": montant_col_config,
                 "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
             },
@@ -324,7 +327,7 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
             inter_fonds_region,
             hide_index=True,
             use_container_width=True,
-            column_config={"Montant UE cumulé": montant_col_config},
+            column_config={**text_widths("Nom du bénéficiaire", "Programme(s)", "Opérations"), "Montant UE cumulé": montant_col_config},
         )
     else:
         st.caption("Aucun cas détecté sur le périmètre actuel.")
@@ -370,6 +373,7 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
         hide_index=True,
         use_container_width=True,
         column_config={
+            **text_widths("Intitulé du projet", "Nom du bénéficiaire"),
             "Taux de cofinancement": taux_col_config,
             "Total des dépenses éligibles": montant_col_config,
             "Montant UE": st.column_config.ProgressColumn(
@@ -400,6 +404,7 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
             hide_index=True,
             use_container_width=True,
             column_config={
+                **text_widths("Intitulé du projet", "Nom du bénéficiaire"),
                 "Total des dépenses éligibles": montant_col_config,
                 "Montant UE": st.column_config.ProgressColumn(
                     format="%,d €", min_value=0, max_value=int(incoherentes_region_table["Montant UE"].max())

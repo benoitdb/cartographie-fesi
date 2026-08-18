@@ -7,6 +7,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from utils.plot_style import format_montant, style_hover, wrap_label
+from utils.table_style import text_widths
 
 
 def _concentration_top10(montants):
@@ -269,7 +270,11 @@ def build_fonds_barchart(df_fonds, color_map, totaux_programme=None, fonds_col="
                 "%{customdata[0]:,.0f} €<br>% consommé : %{customdata[1]:.0%}<extra></extra>"
             ),
         )
-    fig.update_layout(barmode="stack", xaxis_title=None, yaxis_title="Montant UE (€)", showlegend=False)
+    # margin.t=60 explicite : sans ça, ce go.Figure hérite d'une marge haute par défaut différente
+    # de celle de build_cumulative_curve (px.line, qui fixe systématiquement margin.t=60) — un axe Y
+    # identique en valeur ne suffit donc pas à aligner visuellement les deux figures placées côte à
+    # côte, leur zone de tracé démarrant à des hauteurs différentes (issue #35).
+    fig.update_layout(barmode="stack", xaxis_title=None, yaxis_title="Montant UE (€)", showlegend=False, margin=dict(t=60))
     fig.update_traces(width=0.3, selector=dict(type="bar"))
     return style_hover(fig)
 
@@ -391,7 +396,7 @@ def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="N
         top,
         hide_index=True,
         use_container_width=True,
-        column_config={"Montant UE cumulé": montant_col_config},
+        column_config={**text_widths(group_col), "Montant UE cumulé": montant_col_config},
     )
 
     beneficiaire = st.selectbox(
@@ -413,7 +418,10 @@ def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="N
         detail,
         hide_index=True,
         use_container_width=True,
-        column_config={amount_col: montant_col_config},
+        column_config={
+            **text_widths("Numéro Opération", "Intitulé du projet", "Libellé Programme", "Région de l'opération"),
+            amount_col: montant_col_config,
+        },
     )
 
 
