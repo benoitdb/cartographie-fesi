@@ -1,0 +1,118 @@
+{
+  "ftj_article": {
+    "national": {
+      "Article 3": 135296744,
+      "Article 4": 173689036
+    },
+    "Provence-Alpes-Côte d'Azur": {
+      "Article 3": 64716942,
+      "Article 4": 83081256
+    },
+    "Pays de la Loire": {
+      "Article 3": 21151391,
+      "Article 4": 27153386
+    },
+    "Normandie": {
+      "Article 3": 46722475,
+      "Article 4": 59980614
+    },
+    "Hauts-de-France": {
+      "Article 3": 99758799,
+      "Article 4": 128066716
+    },
+    "Grand Est": {
+      "Article 3": 49248015,
+      "Article 4": 63222809
+    },
+    "Auvergne-Rhône-Alpes": {
+      "Article 3": 34094779,
+      "Article 4": 43769637
+    }
+  },
+  "assistance_technique": {
+    "Île-de-France": {
+      "FEDER": 6220357,
+      "FSE+": 9427163
+    },
+    "national": {
+      "FTJ": 11884067,
+      "FSE+": 181838657
+    },
+    "Provence-Alpes-Côte d'Azur": {
+      "FEDER": 11878867,
+      "FSE+": 5343097,
+      "FTJ": 5684545
+    },
+    "La Réunion": {
+      "FEDER": 53240234,
+      "FSE+": 8254773
+    },
+    "Pays de la Loire": {
+      "FEDER": 10186025,
+      "FSE+": 2482032,
+      "FTJ": 1857876
+    },
+    "Occitanie": {
+      "FEDER": 22523672,
+      "FSE+": 6293430
+    },
+    "Nouvelle-Aquitaine": {
+      "FEDER": 24873320,
+      "FSE+": 5389643
+    },
+    "Normandie": {
+      "FEDER": 13578352,
+      "FSE+": 3404070,
+      "FTJ": 4103964
+    },
+    "Martinique": {
+      "FEDER": 20745278,
+      "FSE+": 5659358
+    },
+    "Hauts-de-France": {
+      "FEDER": 30347666,
+      "FSE+": 8940285,
+      "FTJ": 8762518
+    },
+    "Centre-Val de Loire": {
+      "FEDER": 10452264,
+      "FSE+": 3972210
+    },
+    "Guyane": {
+      "FEDER": 17676800,
+      "FSE+": 3938865
+    },
+    "Guadeloupe": {
+      "FEDER": 24060925,
+      "FSE+": 3786134
+    },
+    "Grand Est": {
+      "FEDER": 21354490,
+      "FSE+": 5969889,
+      "FTJ": 4325800
+    },
+    "Corse": {
+      "FEDER": 3555721,
+      "FSE+": 487263
+    },
+    "Bretagne": {
+      "FEDER": 11258668,
+      "FSE+": 2305998
+    },
+    "Bourgogne-Franche-Comté": {
+      "FEDER": 13575758,
+      "FSE+": 3214280
+    },
+    "Auvergne-Rhône-Alpes": {
+      "FEDER": 22315459,
+      "FSE+": 5503445,
+      "FTJ": 2994784
+    },
+    "Saint-Martin": {
+      "FEDER": 2533654
+    },
+    "Mayotte": {
+      "FEDER": 14951304
+    }
+  }
+}

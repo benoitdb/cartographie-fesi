@@ -10,6 +10,14 @@ data/processed/**
 # Totaux programmés (Tableau 9B, reference/programmes_2021_2027.py) : dérivé uniquement de
 # fichiers déjà committés, aucun appel réseau — committé pour la même raison.
 !data/processed/programme_totals.json
+# Détail FTJ Article 3/4 + assistance technique (même source, même script programme_totals.py) :
+# committé pour la même raison.
+!data/processed/programme_detail.json
+# Dotations par objectif stratégique (Tableau 8, reference/dotations_os.py) : dérivé uniquement
+# de fichiers déjà committés, aucun appel réseau — committé pour la même raison.
+!data/processed/dotations_os.json
+# Liste des programmes Interreg (Tableau 10, reference/interreg.py) : même raison.
+!data/processed/interreg.json
 
 # Python
 __pycache__/

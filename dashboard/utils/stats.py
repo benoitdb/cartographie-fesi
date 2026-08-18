@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
 
 from utils.plot_style import format_montant, style_hover, wrap_label
@@ -219,15 +220,74 @@ def build_portfolio_scatter_comparison(df, group_col, theme_col, amount_col="Mon
     return style_hover(fig)
 
 
+def build_fonds_barchart(df_fonds, color_map, totaux_programme=None, fonds_col="fonds", amount_col="montant_ue_total", count_col="count"):
+    """Barres verticales du montant engagé par fonds, colorées par fonds (color_map). Si
+    totaux_programme (dict fonds -> montant programmé, Tableau 9B) est fourni, empile une
+    seconde barre "Reste à engager" (programme - engagé, plancher 0) au-dessus de chaque
+    barre — le sommet de la barre empilée rejoint alors l'enveloppe programmée, complémentaire
+    au repère pointillé de build_cumulative_curve en mode Montant (sans objet en mode %,
+    seule la courbe cumulée bascule — voir issue #33). Un fonds sans donnée programmée n'a
+    simplement pas de segment "Reste à engager" (0), pas d'erreur.
+
+    Pas de légende (showlegend=False) : avec deux barres empilées, la légende faisait perdre
+    l'alignement de hauteur avec la courbe cumulée affichée à côté (même axe_range). Le détail
+    engagé/reste/% consommé est reporté en tooltip sur chaque segment plutôt que par la
+    légende."""
+    reste = pd.Series(0, index=df_fonds.index)
+    pct_consomme = pd.Series(float("nan"), index=df_fonds.index)
+    if totaux_programme:
+        programme = df_fonds[fonds_col].map(totaux_programme).fillna(0)
+        reste = (programme - df_fonds[amount_col]).clip(lower=0)
+        pct_consomme = df_fonds[amount_col] / programme.where(programme != 0)
+
+    count_series = df_fonds[count_col] if count_col in df_fonds else pd.Series(float("nan"), index=df_fonds.index)
+    customdata_engage = pd.concat([count_series, reste, pct_consomme], axis=1).values
+    hover_engage = "<b>%{x}</b><br>Engagé : %{y:,.0f} €"
+    if count_col in df_fonds:
+        hover_engage += "<br>Nb projets : %{customdata[0]:,.0f}"
+    hover_engage += "<br>Reste à engager (estimé) : %{customdata[1]:,.0f} €<br>% consommé : %{customdata[2]:.0%}<extra></extra>"
+
+    fig = go.Figure()
+    fig.add_bar(
+        x=df_fonds[fonds_col],
+        y=df_fonds[amount_col],
+        name="Engagé",
+        marker_color=[color_map.get(f, "gray") for f in df_fonds[fonds_col]],
+        customdata=customdata_engage,
+        hovertemplate=hover_engage,
+    )
+    if totaux_programme and reste.sum() > 0:
+        customdata_reste = pd.concat([df_fonds[amount_col], pct_consomme], axis=1).values
+        fig.add_bar(
+            x=df_fonds[fonds_col],
+            y=reste,
+            name="Reste à engager",
+            marker_color="rgba(150,150,150,0.35)",
+            customdata=customdata_reste,
+            hovertemplate=(
+                "<b>%{x}</b><br>Reste à engager (estimé) : %{y:,.0f} €<br>Engagé : "
+                "%{customdata[0]:,.0f} €<br>% consommé : %{customdata[1]:.0%}<extra></extra>"
+            ),
+        )
+    fig.update_layout(barmode="stack", xaxis_title=None, yaxis_title="Montant UE (€)", showlegend=False)
+    fig.update_traces(width=0.3, selector=dict(type="bar"))
+    return style_hover(fig)
+
+
 def build_cumulative_curve(
-    df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds", color_map=None, totaux_ref=None
+    df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds", color_map=None, totaux_ref=None, mode="montant"
 ):
     """Courbe d'engagement UE cumulé dans le temps, par color_col, avec repères verticaux à
     chaque 1ᵉʳ janvier pour situer les années. color_map (optionnel) fixe la couleur par
     catégorie plutôt que la palette par défaut. totaux_ref (optionnel, dict catégorie ->
     montant) ajoute par catégorie un repère horizontal pointillé léger au niveau de son
     montant **programmé** (Tableau 9B) — l'écart entre la courbe et ce repère est le reste à
-    consommer, aligné avec le barchart "Répartition par fonds" affiché à côté (mêmes couleurs)."""
+    consommer, aligné avec le barchart "Répartition par fonds" affiché à côté (mêmes couleurs).
+
+    mode="pourcentage" (issue #33) : trace le % de l'enveloppe programmée plutôt que le
+    montant cumulé — nécessite totaux_ref (categorie -> montant programmé), les catégories
+    absentes de totaux_ref sont exclues (rien à quoi rapporter un %). Retombe sur mode
+    "montant" si totaux_ref est vide/absent en mode "pourcentage" (rien à diviser)."""
     plot_df = df[[date_col, amount_col, color_col]].copy()
     plot_df[date_col] = pd.to_datetime(plot_df[date_col])
     plot_df = (
@@ -237,23 +297,42 @@ def build_cumulative_curve(
     )
     plot_df["cumule"] = plot_df.groupby(color_col)[amount_col].cumsum()
 
+    if mode == "pourcentage" and not totaux_ref:
+        mode = "montant"
+
+    if mode == "pourcentage":
+        plot_df = plot_df[plot_df[color_col].isin(totaux_ref)].copy()
+        plot_df["valeur"] = plot_df.apply(lambda r: r["cumule"] / totaux_ref[r[color_col]], axis=1)
+        y_label = "% de l'enveloppe programmée"
+    else:
+        plot_df["valeur"] = plot_df["cumule"]
+        y_label = "Montant UE cumulé (€)"
+
     fig = px.line(
         plot_df,
         x=date_col,
-        y="cumule",
+        y="valeur",
         color=color_col,
         color_discrete_map=color_map,
-        labels={date_col: "Date", "cumule": "Montant UE cumulé (€)"},
+        labels={date_col: "Date", "valeur": y_label},
     )
     fig.update_traces(line=dict(width=2))
-    fig.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+    if mode == "pourcentage":
+        fig.update_yaxes(tickformat=".0%")
+        fig.for_each_trace(
+            lambda t: t.update(hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>%{{y:.1%}} de l'enveloppe programmée<extra></extra>")
         )
-    )
+    else:
+        fig.for_each_trace(
+            lambda t: t.update(
+                hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+            )
+        )
     for year in range(plot_df[date_col].dt.year.min(), plot_df[date_col].dt.year.max() + 1):
         fig.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
-    if totaux_ref:
+    if mode == "pourcentage":
+        fig.add_hline(y=1, line_dash="dot", line_color="black", opacity=0.4)
+    elif totaux_ref:
         for categorie, total in totaux_ref.items():
             couleur = (color_map or {}).get(categorie, "gray")
             fig.add_hline(y=total, line_dash="dot", line_color=couleur, opacity=0.4)
@@ -289,6 +368,53 @@ def compute_top_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col=
     complémentaire à la concentration par opération (compute_stats_table)."""
     agg = df.groupby(group_col)[amount_col].agg(montant_ue_total="sum", count="count").reset_index()
     return agg.sort_values("montant_ue_total", ascending=False).head(top_n)
+
+
+def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="Nom du bénéficiaire", amount_col="Montant UE", top_n=20):
+    """Affiche le tableau "Top bénéficiaires" (compute_top_beneficiaires, lecture seule) puis
+    un st.selectbox pour choisir un bénéficiaire et afficher le détail de tous ses projets dans
+    le périmètre passé en df — issue #22 (drill-down bénéficiaire, jusqu'ici seulement agrégé
+    sans vue détaillée par bénéficiaire).
+
+    Un selectbox plutôt qu'une sélection de ligne sur le tableau (st.dataframe
+    on_select/selection_mode) : Streamlit affiche une case à cocher pour la sélection de ligne
+    même en selection_mode="single-row", ce qui laisse penser à tort qu'un choix multiple est
+    possible — un widget dédié à choix unique est plus conforme à la convention (case à cocher
+    = sélection multiple).
+
+    key doit être unique par appel (Accueil vs Vue Régionale vs Volet National) pour que
+    Streamlit ne mélange pas les sélections entre les tableaux."""
+    top = compute_top_beneficiaires(df, group_col=group_col, amount_col=amount_col, top_n=top_n).rename(
+        columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
+    )
+    st.dataframe(
+        top,
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Montant UE cumulé": montant_col_config},
+    )
+
+    beneficiaire = st.selectbox(
+        "Voir le détail des projets d'un bénéficiaire",
+        options=["(choisir un bénéficiaire)"] + top[group_col].tolist(),
+        key=key,
+    )
+    if beneficiaire == "(choisir un bénéficiaire)":
+        return
+
+    detail_cols = [
+        c
+        for c in ["Numéro Opération", "Intitulé du projet", "Libellé Programme", "Fonds", "Région de l'opération", amount_col, "Date de début de l'opération"]
+        if c in df.columns
+    ]
+    detail = df[df[group_col] == beneficiaire][detail_cols].sort_values(amount_col, ascending=False)
+    st.markdown(f"**Détail des projets de {beneficiaire}** ({len(detail)} opération(s))")
+    st.dataframe(
+        detail,
+        hide_index=True,
+        use_container_width=True,
+        column_config={amount_col: montant_col_config},
+    )
 
 
 def build_pareto_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col="Montant UE", top_n=15):
@@ -364,7 +490,7 @@ def _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_
     sous-DataFrame des opérations concernées) — brique commune aux deux tables construites par
     detect_regroupements_beneficiaire, qui n'en diffèrent que par la taille du regroupement
     retenue."""
-    work = df[[beneficiaire_col, "Numéro Opération", "Intitulé du projet", "Libellé Programme", date_col, amount_col]].copy()
+    work = df[[beneficiaire_col, "Numéro Opération", "Intitulé du projet", "Libellé Programme", "Fonds", date_col, amount_col]].copy()
     work[date_col] = pd.to_datetime(work[date_col])
 
     clusters = []
@@ -377,7 +503,7 @@ def _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_
             for j in range(i + 1, len(records)):
                 a, b = records[i], records[j]
                 m1, m2 = a[amount_col], b[amount_col]
-                if not m1 or not m2:
+                if not isinstance(m1, (int, float)) or not isinstance(m2, (int, float)) or math.isnan(m1) or math.isnan(m2) or m1 == 0 or m2 == 0:
                     continue
                 if abs((a[date_col] - b[date_col]).days) > max_days:
                     continue
@@ -402,20 +528,27 @@ def detect_regroupements_beneficiaire(
     max_group_size=3,
 ):
     """Pour chaque bénéficiaire, regroupe ses opérations dont le montant et la date de début sont
-    proches d'au moins une autre opération du même bénéficiaire. Retourne deux tables à partir du
-    même calcul (évite de le refaire deux fois, coûteux sur tout le périmètre national) :
+    proches d'au moins une autre opération du même bénéficiaire. Retourne trois tables à partir
+    du même calcul (évite de le refaire plusieurs fois, coûteux sur tout le périmètre national) :
 
     - petits_regroupements : bénéficiaires avec ≤ max_group_size opérations rapprochées (nombre
       d'opérations, montant cumulé)
     - grands_regroupements : au-delà de max_group_size (typiquement des programmes découpés en
       plusieurs lots), avec en plus le coefficient de variation des montants au sein du
       regroupement — une dispersion élevée indique des lots de taille très inégale, une
-      dispersion quasi nulle indique des lots de montant quasi identique."""
+      dispersion quasi nulle indique des lots de montant quasi identique.
+    - inter_fonds : sous-ensemble des regroupements ci-dessus (petits et grands confondus) dont
+      les opérations couvrent plus d'un Fonds (FEDER/FSE+/FTJ) pour ce bénéficiaire — signal plus
+      fort qu'un simple regroupement intra-programme (accord-cadre en plusieurs lots, même Fonds,
+      qui reste la lecture la plus fréquente d'un grand regroupement). Table dédiée plutôt qu'un
+      indicateur noyé dans les deux tables ci-dessus : le volume de cas inter-fonds est faible
+      (dizaines, pas centaines) et mérite sa propre vue plutôt qu'un tri en tête de liste."""
     clusters = _cluster_operations_proches(df, beneficiaire_col, amount_col, date_col, max_days, max_relative_diff)
 
-    petits_rows, grands_rows = [], []
+    petits_rows, grands_rows, inter_fonds_rows = [], [], []
     for beneficiaire, involved in clusters:
         montants = involved[amount_col]
+        fonds = sorted(set(involved["Fonds"]))
         row = {
             beneficiaire_col: beneficiaire,
             "Nb opérations rapprochées": len(involved),
@@ -435,13 +568,73 @@ def detect_regroupements_beneficiaire(
             moyenne = montants.mean()
             grands_rows.append({**row, "Coeff. de variation": (montants.std() / moyenne) if moyenne else 0})
 
+        if len(fonds) > 1:
+            inter_fonds_rows.append(
+                {
+                    **row,
+                    "Fonds": "; ".join(fonds),
+                    "Programme(s)": "; ".join(sorted(set(involved["Libellé Programme"]))),
+                    "Opérations": "; ".join(involved["Intitulé du projet"]),
+                }
+            )
+
     common_cols = [beneficiaire_col, "Nb opérations rapprochées", "Montant UE cumulé", "Première date", "Dernière date"]
     petits_cols = common_cols + ["Opérations", "Programme(s)"]
     grands_cols = common_cols[:3] + ["Coeff. de variation"] + common_cols[3:]
+    inter_fonds_cols = common_cols[:3] + ["Fonds", "Programme(s)", "Opérations"] + common_cols[3:]
 
     petits = pd.DataFrame(petits_rows, columns=petits_cols) if petits_rows else pd.DataFrame(columns=petits_cols)
     grands = pd.DataFrame(grands_rows, columns=grands_cols) if grands_rows else pd.DataFrame(columns=grands_cols)
+    inter_fonds = (
+        pd.DataFrame(inter_fonds_rows, columns=inter_fonds_cols)
+        if inter_fonds_rows
+        else pd.DataFrame(columns=inter_fonds_cols)
+    )
     return (
         petits.sort_values("Montant UE cumulé", ascending=False),
         grands.sort_values("Montant UE cumulé", ascending=False),
+        inter_fonds.sort_values("Montant UE cumulé", ascending=False),
     )
+
+
+def detect_beneficiaires_multi_region(
+    df,
+    fuzzy_clusters,
+    beneficiaire_col="Nom du bénéficiaire",
+    region_col="regions_modernes",
+    amount_col="Montant UE",
+):
+    """Repère les bénéficiaires (ou variantes de saisie rapprochées via fuzzy_clusters, voir
+    data-pipeline/beneficiaire_matching.py et issue #23) présents dans plusieurs régions à la
+    fois — signal à recouper pour un éventuel double financement, indépendamment de la
+    proximité montant/date (contrairement à detect_regroupements_beneficiaire, qui vise les
+    doublons proches dans le temps).
+
+    La clé de regroupement est le cluster fuzzy si le nom en fait partie, sinon le nom exact
+    tel quel — donc les doublons exacts entre régions (même nom saisi à l'identique) sont
+    aussi couverts, pas seulement les variantes approchées."""
+    work = df[[beneficiaire_col, region_col, "Fonds", "Numéro Opération", amount_col]].copy()
+    work["_cle"] = work[beneficiaire_col].map(lambda n: fuzzy_clusters.get(n, n))
+
+    rows = []
+    for cle, group in work.groupby("_cle"):
+        regions = set()
+        for r in group[region_col]:
+            regions.update(r or [])
+        if len(regions) < 2:
+            continue
+        noms = sorted(set(group[beneficiaire_col]))
+        rows.append(
+            {
+                beneficiaire_col: " / ".join(noms),
+                "Rapprochement": "approché (variantes de saisie)" if len(noms) > 1 else "exact",
+                "Régions": ", ".join(sorted(regions)),
+                "Fonds": ", ".join(sorted(set(group["Fonds"]))),
+                "Nb opérations": len(group),
+                "Montant UE cumulé": group[amount_col].sum(),
+            }
+        )
+
+    cols = [beneficiaire_col, "Rapprochement", "Régions", "Fonds", "Nb opérations", "Montant UE cumulé"]
+    result = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)
+    return result.sort_values("Montant UE cumulé", ascending=False)

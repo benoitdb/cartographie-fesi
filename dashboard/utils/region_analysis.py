@@ -6,17 +6,18 @@ from utils.plot_style import style_hover
 from utils.stats import (
     build_boxplot,
     build_cumulative_curve,
+    build_fonds_barchart,
     build_histogram,
     build_lorenz_beneficiaires,
     build_pareto_beneficiaires,
     build_portfolio_scatter_comparison,
     compute_cofinancement_table,
     compute_stats_table,
-    compute_top_beneficiaires,
     detect_cofinancement_outliers,
     detect_incoherent_cofinancement,
     detect_outliers,
     detect_regroupements_beneficiaire,
+    render_top_beneficiaires_drilldown,
 )
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 from utils.treemap import build_hierarchy_treemap
@@ -24,11 +25,15 @@ from utils.treemap import build_hierarchy_treemap
 FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
 
 
-def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, key_suffix="", programme_totals=None):
-    """Rend l'analyse complète d'un ensemble d'opérations déjà filtré : répartition par
-    fonds, courbe cumulée, treemaps, statistiques (dispersion, concentration, outliers,
-    cofinancement). Partagé entre Vue Régionale et Volet National — seule la sélection des
-    opérations en amont diffère entre les deux pages.
+def render_region_ensemble(region_ops, region_label, fonds_breakdown_df=None, key_suffix="", programme_totals=None):
+    """Tronc commun : répartition par fonds, courbe cumulée, treemaps (vue d'ensemble et détail
+    par fonds), structure du portefeuille par type d'intervention — description factuelle,
+    aucune analyse de dispersion/atypie ici (voir render_region_audit). Partagé entre Vue
+    Régionale et Volet National, appelé dans l'onglet "Vue d'ensemble" de chaque page.
+
+    Construit et retourne df_region_ops (colonnes LEVEL1/LEVEL2/LEVEL3 nettoyées des NaN) :
+    les onglets Pilotage et Analyses & contrôle le réutilisent tel quel, pas besoin de
+    reconstruire ce DataFrame trois fois.
 
     fonds_breakdown_df : DataFrame précalculé (colonnes fonds/montant_ue_total/count) pour
     le graphe "Répartition par fonds", à la place du recalcul depuis region_ops — utilisé
@@ -58,37 +63,27 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
             .sort_values("montant_ue_total")
         )
 
-    fig_region_fonds = px.bar(
-        df_region_fonds,
-        x="fonds",
-        y="montant_ue_total",
-        color="fonds",
-        color_discrete_map=FONDS_COLORS,
-        hover_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)", "fonds": "Fonds", "count": "Nb projets"},
-    )
-    fig_region_fonds.update_layout(height=400, showlegend=False, xaxis_title=None)
-    fig_region_fonds.update_traces(width=0.5)
-    fig_region_fonds.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
-        )
-    )
-    fig_region_fonds = style_hover(fig_region_fonds)
+    # Empilée avec un segment "Reste à engager" (programme_totals) quand disponible — le
+    # sommet de chaque barre rejoint alors l'enveloppe programmée (issue #33bis).
+    fig_region_fonds = build_fonds_barchart(df_region_fonds, FONDS_COLORS, totaux_programme=programme_totals)
+    fig_region_fonds.update_layout(height=400)
 
     fonds_col, progress_col = st.columns([1, 3])
     with fonds_col:
         st.plotly_chart(fig_region_fonds, use_container_width=True)
     with progress_col:
+        mode_courbe = st.radio("Courbe cumulée", ["Montant", "%"], horizontal=True, key=f"mode_courbe{key_suffix}")
+        mode_courbe_val = "pourcentage" if mode_courbe == "%" else "montant"
         st.plotly_chart(
-            build_cumulative_curve(pd.DataFrame(region_ops), color_map=FONDS_COLORS, totaux_ref=programme_totals),
+            build_cumulative_curve(pd.DataFrame(region_ops), color_map=FONDS_COLORS, totaux_ref=programme_totals, mode=mode_courbe_val),
             use_container_width=True,
         )
         st.caption(
             "Engagement UE cumulé dans le temps. Basé sur la date de début de l'opération — environ 60% "
             "des dates sont arrondies au 1ᵉʳ janvier (date administrative plutôt qu'une date de démarrage "
             "précise), d'où des paliers plutôt qu'une progression lissée. Cliquer sur un fonds dans la "
-            "légende pour l'isoler ou le masquer."
+            "légende pour l'isoler ou le masquer. En mode %, seuls les fonds avec une enveloppe programmée "
+            "connue sont affichés."
         )
 
     df_region_ops = pd.DataFrame(region_ops)
@@ -118,12 +113,60 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
             )
             st.plotly_chart(fig_fonds_detail, use_container_width=True)
 
-    # Analyses statistiques
-    st.subheader("Analyses statistiques")
+    st.markdown("**Structure du portefeuille par type d'intervention**")
     st.caption(
-        "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés plus haut : ils "
-        "renseignent sur la dispersion des montants, la concentration du portefeuille et la cohérence "
-        "des taux de cofinancement — des repères usuels pour l'analyse de dépense publique."
+        "Chaque bulle est une combinaison type d'intervention / objectif stratégique, positionnée par "
+        "nombre de projets (x) et montant UE moyen ou total (y selon le graphique) — utile pour repérer "
+        "si une thématique de financement (couleur) concentre l'essentiel de la valeur sur certains "
+        "types d'intervention (souvent infrastructure) plutôt que sur de nombreux petits projets "
+        "(souvent formation, aides individuelles)."
+    )
+    st.plotly_chart(
+        build_portfolio_scatter_comparison(df_region_ops, LEVEL3, LEVEL1, color_map=OBJECTIF_STRATEGIQUE_COLORS),
+        use_container_width=True,
+    )
+
+    return df_region_ops
+
+
+def render_region_gestion(df_region_ops, region_label):
+    """Espace Autorité de gestion : répartition engagé seul par Objectif Stratégique — le Tableau
+    8 de l'Accord de partenariat (source du pilotage par Fonds, rendu séparément par les pages
+    appelantes juste avant cet onglet) ne ventile les dotations programmées par OS qu'au niveau
+    national, pas par région (voir issue #21, #28). Pas de dotation régionale par OS disponible
+    à ce jour pour tracer un taux de consommation ici, donc engagé seul."""
+    st.subheader("Répartition par Objectif Stratégique")
+    df_region_os = (
+        df_region_ops.groupby(LEVEL1).agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count")).reset_index()
+    )
+    fig_region_os = px.bar(
+        df_region_os,
+        x=LEVEL1,
+        y="montant_ue_total",
+        color=LEVEL1,
+        color_discrete_map=OBJECTIF_STRATEGIQUE_COLORS,
+        hover_data=["count"],
+        labels={"montant_ue_total": "Montant UE (€)", LEVEL1: "Objectif stratégique", "count": "Nb projets"},
+    )
+    fig_region_os.update_layout(height=400, showlegend=False, xaxis_title=None)
+    fig_region_os.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
+        )
+    )
+    st.plotly_chart(style_hover(fig_region_os), use_container_width=True)
+
+
+def render_region_audit(df_region_ops, region_label, key_suffix=""):
+    """Espace Autorité d'audit : dispersion/concentration des montants, opérations atypiques,
+    regroupements par bénéficiaire (dont inter-fonds, #23), cofinancement atypique, cohérence
+    des montants — indicateurs usuels de contrôle de dépense publique, pas de description
+    structurelle (voir render_region_ensemble pour ça)."""
+    st.caption(
+        "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés dans la vue "
+        "d'ensemble : ils renseignent sur la dispersion des montants, la concentration du "
+        "portefeuille et la cohérence des taux de cofinancement — des repères usuels pour l'analyse "
+        "de dépense publique."
     )
 
     st.caption(
@@ -230,22 +273,14 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
         )
         st.plotly_chart(build_lorenz_beneficiaires(df_region_ops), use_container_width=True)
 
-    top_beneficiaires_region = compute_top_beneficiaires(df_region_ops).rename(
-        columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
-    )
-    st.dataframe(
-        top_beneficiaires_region,
-        hide_index=True,
-        use_container_width=True,
-        column_config={"Montant UE cumulé": montant_col_config},
-    )
+    render_top_beneficiaires_drilldown(df_region_ops, montant_col_config, key=f"top_beneficiaires_region_{key_suffix}")
 
     st.markdown("**Opérations rapprochées par bénéficiaire**")
     st.caption(
         "On regarde ici de près les opérations d'un même bénéficiaire dont le montant et la date de "
         "démarrage sont proches."
     )
-    proches_region, grands_regroupements_region = detect_regroupements_beneficiaire(df_region_ops)
+    proches_region, grands_regroupements_region, inter_fonds_region = detect_regroupements_beneficiaire(df_region_ops)
 
     st.caption(
         f"Petits regroupements (2 à 3 opérations) : {len(proches_region)} bénéficiaire(s). Les "
@@ -277,18 +312,22 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
             },
         )
 
-    st.markdown("**Structure du portefeuille par type d'intervention**")
+    st.markdown("**Regroupements inter-fonds**")
     st.caption(
-        "Chaque bulle est une combinaison type d'intervention / objectif stratégique, positionnée par "
-        "nombre de projets (x) et montant UE moyen ou total (y selon le graphique) — utile pour repérer "
-        "si une thématique de financement (couleur) concentre l'essentiel de la valeur sur certains "
-        "types d'intervention (souvent infrastructure) plutôt que sur de nombreux petits projets "
-        "(souvent formation, aides individuelles)."
+        f"{len(inter_fonds_region)} bénéficiaire(s) avec des opérations rapprochées (montant et date "
+        "proches) couvrant plus d'un Fonds (ex. FEDER + FSE+) — signal plus fort qu'un regroupement "
+        "intra-programme (lots d'un même accord-cadre, cas le plus fréquent ci-dessus), à recouper, "
+        "pas une preuve en soi."
     )
-    st.plotly_chart(
-        build_portfolio_scatter_comparison(df_region_ops, LEVEL3, LEVEL1, color_map=OBJECTIF_STRATEGIQUE_COLORS),
-        use_container_width=True,
-    )
+    if len(inter_fonds_region):
+        st.dataframe(
+            inter_fonds_region,
+            hide_index=True,
+            use_container_width=True,
+            column_config={"Montant UE cumulé": montant_col_config},
+        )
+    else:
+        st.caption("Aucun cas détecté sur le périmètre actuel.")
 
     st.markdown("**Taux de cofinancement UE**")
     st.caption(
@@ -368,5 +407,3 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
                 "Taux de cofinancement": taux_col_config,
             },
         )
-
-    return df_region_ops

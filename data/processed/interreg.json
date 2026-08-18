@@ -1,0 +1,92 @@
+[
+  {
+    "cci": "2021TC16RFCB006",
+    "intitule": "Spain-France-Andorra (POCTEFA)",
+    "type": "VI-A"
+  },
+  {
+    "cci": "2021TC16RFCB031",
+    "intitule": "Italy-France (Maritime)",
+    "type": "VI-A"
+  },
+  {
+    "cci": "2021TC16RFCB032",
+    "intitule": "France-Italy (ALCOTRA)",
+    "type": "VI-A"
+  },
+  {
+    "cci": "2021TC16RFCB036",
+    "intitule": "France-Germany-Switzerland (Upper Rhine)",
+    "type": "VI-A"
+  },
+  {
+    "cci": "2021TC16RFCB037",
+    "intitule": "France-Switzerland",
+    "type": "VI-A"
+  },
+  {
+    "cci": "2021TC16RFCB039",
+    "intitule": "Belgium-France (Wallonie-Vlaanderen-France)",
+    "type": "VI-A"
+  },
+  {
+    "cci": "2021TC16RFCB040",
+    "intitule": "France-Belgium-Germany-Luxembourg (Grande Région/Großregion)",
+    "type": "VI-A"
+  },
+  {
+    "cci": "2021TC16RFTN001",
+    "intitule": "Alpine Space",
+    "type": "VI-B"
+  },
+  {
+    "cci": "2021TC16RFTN002",
+    "intitule": "Atlantic Area",
+    "type": "VI-B"
+  },
+  {
+    "cci": "2021TC16RFTN004",
+    "intitule": "North Sea",
+    "type": "VI-B"
+  },
+  {
+    "cci": "2021TC16RFTN005",
+    "intitule": "North West Europe",
+    "type": "VI-B"
+  },
+  {
+    "cci": "2021TC16RFTN006",
+    "intitule": "South West Europe (SUDOE)",
+    "type": "VI-B"
+  },
+  {
+    "cci": "2021TC16FFTN001",
+    "intitule": "Euro Mediterranean (EURO MED)",
+    "type": "VI-B"
+  },
+  {
+    "cci": "2021TC16NXTN001",
+    "intitule": "NEXT Mediterranean Sea Basin (NEXT MED)",
+    "type": "VI-B"
+  },
+  {
+    "cci": "2021TC16FFOR002",
+    "intitule": "Canal du Mozambique",
+    "type": "VI-D"
+  },
+  {
+    "cci": "2021TC16FFOR003",
+    "intitule": "Caraïbes",
+    "type": "VI-D"
+  },
+  {
+    "cci": "2021TC16FFOR004",
+    "intitule": "Océan Indien",
+    "type": "VI-D"
+  },
+  {
+    "cci": "2021TC16FFOR005",
+    "intitule": "Amazonie",
+    "type": "VI-D"
+  }
+]

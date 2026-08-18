@@ -23,15 +23,21 @@ from pathlib import Path
 from reference.programmes_2021_2027 import PROGRAMMES
 
 OUTPUT_PATH = Path(__file__).parent.parent / "data" / "processed" / "programme_totals.json"
+DETAIL_OUTPUT_PATH = Path(__file__).parent.parent / "data" / "processed" / "programme_detail.json"
 
 
 def main():
     totals = defaultdict(lambda: defaultdict(int))
+    ftj_article = defaultdict(lambda: defaultdict(int))
+    assistance_technique = defaultdict(lambda: defaultdict(int))
     for p in PROGRAMMES:
         if p.fonds == "FEAMPA":
             continue
         cle_region = p.region if p.region else "national"
         totals[cle_region][p.fonds] += p.contribution_ue
+        assistance_technique[cle_region][p.fonds] += p.assistance_technique
+        if p.fonds == "FTJ":
+            ftj_article[cle_region][p.categorie] += p.contribution_ue
 
     output = {region: dict(fonds_totals) for region, fonds_totals in totals.items()}
 
@@ -43,6 +49,19 @@ def main():
     for region, fonds_totals in sorted(output.items()):
         detail = ", ".join(f"{f}={v / 1e6:,.1f} M€".replace(",", " ") for f, v in fonds_totals.items())
         print(f"  {region}: {detail}")
+
+    # Détail non couvert par programme_totals.json (voir issue #20/#21) : split FTJ
+    # Article 3/4 (classification propre au FTJ, sans lien avec les 3 catégories de cohésion)
+    # et enveloppes d'assistance technique par fonds — fichier séparé plutôt qu'ajouté à
+    # programme_totals.json pour ne rien changer à sa forme (region -> fonds -> montant),
+    # déjà consommée telle quelle par le pilotage programmé/engagé.
+    detail_output = {
+        "ftj_article": {region: dict(v) for region, v in ftj_article.items()},
+        "assistance_technique": {region: dict(v) for region, v in assistance_technique.items()},
+    }
+    with open(DETAIL_OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(detail_output, f, ensure_ascii=False, indent=2)
+    print(f"✅ Écrit dans {DETAIL_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

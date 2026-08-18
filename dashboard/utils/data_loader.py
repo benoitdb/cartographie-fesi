@@ -10,6 +10,11 @@ GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-drom
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
 REGION_METADATA_PATH = REPO_ROOT / "data" / "processed" / "region_metadata.json"
 PROGRAMME_TOTALS_PATH = REPO_ROOT / "data" / "processed" / "programme_totals.json"
+PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.json"
+BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuzzy.json"
+DOTATIONS_OS_PATH = REPO_ROOT / "data" / "processed" / "dotations_os.json"
+INTERREG_PATH = REPO_ROOT / "data" / "processed" / "interreg.json"
+TRANSFERTS_SOLIDARITE_PATH = REPO_ROOT / "data" / "processed" / "transferts_solidarite.json"
 
 
 @st.cache_data
@@ -51,4 +56,52 @@ def load_region_metadata():
 @st.cache_data
 def load_programme_totals():
     with open(PROGRAMME_TOTALS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_programme_detail():
+    """Détail non couvert par load_programme_totals() : split FTJ Article 3/4 et enveloppes
+    d'assistance technique par fonds, par région (clé "national" pour les programmes
+    nationaux) — voir issues #20/#21. {"ftj_article": {région: {"Article 3": montant, ...}},
+    "assistance_technique": {région: {fonds: montant}}}."""
+    with open(PROGRAMME_DETAIL_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_beneficiaires_fuzzy():
+    """Rapprochements approchés de noms de bénéficiaires entre régions disjointes (issue
+    #23) : {nom_de_bénéficiaire: cluster_id}, précalculé par
+    data-pipeline/beneficiaires_fuzzy.py — voir beneficiaire_matching.py pour la méthode."""
+    with open(BENEFICIAIRES_FUZZY_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_dotations_os():
+    """Dotations programmées par objectif stratégique, au niveau national uniquement (Tableau
+    8 de l'Accord de partenariat, voir data-pipeline/reference/dotations_os.py et issue #21).
+    {objectif_stratégique: {fonds: montant}}."""
+    with open(DOTATIONS_OS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_interreg():
+    """Liste des 18 programmes Interreg auxquels la France participe (Tableau 10, aucune
+    donnée financière ni opération — voir data-pipeline/reference/interreg.py et issue #19).
+    [{"cci": str, "intitule": str, "type": "VI-A"|"VI-B"|"VI-D"}]."""
+    with open(INTERREG_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_transferts_solidarite():
+    """Transferts de solidarité entre catégories de régions vers "Moins développées" (Tableau
+    3A/3B de l'Accord de partenariat, voir data-pipeline/reference/transferts_solidarite.py et
+    issue #30). Mécanisme national global, non croisable avec data.json — purement
+    informationnel. {"transferts": [{"categorie_origine": str, "montants_par_annee":
+    {année: montant}, "total_publie": montant, "part_dotation_transferee": float}]}."""
+    with open(TRANSFERTS_SOLIDARITE_PATH, encoding="utf-8") as f:
         return json.load(f)

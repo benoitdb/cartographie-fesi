@@ -23,7 +23,7 @@ FSE_DEPASSEMENT_DETAIL = (
 )
 
 
-def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage):
+def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ftj_article=None, assistance_technique=None, color_map=None):
     """Bloc A : montants agrégés (programmé, engagé, reste à engager) + une card par fonds
     avec sa propre barre de progression. N'affiche rien si aucune donnée programmée pour ce
     périmètre (ex. fonds sélectionnés absents du Tableau 9B).
@@ -33,7 +33,23 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage):
     FSE_DEPASSEMENT_DETAIL) ne doit jamais "rogner" sur le reste d'un autre fonds dans ce
     total — sinon un dépassement FSE+ peut faire disparaître un vrai reliquat FEDER du total
     affiché (cas constaté : Auvergne-Rhône-Alpes affichait 94% consommé au global alors qu'il
-    restait ~150M€ de FEDER, le dépassement FSE+ masquant ce reliquat dans l'agrégat)."""
+    restait ~150M€ de FEDER, le dépassement FSE+ masquant ce reliquat dans l'agrégat).
+
+    ftj_article (optionnel) : {"Article 3": montant, "Article 4": montant} programmés pour ce
+    périmètre — classification propre au FTJ (règlement FTJ), sans lien avec les 3 catégories
+    de cohésion FEDER/FSE+, affichée en complément sous la card FTJ (issues #20/#21).
+
+    assistance_technique (optionnel) : {fonds: montant} des enveloppes d'assistance technique
+    par fonds pour ce périmètre — budget de soutien à l'instruction/gestion des programmes,
+    distinct des montants programmés/engagés ci-dessus (ni programmé aux porteurs de projet,
+    ni comparable à un "engagé"), affiché à part pour ne pas fausser le taux de consommation
+    (issues #20/#21).
+
+    color_map (optionnel) : {valeur de df_fonds_pilotage["fonds"]: couleur}, ex. FONDS_COLORS
+    ou OBJECTIF_STRATEGIQUE_COLORS (themes.py) — réutilise cette fonction pour une dimension
+    autre que le Fonds (ex. pilotage par Objectif Stratégique, issue #21) avec des couleurs
+    cohérentes avec les autres graphes de la même dimension. None conserve la couleur par
+    défaut (bleu, rouge si dépassement)."""
     if not montant_programme or df_fonds_pilotage.empty:
         return
 
@@ -63,24 +79,42 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage):
                     f"**{row.fonds} :** {row.engage / 1e6:,.1f} / {row.programme / 1e6:,.1f} M€".replace(",", " ")
                 )
                 st.plotly_chart(
-                    build_fonds_mini_bar(row.engage, row.programme),
+                    build_fonds_mini_bar(row.engage, row.programme, color=(color_map or {}).get(row.fonds)),
                     use_container_width=True,
                     config={"displayModeBar": False},
                 )
                 st.caption(f"⚠️ {taux_fonds:.0%} — dépassement" if depassement else f"{taux_fonds:.0%} consommé")
+                # Ligne toujours présente (même vide) sur chaque card : le détail Article 3/4 ne
+                # concerne que le FTJ, mais laisser les autres cards sans cette ligne les rendait
+                # plus basses — un espace insécable réserve la même hauteur sans rien afficher.
+                if row.fonds == "FTJ" and ftj_article:
+                    art3, art4 = ftj_article.get("Article 3", 0), ftj_article.get("Article 4", 0)
+                    st.caption(f"dont Article 3 : {art3 / 1e6:,.1f} M€ · Article 4 : {art4 / 1e6:,.1f} M€".replace(",", " "))
+                else:
+                    st.caption(" ")
     if depassement_present:
         st.caption(FSE_DEPASSEMENT_DETAIL)
+    if assistance_technique:
+        detail_at = ", ".join(f"{f} {v / 1e6:,.1f} M€".replace(",", " ") for f, v in assistance_technique.items())
+        st.caption(
+            f"+ Assistance technique programmée (hors montants ci-dessus, budget de soutien à "
+            f"l'instruction/gestion des programmes) : {detail_at}."
+        )
 
 
-def build_fonds_mini_bar(engage, programme):
+def build_fonds_mini_bar(engage, programme, color=None):
     """Mini barre de progression (une card = un fonds, dans render_kpi_pilotage) : st.progress
     plafonne visuellement à 100% et ne peut pas se colorer, donc barre Plotly custom à la
     place — la barre engagée dépasse visuellement le repère "Programmé" (ligne pointillée
     verticale) en cas de dépassement, colorée en rouge plutôt que tronquée à 100%, pour que le
-    dépassement (voir FSE_DEPASSEMENT_DETAIL) reste visible plutôt que caché par le plafond."""
+    dépassement (voir FSE_DEPASSEMENT_DETAIL) reste visible plutôt que caché par le plafond.
+
+    color (optionnel) : couleur de la catégorie (ex. OBJECTIF_STRATEGIQUE_COLORS), pour rester
+    cohérent avec les autres graphes de la même dimension — le rouge de dépassement reste
+    toujours prioritaire dessus, c'est un signal d'alerte, pas une couleur de catégorie."""
     taux = engage / programme if programme else 0
     depassement = taux > 1
-    color = "#e34948" if depassement else "#4C78A8"
+    color = "#e34948" if depassement else (color or "#4C78A8")
     x_max = max(engage, programme) * 1.15 if programme else engage * 1.15
 
     fig = go.Figure()

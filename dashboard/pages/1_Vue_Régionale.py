@@ -5,6 +5,7 @@ from utils.data_loader import (
     load_data,
     load_dromcom_codes_postaux,
     load_dromcom_geojson,
+    load_programme_detail,
     load_programme_totals,
     load_region_metadata,
 )
@@ -20,7 +21,7 @@ from utils.dromcom_localisation import build_bubbles_localisation
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.plot_style import MAP_CONFIG, build_standalone_colorbar
-from utils.region_analysis import FONDS, render_region_analysis
+from utils.region_analysis import FONDS, render_region_audit, render_region_ensemble, render_region_gestion
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 
 st.set_page_config(page_title="Vue Régionale - Cartographie FESI", layout="wide")
@@ -195,164 +196,229 @@ else:
         ]
     ).sort_values("montant_ue_total")
 
-# Pilotage : programmé (Tableau 9B, Accord de partenariat 2021-2027) vs engagé (data.json)
-st.subheader("Pilotage : programmé vs engagé")
 programme_totals_region = load_programme_totals().get(region, {})
 montant_programme_region = sum(v for f, v in programme_totals_region.items() if f in selected_fonds)
+programme_totals_region_selection = {f: v for f, v in programme_totals_region.items() if f in selected_fonds}
 
-if montant_programme_region:
-    engage_by_fonds = pd.DataFrame(region_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
-    df_fonds_pilotage = pd.DataFrame(
-        [
-            {"fonds": f, "engage": engage_by_fonds.get(f, 0), "programme": programme_totals_region[f]}
-            for f in ("FEDER", "FSE+", "FTJ")
-            if f in programme_totals_region
-        ]
+tab_ensemble, tab_pilotage, tab_audit = st.tabs(["Vue d'ensemble", "Pilotage", "Analyses & contrôle"])
+
+with tab_ensemble:
+    df_region_ops = render_region_ensemble(
+        region_ops,
+        region,
+        fonds_breakdown_df=fonds_breakdown_df,
+        programme_totals=programme_totals_region_selection,
     )
-    render_kpi_pilotage(df_fonds_pilotage, montant_programme_region, region_data["montant_ue_total"])
 
-    traj_col, bullet_col = st.columns(2)
-    with traj_col:
-        st.plotly_chart(build_trajectoire(pd.DataFrame(region_ops), montant_programme_region), use_container_width=True)
-    with bullet_col:
-        if not df_fonds_pilotage.empty:
-            st.plotly_chart(
-                build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
-                use_container_width=True,
-            )
-else:
-    st.info("Pas de donnée programmée (Tableau 9B) pour cette région avec les fonds sélectionnés.")
+    # Détail par département (régions métropole uniquement : les régions DROM
+    # correspondent chacune à un département unique, pas de découpage pertinent)
+    if region in DEPT_TO_REGION.values():
+        st.subheader("Détail par département")
 
-df_region_ops = render_region_analysis(
-    region_ops,
-    region,
-    fonds_breakdown_df=fonds_breakdown_df,
-    programme_totals={f: v for f, v in programme_totals_region.items() if f in selected_fonds},
-)
+        df_region_dept = assign_departments_df(df_region_ops)
+        coverage = department_coverage_summary(df_region_dept)
 
-# Détail par département (régions métropole uniquement : les régions DROM
-# correspondent chacune à un département unique, pas de découpage pertinent)
-if region in DEPT_TO_REGION.values():
-    st.subheader("Détail par département")
+        depts_region = {code for code, r in DEPT_TO_REGION.items() if r == region}
+        hors_region = df_region_dept["dept"].notna() & ~df_region_dept["dept"].isin(depts_region)
+        part_hors_region = hors_region.sum() / len(df_region_dept) if len(df_region_dept) else 0
 
-    df_region_dept = assign_departments_df(df_region_ops)
-    coverage = department_coverage_summary(df_region_dept)
-
-    depts_region = {code for code, r in DEPT_TO_REGION.items() if r == region}
-    hors_region = df_region_dept["dept"].notna() & ~df_region_dept["dept"].isin(depts_region)
-    part_hors_region = hors_region.sum() / len(df_region_dept) if len(df_region_dept) else 0
-
-    st.caption(
-        f"Rattachement département : {coverage['opération']:.0%} via la donnée pipeline (fiable), "
-        f"{coverage['approximé']:.0%} approximé via le code postal du bénéficiaire (siège du "
-        f"bénéficiaire, pas nécessairement le lieu de réalisation du projet), "
-        f"{coverage['nom du bénéficiaire']:.0%} déduit du nom du bénéficiaire (mention explicite "
-        f"d'une ville ou du département), {coverage['inconnu']:.0%} non rattaché (absent de la "
-        "carte, faute de département identifié, mais comptabilisé dans le tableau ci-dessous). "
-        f"{part_hors_region:.0%} des opérations pointent vers un département situé hors de {region} — "
-        "voir la section dédiée plus bas ; elles restent comptées dans les totaux de la région "
-        "(Fonds, objectifs, courbe...) puisque leur rattachement régional reste fiable, seul le "
-        "département est en cause."
-    )
-    if region == "Corse":
         st.caption(
-            "⚠️ Point de vigilance spécifique à la Corse : l'approximation par code postal du "
-            "bénéficiaire ne s'applique pas ici (un code postal débutant par 20 ne permet pas de "
-            "distinguer 2A/2B), d'où un recours plus fréquent à la déduction par nom du bénéficiaire "
-            "et une part de données non rattachées plus élevée que dans les autres régions."
+            f"Rattachement département : {coverage['opération']:.0%} via la donnée pipeline (fiable), "
+            f"{coverage['approximé']:.0%} approximé via le code postal du bénéficiaire (siège du "
+            f"bénéficiaire, pas nécessairement le lieu de réalisation du projet), "
+            f"{coverage['nom du bénéficiaire']:.0%} déduit du nom du bénéficiaire (mention explicite "
+            f"d'une ville ou du département), {coverage['inconnu']:.0%} non rattaché (absent de la "
+            "carte, faute de département identifié, mais comptabilisé dans le tableau ci-dessous). "
+            f"{part_hors_region:.0%} des opérations pointent vers un département situé hors de {region} — "
+            "voir la section dédiée plus bas ; elles restent comptées dans les totaux de la région "
+            "(Fonds, objectifs, courbe...) puisque leur rattachement régional reste fiable, seul le "
+            "département est en cause."
         )
+        if region == "Corse":
+            st.caption(
+                "⚠️ Point de vigilance spécifique à la Corse : l'approximation par code postal du "
+                "bénéficiaire ne s'applique pas ici (un code postal débutant par 20 ne permet pas de "
+                "distinguer 2A/2B), d'où un recours plus fréquent à la déduction par nom du bénéficiaire "
+                "et une part de données non rattachées plus élevée que dans les autres régions."
+            )
 
-    non_reparti = df_region_dept[df_region_dept["dept"].isna()]
-    non_reparti_montant = non_reparti["Montant UE"].sum()
-    non_reparti_count = len(non_reparti)
+        non_reparti = df_region_dept[df_region_dept["dept"].isna()]
+        non_reparti_montant = non_reparti["Montant UE"].sum()
+        non_reparti_count = len(non_reparti)
 
-    df_dept_connu = df_region_dept[df_region_dept["dept"].notna() & df_region_dept["dept"].isin(depts_region)]
-    dept_table = (
-        df_dept_connu.groupby("dept")
-        .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
-        .reset_index()
-        .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
-        .sort_values("Montant UE total", ascending=False)
-    )
-    # Échelle calée sur les seuls départements (avant l'ajout de la ligne "Non réparti" ci-dessous,
-    # qui ne correspond à aucun département sur la carte) — même échelle que la carte donc.
-    color_range_dept = [0, dept_table["Montant UE total"].max()] if len(dept_table) else [0, 1]
-    if non_reparti_count:
-        dept_table = pd.concat(
-            [
+        df_dept_connu = df_region_dept[df_region_dept["dept"].notna() & df_region_dept["dept"].isin(depts_region)]
+        dept_table = (
+            df_dept_connu.groupby("dept")
+            .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
+            .reset_index()
+            .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
+            .sort_values("Montant UE total", ascending=False)
+        )
+        # Échelle calée sur les seuls départements (avant l'ajout de la ligne "Non réparti" ci-dessous,
+        # qui ne correspond à aucun département sur la carte) — même échelle que la carte donc.
+        color_range_dept = [0, dept_table["Montant UE total"].max()] if len(dept_table) else [0, 1]
+        if non_reparti_count:
+            dept_table = pd.concat(
+                [
+                    dept_table,
+                    pd.DataFrame(
+                        [{"Département": "Non réparti (région entière)", "Montant UE total": non_reparti_montant, "Nb projets": non_reparti_count}]
+                    ),
+                ],
+                ignore_index=True,
+            )
+
+        # Légende + carte + tableau côte à côte (plutôt qu'empilés) : la carte d'une seule région est
+        # étroite, ce qui générait beaucoup de vide autour d'elle et du tableau en dessous. Même
+        # principe de légende autonome que la carte nationale (Accueil.py) : la carte désactive son
+        # colorbar intégré au profit d'une légende commune dans sa propre colonne.
+        col_legend_dept, col_map_dept, col_table_dept = st.columns([1, 4, 5])
+        with col_legend_dept:
+            st.plotly_chart(
+                build_standalone_colorbar(color_range_dept, "Montant UE (€)", height=420),
+                use_container_width=True,
+                config={"displayModeBar": False},
+            )
+        with col_map_dept:
+            st.plotly_chart(
+                build_department_choropleth(df_region_dept, region, show_colorbar=False),
+                use_container_width=True,
+                config=MAP_CONFIG,
+            )
+        with col_table_dept:
+            st.dataframe(
                 dept_table,
-                pd.DataFrame(
-                    [{"Département": "Non réparti (région entière)", "Montant UE total": non_reparti_montant, "Nb projets": non_reparti_count}]
-                ),
-            ],
-            ignore_index=True,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Montant UE total": st.column_config.ProgressColumn(
+                        format="%,d €",
+                        min_value=0,
+                        max_value=int(dept_table["Montant UE total"].max()) if len(dept_table) else 1,
+                    )
+                },
+            )
+
+        if non_reparti_count:
+            kpi_col1, kpi_col2 = st.columns(2)
+            kpi_col1.metric("Montant non rattaché à un département", f"{non_reparti_montant / 1e6:,.2f} M€".replace(",", " "))
+            kpi_col2.metric("Opérations non rattachées", f"{non_reparti_count}")
+
+        # Opérations dont le département assigné sort du périmètre de la région
+        st.subheader("Opérations rattachées à un département hors de la région")
+        st.caption(
+            f"Ces opérations sont bien attribuées à {region} (donnée fiable), mais leur département "
+            "assigné (donnée pipeline ou approximation via le code postal du bénéficiaire) appartient à "
+            "une autre région — le plus souvent parce que le siège du bénéficiaire est situé ailleurs "
+            "que le lieu de réalisation du projet. Elles sont incluses dans tous les totaux de la région "
+            "affichés sur cette page, mais exclues de la carte et du tableau ci-dessus."
         )
 
-    # Légende + carte + tableau côte à côte (plutôt qu'empilés) : la carte d'une seule région est
-    # étroite, ce qui générait beaucoup de vide autour d'elle et du tableau en dessous. Même
-    # principe de légende autonome que la carte nationale (Accueil.py) : la carte désactive son
-    # colorbar intégré au profit d'une légende commune dans sa propre colonne.
-    col_legend_dept, col_map_dept, col_table_dept = st.columns([1, 4, 5])
-    with col_legend_dept:
-        st.plotly_chart(
-            build_standalone_colorbar(color_range_dept, "Montant UE (€)", height=420),
-            use_container_width=True,
-            config={"displayModeBar": False},
+        df_hors_region = df_region_dept[hors_region].copy()
+        df_hors_region["Région du département"] = df_hors_region["dept"].map(DEPT_TO_REGION)
+        st.caption(f"{len(df_hors_region)} opération(s) concernée(s).")
+        df_hors_region_table = (
+            df_hors_region[
+                ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "dept", "Région du département", "dept_source", "Montant UE"]
+            ].rename(columns={"dept": "Département", "dept_source": "Rattachement"}).sort_values("Montant UE", ascending=False)
         )
-    with col_map_dept:
-        st.plotly_chart(
-            build_department_choropleth(df_region_dept, region, show_colorbar=False),
-            use_container_width=True,
-            config=MAP_CONFIG,
-        )
-    with col_table_dept:
         st.dataframe(
-            dept_table,
+            style_categorical_columns(df_hors_region_table, {FONDS: FONDS_COLORS}),
             hide_index=True,
             use_container_width=True,
             column_config={
-                "Montant UE total": st.column_config.ProgressColumn(
+                "Montant UE": st.column_config.ProgressColumn(
                     format="%,d €",
                     min_value=0,
-                    max_value=int(dept_table["Montant UE total"].max()) if len(dept_table) else 1,
+                    max_value=int(df_hors_region_table["Montant UE"].max()) if len(df_hors_region_table) else 1,
                 )
             },
         )
 
-    if non_reparti_count:
-        kpi_col1, kpi_col2 = st.columns(2)
-        kpi_col1.metric("Montant non rattaché à un département", f"{non_reparti_montant / 1e6:,.2f} M€".replace(",", " "))
-        kpi_col2.metric("Opérations non rattachées", f"{non_reparti_count}")
+    render_liste_complete_projets(df_region_ops, region)
 
-    # Opérations dont le département assigné sort du périmètre de la région
-    st.subheader("Opérations rattachées à un département hors de la région")
+    # Opérations interrégionales impliquant cette région — pour info uniquement, exclues de tous
+    # les totaux/graphes ci-dessus (comme partout ailleurs dans le dashboard, is_interregional est
+    # filtré des vues par région, voir filters.py). Concerne 6 régions au total : Auvergne-Rhône-
+    # Alpes, Bourgogne-Franche-Comté, Grand Est, Île-de-France, Occitanie, Provence-Alpes-Côte
+    # d'Azur — surtout des actions "massif"/"fleuve" (Rhône-Saône, massif des Alpes) à cheval sur
+    # plusieurs régions au sein d'un même programme régional (voir issue #19, à ne pas confondre
+    # avec Interreg).
+    ops_interregionaux_region = [
+        op
+        for op in data["operations"]
+        if op.get("is_interregional") and op.get("Fonds") in selected_fonds and region in (op.get("regions_modernes") or [])
+    ]
+    if ops_interregionaux_region:
+        st.subheader("Opérations interrégionales impliquant cette région")
+        st.caption(
+            f"{len(ops_interregionaux_region)} opération(s) dont le territoire couvre plusieurs régions à la "
+            "fois, dont celle-ci — pour information uniquement, non comptées dans les totaux et graphes "
+            "ci-dessus (déjà comptabilisées une fois au niveau national, voir Accueil)."
+        )
+        df_interregionaux_region = pd.DataFrame(ops_interregionaux_region)
+        df_interregionaux_region["Autres régions"] = df_interregionaux_region["regions_modernes"].apply(
+            lambda regions: ", ".join(r for r in regions if r != region)
+        )
+        df_interregionaux_table = df_interregionaux_region[
+            ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "Autres régions", "Montant UE"]
+        ].sort_values("Montant UE", ascending=False)
+        st.dataframe(
+            style_categorical_columns(df_interregionaux_table, {FONDS: FONDS_COLORS}),
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Montant UE": st.column_config.ProgressColumn(
+                    format="%,d €",
+                    min_value=0,
+                    max_value=int(df_interregionaux_table["Montant UE"].max()),
+                )
+            },
+        )
+
+with tab_pilotage:
+    # Pilotage : programmé (Tableau 9B, Accord de partenariat 2021-2027) vs engagé (data.json)
+    st.subheader("Pilotage : programmé vs engagé")
+
+    if montant_programme_region:
+        engage_by_fonds = pd.DataFrame(region_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
+        df_fonds_pilotage = pd.DataFrame(
+            [
+                {"fonds": f, "engage": engage_by_fonds.get(f, 0), "programme": programme_totals_region[f]}
+                for f in ("FEDER", "FSE+", "FTJ")
+                if f in programme_totals_region
+            ]
+        )
+        programme_detail = load_programme_detail()
+        render_kpi_pilotage(
+            df_fonds_pilotage,
+            montant_programme_region,
+            region_data["montant_ue_total"],
+            ftj_article=programme_detail["ftj_article"].get(region) if "FTJ" in selected_fonds else None,
+            assistance_technique={
+                f: v for f, v in programme_detail["assistance_technique"].get(region, {}).items() if f in selected_fonds
+            },
+        )
+
+        traj_col, bullet_col = st.columns(2)
+        with traj_col:
+            st.plotly_chart(build_trajectoire(pd.DataFrame(region_ops), montant_programme_region), use_container_width=True)
+        with bullet_col:
+            if not df_fonds_pilotage.empty:
+                st.plotly_chart(
+                    build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
+                    use_container_width=True,
+                )
+    else:
+        st.info("Pas de donnée programmée (Tableau 9B) pour cette région avec les fonds sélectionnés.")
+
+    render_region_gestion(df_region_ops, region)
+
     st.caption(
-        f"Ces opérations sont bien attribuées à {region} (donnée fiable), mais leur département "
-        "assigné (donnée pipeline ou approximation via le code postal du bénéficiaire) appartient à "
-        "une autre région — le plus souvent parce que le siège du bénéficiaire est situé ailleurs "
-        "que le lieu de réalisation du projet. Elles sont incluses dans tous les totaux de la région "
-        "affichés sur cette page, mais exclues de la carte et du tableau ci-dessus."
+        "Fonction comptable (certification) : depuis 2021-2027, cette fonction est intégrée à "
+        "l'Autorité de gestion (règlement (UE) 2021/1060, art. 76) — il n'y a plus d'autorité de "
+        "certification distincte comme sur 2014-2020, donc pas d'espace séparé pour elle ici."
     )
 
-    df_hors_region = df_region_dept[hors_region].copy()
-    df_hors_region["Région du département"] = df_hors_region["dept"].map(DEPT_TO_REGION)
-    st.caption(f"{len(df_hors_region)} opération(s) concernée(s).")
-    df_hors_region_table = (
-        df_hors_region[
-            ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "dept", "Région du département", "dept_source", "Montant UE"]
-        ].rename(columns={"dept": "Département", "dept_source": "Rattachement"}).sort_values("Montant UE", ascending=False)
-    )
-    st.dataframe(
-        style_categorical_columns(df_hors_region_table, {FONDS: FONDS_COLORS}),
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Montant UE": st.column_config.ProgressColumn(
-                format="%,d €",
-                min_value=0,
-                max_value=int(df_hors_region_table["Montant UE"].max()) if len(df_hors_region_table) else 1,
-            )
-        },
-    )
-
-render_liste_complete_projets(df_region_ops, region)
+with tab_audit:
+    render_region_audit(df_region_ops, region)
