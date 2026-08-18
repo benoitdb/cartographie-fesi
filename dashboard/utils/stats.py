@@ -220,15 +220,74 @@ def build_portfolio_scatter_comparison(df, group_col, theme_col, amount_col="Mon
     return style_hover(fig)
 
 
+def build_fonds_barchart(df_fonds, color_map, totaux_programme=None, fonds_col="fonds", amount_col="montant_ue_total", count_col="count"):
+    """Barres verticales du montant engagé par fonds, colorées par fonds (color_map). Si
+    totaux_programme (dict fonds -> montant programmé, Tableau 9B) est fourni, empile une
+    seconde barre "Reste à engager" (programme - engagé, plancher 0) au-dessus de chaque
+    barre — le sommet de la barre empilée rejoint alors l'enveloppe programmée, complémentaire
+    au repère pointillé de build_cumulative_curve en mode Montant (sans objet en mode %,
+    seule la courbe cumulée bascule — voir issue #33). Un fonds sans donnée programmée n'a
+    simplement pas de segment "Reste à engager" (0), pas d'erreur.
+
+    Pas de légende (showlegend=False) : avec deux barres empilées, la légende faisait perdre
+    l'alignement de hauteur avec la courbe cumulée affichée à côté (même axe_range). Le détail
+    engagé/reste/% consommé est reporté en tooltip sur chaque segment plutôt que par la
+    légende."""
+    reste = pd.Series(0, index=df_fonds.index)
+    pct_consomme = pd.Series(float("nan"), index=df_fonds.index)
+    if totaux_programme:
+        programme = df_fonds[fonds_col].map(totaux_programme).fillna(0)
+        reste = (programme - df_fonds[amount_col]).clip(lower=0)
+        pct_consomme = df_fonds[amount_col] / programme.where(programme != 0)
+
+    count_series = df_fonds[count_col] if count_col in df_fonds else pd.Series(float("nan"), index=df_fonds.index)
+    customdata_engage = pd.concat([count_series, reste, pct_consomme], axis=1).values
+    hover_engage = "<b>%{x}</b><br>Engagé : %{y:,.0f} €"
+    if count_col in df_fonds:
+        hover_engage += "<br>Nb projets : %{customdata[0]:,.0f}"
+    hover_engage += "<br>Reste à engager (estimé) : %{customdata[1]:,.0f} €<br>% consommé : %{customdata[2]:.0%}<extra></extra>"
+
+    fig = go.Figure()
+    fig.add_bar(
+        x=df_fonds[fonds_col],
+        y=df_fonds[amount_col],
+        name="Engagé",
+        marker_color=[color_map.get(f, "gray") for f in df_fonds[fonds_col]],
+        customdata=customdata_engage,
+        hovertemplate=hover_engage,
+    )
+    if totaux_programme and reste.sum() > 0:
+        customdata_reste = pd.concat([df_fonds[amount_col], pct_consomme], axis=1).values
+        fig.add_bar(
+            x=df_fonds[fonds_col],
+            y=reste,
+            name="Reste à engager",
+            marker_color="rgba(150,150,150,0.35)",
+            customdata=customdata_reste,
+            hovertemplate=(
+                "<b>%{x}</b><br>Reste à engager (estimé) : %{y:,.0f} €<br>Engagé : "
+                "%{customdata[0]:,.0f} €<br>% consommé : %{customdata[1]:.0%}<extra></extra>"
+            ),
+        )
+    fig.update_layout(barmode="stack", xaxis_title=None, yaxis_title="Montant UE (€)", showlegend=False)
+    fig.update_traces(width=0.3, selector=dict(type="bar"))
+    return style_hover(fig)
+
+
 def build_cumulative_curve(
-    df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds", color_map=None, totaux_ref=None
+    df, date_col="Date de début de l'opération", amount_col="Montant UE", color_col="Fonds", color_map=None, totaux_ref=None, mode="montant"
 ):
     """Courbe d'engagement UE cumulé dans le temps, par color_col, avec repères verticaux à
     chaque 1ᵉʳ janvier pour situer les années. color_map (optionnel) fixe la couleur par
     catégorie plutôt que la palette par défaut. totaux_ref (optionnel, dict catégorie ->
     montant) ajoute par catégorie un repère horizontal pointillé léger au niveau de son
     montant **programmé** (Tableau 9B) — l'écart entre la courbe et ce repère est le reste à
-    consommer, aligné avec le barchart "Répartition par fonds" affiché à côté (mêmes couleurs)."""
+    consommer, aligné avec le barchart "Répartition par fonds" affiché à côté (mêmes couleurs).
+
+    mode="pourcentage" (issue #33) : trace le % de l'enveloppe programmée plutôt que le
+    montant cumulé — nécessite totaux_ref (categorie -> montant programmé), les catégories
+    absentes de totaux_ref sont exclues (rien à quoi rapporter un %). Retombe sur mode
+    "montant" si totaux_ref est vide/absent en mode "pourcentage" (rien à diviser)."""
     plot_df = df[[date_col, amount_col, color_col]].copy()
     plot_df[date_col] = pd.to_datetime(plot_df[date_col])
     plot_df = (
@@ -238,23 +297,42 @@ def build_cumulative_curve(
     )
     plot_df["cumule"] = plot_df.groupby(color_col)[amount_col].cumsum()
 
+    if mode == "pourcentage" and not totaux_ref:
+        mode = "montant"
+
+    if mode == "pourcentage":
+        plot_df = plot_df[plot_df[color_col].isin(totaux_ref)].copy()
+        plot_df["valeur"] = plot_df.apply(lambda r: r["cumule"] / totaux_ref[r[color_col]], axis=1)
+        y_label = "% de l'enveloppe programmée"
+    else:
+        plot_df["valeur"] = plot_df["cumule"]
+        y_label = "Montant UE cumulé (€)"
+
     fig = px.line(
         plot_df,
         x=date_col,
-        y="cumule",
+        y="valeur",
         color=color_col,
         color_discrete_map=color_map,
-        labels={date_col: "Date", "cumule": "Montant UE cumulé (€)"},
+        labels={date_col: "Date", "valeur": y_label},
     )
     fig.update_traces(line=dict(width=2))
-    fig.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+    if mode == "pourcentage":
+        fig.update_yaxes(tickformat=".0%")
+        fig.for_each_trace(
+            lambda t: t.update(hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>%{{y:.1%}} de l'enveloppe programmée<extra></extra>")
         )
-    )
+    else:
+        fig.for_each_trace(
+            lambda t: t.update(
+                hovertemplate=f"<b>{t.name}</b><br>%{{x|%d/%m/%Y}}<br>Montant UE cumulé : %{{y:,.0f}} €<extra></extra>"
+            )
+        )
     for year in range(plot_df[date_col].dt.year.min(), plot_df[date_col].dt.year.max() + 1):
         fig.add_vline(x=f"{year}-01-01", line_dash="dot", line_color="gray", opacity=0.4)
-    if totaux_ref:
+    if mode == "pourcentage":
+        fig.add_hline(y=1, line_dash="dot", line_color="black", opacity=0.4)
+    elif totaux_ref:
         for categorie, total in totaux_ref.items():
             couleur = (color_map or {}).get(categorie, "gray")
             fig.add_hline(y=total, line_dash="dot", line_color=couleur, opacity=0.4)

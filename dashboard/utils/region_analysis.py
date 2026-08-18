@@ -6,6 +6,7 @@ from utils.plot_style import style_hover
 from utils.stats import (
     build_boxplot,
     build_cumulative_curve,
+    build_fonds_barchart,
     build_histogram,
     build_lorenz_beneficiaires,
     build_pareto_beneficiaires,
@@ -62,37 +63,27 @@ def render_region_ensemble(region_ops, region_label, fonds_breakdown_df=None, ke
             .sort_values("montant_ue_total")
         )
 
-    fig_region_fonds = px.bar(
-        df_region_fonds,
-        x="fonds",
-        y="montant_ue_total",
-        color="fonds",
-        color_discrete_map=FONDS_COLORS,
-        hover_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)", "fonds": "Fonds", "count": "Nb projets"},
-    )
-    fig_region_fonds.update_layout(height=400, showlegend=False, xaxis_title=None)
-    fig_region_fonds.update_traces(width=0.5)
-    fig_region_fonds.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
-        )
-    )
-    fig_region_fonds = style_hover(fig_region_fonds)
+    # Empilée avec un segment "Reste à engager" (programme_totals) quand disponible — le
+    # sommet de chaque barre rejoint alors l'enveloppe programmée (issue #33bis).
+    fig_region_fonds = build_fonds_barchart(df_region_fonds, FONDS_COLORS, totaux_programme=programme_totals)
+    fig_region_fonds.update_layout(height=400)
 
     fonds_col, progress_col = st.columns([1, 3])
     with fonds_col:
         st.plotly_chart(fig_region_fonds, use_container_width=True)
     with progress_col:
+        mode_courbe = st.radio("Courbe cumulée", ["Montant", "%"], horizontal=True, key=f"mode_courbe{key_suffix}")
+        mode_courbe_val = "pourcentage" if mode_courbe == "%" else "montant"
         st.plotly_chart(
-            build_cumulative_curve(pd.DataFrame(region_ops), color_map=FONDS_COLORS, totaux_ref=programme_totals),
+            build_cumulative_curve(pd.DataFrame(region_ops), color_map=FONDS_COLORS, totaux_ref=programme_totals, mode=mode_courbe_val),
             use_container_width=True,
         )
         st.caption(
             "Engagement UE cumulé dans le temps. Basé sur la date de début de l'opération — environ 60% "
             "des dates sont arrondies au 1ᵉʳ janvier (date administrative plutôt qu'une date de démarrage "
             "précise), d'où des paliers plutôt qu'une progression lissée. Cliquer sur un fonds dans la "
-            "légende pour l'isoler ou le masquer."
+            "légende pour l'isoler ou le masquer. En mode %, seuls les fonds avec une enveloppe programmée "
+            "connue sont affichés."
         )
 
     df_region_ops = pd.DataFrame(region_ops)

@@ -18,6 +18,7 @@ from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage, r
 from utils.stats import (
     build_boxplot,
     build_cumulative_curve,
+    build_fonds_barchart,
     build_histogram,
     build_lorenz_beneficiaires,
     build_pareto_beneficiaires,
@@ -224,35 +225,29 @@ with tab_ensemble:
 
     # Barres verticales (plutôt qu'horizontales) pour une hauteur cohérente avec la courbe
     # cumulée affichée à côté — les deux graphes se lisent alors sur le même axe vertical
-    # (montant), la courbe cumulée étant elle-même naturellement "en hauteur".
-    fig_fonds = px.bar(
-        df_fonds,
-        x="fonds",
-        y="montant_ue_total",
-        color="fonds",
-        color_discrete_map=FONDS_COLORS,
-        hover_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)", "fonds": "Fonds", "count": "Nb projets"},
-    )
-    fig_fonds.update_layout(height=450, showlegend=False, xaxis_title=None)
+    # (montant), la courbe cumulée étant elle-même naturellement "en hauteur". Empilée avec un
+    # segment "Reste à engager" (totaux_programme_national) : le sommet de chaque barre
+    # rejoint l'enveloppe programmée, comme le repère pointillé de la courbe cumulée mais
+    # visible directement sur les barres (issue #33bis).
+    fig_fonds = build_fonds_barchart(df_fonds, FONDS_COLORS, totaux_programme=totaux_programme_national)
+    fig_fonds.update_layout(height=450)
     fig_fonds.update_yaxes(range=axe_range)
-    fig_fonds.update_traces(width=0.3)
-    fig_fonds.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
-        )
-    )
-    fig_fonds = style_hover(fig_fonds)
 
-    fig_cumulative = build_cumulative_curve(df_national_ops, color_map=FONDS_COLORS, totaux_ref=totaux_programme_national)
-    fig_cumulative.update_yaxes(range=axe_range)
+    mode_courbe = st.radio("Courbe cumulée", ["Montant", "%"], horizontal=True, key="mode_courbe_national")
+    mode_courbe_val = "pourcentage" if mode_courbe == "%" else "montant"
+
+    fig_cumulative = build_cumulative_curve(
+        df_national_ops, color_map=FONDS_COLORS, totaux_ref=totaux_programme_national, mode=mode_courbe_val
+    )
+    if mode_courbe_val == "montant":
+        fig_cumulative.update_yaxes(range=axe_range)
 
     st.caption(
         "Engagement UE cumulé dans le temps. Basé sur la date de début de l'opération — environ 60% des "
         "dates sont arrondies au 1ᵉʳ janvier (date administrative plutôt qu'une date de démarrage précise), "
         "d'où des paliers plutôt qu'une progression lissée. Cliquer sur un fonds dans la légende pour "
         "l'isoler ou le masquer. Repère pointillé : enveloppe programmée nationale par fonds (Tableau 9B, "
-        "toutes régions et volet national confondus). " + RESERVE_METHODO
+        "toutes régions et volet national confondus) — en mode %, repère unique à 100%. " + RESERVE_METHODO
     )
     fonds_col, progress_col = st.columns([3, 7])
     with fonds_col:
