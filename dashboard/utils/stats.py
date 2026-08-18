@@ -270,7 +270,11 @@ def build_fonds_barchart(df_fonds, color_map, totaux_programme=None, fonds_col="
                 "%{customdata[0]:,.0f} €<br>% consommé : %{customdata[1]:.0%}<extra></extra>"
             ),
         )
-    fig.update_layout(barmode="stack", xaxis_title=None, yaxis_title="Montant UE (€)", showlegend=False)
+    # margin.t=60 explicite : sans ça, ce go.Figure hérite d'une marge haute par défaut différente
+    # de celle de build_cumulative_curve (px.line, qui fixe systématiquement margin.t=60) — un axe Y
+    # identique en valeur ne suffit donc pas à aligner visuellement les deux figures placées côte à
+    # côte, leur zone de tracé démarrant à des hauteurs différentes (issue #35).
+    fig.update_layout(barmode="stack", xaxis_title=None, yaxis_title="Montant UE (€)", showlegend=False, margin=dict(t=60))
     fig.update_traces(width=0.3, selector=dict(type="bar"))
     return style_hover(fig)
 
