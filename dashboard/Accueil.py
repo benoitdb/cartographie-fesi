@@ -24,12 +24,12 @@ from utils.stats import (
     build_portfolio_scatter,
     compute_cofinancement_table,
     compute_stats_table,
-    compute_top_beneficiaires,
     detect_cofinancement_outliers,
     detect_incoherent_cofinancement,
     detect_beneficiaires_multi_region,
     detect_outliers,
     detect_regroupements_beneficiaire,
+    render_top_beneficiaires_drilldown,
 )
 from utils.plot_style import MAP_CONFIG, build_standalone_colorbar, disable_map_interaction, style_hover, style_map_background
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
@@ -570,15 +570,7 @@ with tab_audit:
         )
         st.plotly_chart(build_lorenz_beneficiaires(df_national_ops), use_container_width=True)
 
-    top_beneficiaires = compute_top_beneficiaires(df_national_ops).rename(
-        columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
-    )
-    st.dataframe(
-        top_beneficiaires,
-        hide_index=True,
-        use_container_width=True,
-        column_config={"Montant UE cumulé": montant_col_config},
-    )
+    render_top_beneficiaires_drilldown(df_national_ops, montant_col_config, key="top_beneficiaires_national")
 
     st.markdown("**Opérations rapprochées par bénéficiaire**")
     st.caption(

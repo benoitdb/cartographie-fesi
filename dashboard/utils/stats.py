@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
 
 from utils.plot_style import format_montant, style_hover, wrap_label
@@ -289,6 +290,53 @@ def compute_top_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col=
     complémentaire à la concentration par opération (compute_stats_table)."""
     agg = df.groupby(group_col)[amount_col].agg(montant_ue_total="sum", count="count").reset_index()
     return agg.sort_values("montant_ue_total", ascending=False).head(top_n)
+
+
+def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="Nom du bénéficiaire", amount_col="Montant UE", top_n=20):
+    """Affiche le tableau "Top bénéficiaires" (compute_top_beneficiaires, lecture seule) puis
+    un st.selectbox pour choisir un bénéficiaire et afficher le détail de tous ses projets dans
+    le périmètre passé en df — issue #22 (drill-down bénéficiaire, jusqu'ici seulement agrégé
+    sans vue détaillée par bénéficiaire).
+
+    Un selectbox plutôt qu'une sélection de ligne sur le tableau (st.dataframe
+    on_select/selection_mode) : Streamlit affiche une case à cocher pour la sélection de ligne
+    même en selection_mode="single-row", ce qui laisse penser à tort qu'un choix multiple est
+    possible — un widget dédié à choix unique est plus conforme à la convention (case à cocher
+    = sélection multiple).
+
+    key doit être unique par appel (Accueil vs Vue Régionale vs Volet National) pour que
+    Streamlit ne mélange pas les sélections entre les tableaux."""
+    top = compute_top_beneficiaires(df, group_col=group_col, amount_col=amount_col, top_n=top_n).rename(
+        columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
+    )
+    st.dataframe(
+        top,
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Montant UE cumulé": montant_col_config},
+    )
+
+    beneficiaire = st.selectbox(
+        "Voir le détail des projets d'un bénéficiaire",
+        options=["(choisir un bénéficiaire)"] + top[group_col].tolist(),
+        key=key,
+    )
+    if beneficiaire == "(choisir un bénéficiaire)":
+        return
+
+    detail_cols = [
+        c
+        for c in ["Numéro Opération", "Intitulé du projet", "Libellé Programme", "Fonds", "Région de l'opération", amount_col, "Date de début de l'opération"]
+        if c in df.columns
+    ]
+    detail = df[df[group_col] == beneficiaire][detail_cols].sort_values(amount_col, ascending=False)
+    st.markdown(f"**Détail des projets de {beneficiaire}** ({len(detail)} opération(s))")
+    st.dataframe(
+        detail,
+        hide_index=True,
+        use_container_width=True,
+        column_config={amount_col: montant_col_config},
+    )
 
 
 def build_pareto_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col="Montant UE", top_n=15):

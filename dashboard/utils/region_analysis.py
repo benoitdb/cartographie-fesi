@@ -12,11 +12,11 @@ from utils.stats import (
     build_portfolio_scatter_comparison,
     compute_cofinancement_table,
     compute_stats_table,
-    compute_top_beneficiaires,
     detect_cofinancement_outliers,
     detect_incoherent_cofinancement,
     detect_outliers,
     detect_regroupements_beneficiaire,
+    render_top_beneficiaires_drilldown,
 )
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 from utils.treemap import build_hierarchy_treemap
@@ -282,15 +282,7 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
         )
         st.plotly_chart(build_lorenz_beneficiaires(df_region_ops), use_container_width=True)
 
-    top_beneficiaires_region = compute_top_beneficiaires(df_region_ops).rename(
-        columns={"montant_ue_total": "Montant UE cumulé", "count": "Nb projets"}
-    )
-    st.dataframe(
-        top_beneficiaires_region,
-        hide_index=True,
-        use_container_width=True,
-        column_config={"Montant UE cumulé": montant_col_config},
-    )
+    render_top_beneficiaires_drilldown(df_region_ops, montant_col_config, key=f"top_beneficiaires_region_{key_suffix}")
 
     st.markdown("**Opérations rapprochées par bénéficiaire**")
     st.caption(
