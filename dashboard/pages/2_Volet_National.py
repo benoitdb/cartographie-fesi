@@ -4,7 +4,7 @@ import streamlit as st
 from utils.data_loader import load_data, load_programme_detail, load_programme_totals, load_region_metadata
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
-from utils.region_analysis import render_region_analysis
+from utils.region_analysis import render_region_audit, render_region_ensemble, render_region_gestion
 
 st.set_page_config(page_title="Volet National - Cartographie FESI", layout="wide")
 
@@ -70,46 +70,62 @@ if population_totale:
         with st.container(border=True):
             st.markdown(f"**Montant UE / habitant :** {national_data['montant_ue_total'] / population_totale:,.2f} €".replace(",", " "))
 
-# Pilotage : programmé (Tableau 9B, Accord de partenariat 2021-2027) vs engagé (data.json)
-st.subheader("Pilotage : programmé vs engagé")
 programme_totals_national = load_programme_totals().get("national", {})
 montant_programme_national = sum(v for f, v in programme_totals_national.items() if f in selected_fonds)
 
-if montant_programme_national:
-    engage_by_fonds_national = pd.DataFrame(national_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
-    df_fonds_pilotage_national = pd.DataFrame(
-        [
-            {"fonds": f, "engage": engage_by_fonds_national.get(f, 0), "programme": programme_totals_national[f]}
-            for f in ("FEDER", "FSE+", "FTJ")
-            if f in programme_totals_national
-        ]
-    )
-    programme_detail_national = load_programme_detail()
-    render_kpi_pilotage(
-        df_fonds_pilotage_national,
-        montant_programme_national,
-        national_data["montant_ue_total"],
-        ftj_article=programme_detail_national["ftj_article"].get("national") if "FTJ" in selected_fonds else None,
-        assistance_technique={
-            f: v for f, v in programme_detail_national["assistance_technique"].get("national", {}).items() if f in selected_fonds
-        },
+tab_ensemble, tab_pilotage, tab_audit = st.tabs(["Vue d'ensemble", "Pilotage", "Analyses & contrôle"])
+
+with tab_ensemble:
+    df_national_analysis_ops = render_region_ensemble(
+        national_ops,
+        "le Volet national",
+        key_suffix="_volet_national",
+        programme_totals={f: v for f, v in programme_totals_national.items() if f in selected_fonds},
     )
 
-    traj_col_national, bullet_col_national = st.columns(2)
-    with traj_col_national:
-        st.plotly_chart(build_trajectoire(pd.DataFrame(national_ops), montant_programme_national), use_container_width=True)
-    with bullet_col_national:
-        if not df_fonds_pilotage_national.empty:
-            st.plotly_chart(
-                build_ranking_programme_vs_engage(df_fonds_pilotage_national, "fonds", "engage", "programme", height=400),
-                use_container_width=True,
-            )
-else:
-    st.info("Pas de donnée programmée (Tableau 9B) pour le Volet national avec les fonds sélectionnés.")
+with tab_pilotage:
+    # Pilotage : programmé (Tableau 9B, Accord de partenariat 2021-2027) vs engagé (data.json)
+    st.subheader("Pilotage : programmé vs engagé")
 
-render_region_analysis(
-    national_ops,
-    "le Volet national",
-    key_suffix="_volet_national",
-    programme_totals={f: v for f, v in programme_totals_national.items() if f in selected_fonds},
-)
+    if montant_programme_national:
+        engage_by_fonds_national = pd.DataFrame(national_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
+        df_fonds_pilotage_national = pd.DataFrame(
+            [
+                {"fonds": f, "engage": engage_by_fonds_national.get(f, 0), "programme": programme_totals_national[f]}
+                for f in ("FEDER", "FSE+", "FTJ")
+                if f in programme_totals_national
+            ]
+        )
+        programme_detail_national = load_programme_detail()
+        render_kpi_pilotage(
+            df_fonds_pilotage_national,
+            montant_programme_national,
+            national_data["montant_ue_total"],
+            ftj_article=programme_detail_national["ftj_article"].get("national") if "FTJ" in selected_fonds else None,
+            assistance_technique={
+                f: v for f, v in programme_detail_national["assistance_technique"].get("national", {}).items() if f in selected_fonds
+            },
+        )
+
+        traj_col_national, bullet_col_national = st.columns(2)
+        with traj_col_national:
+            st.plotly_chart(build_trajectoire(pd.DataFrame(national_ops), montant_programme_national), use_container_width=True)
+        with bullet_col_national:
+            if not df_fonds_pilotage_national.empty:
+                st.plotly_chart(
+                    build_ranking_programme_vs_engage(df_fonds_pilotage_national, "fonds", "engage", "programme", height=400),
+                    use_container_width=True,
+                )
+    else:
+        st.info("Pas de donnée programmée (Tableau 9B) pour le Volet national avec les fonds sélectionnés.")
+
+    render_region_gestion(df_national_analysis_ops, "le Volet national")
+
+    st.caption(
+        "Fonction comptable (certification) : depuis 2021-2027, cette fonction est intégrée à "
+        "l'Autorité de gestion (règlement (UE) 2021/1060, art. 76) — il n'y a plus d'autorité de "
+        "certification distincte comme sur 2014-2020, donc pas d'espace séparé pour elle ici."
+    )
+
+with tab_audit:
+    render_region_audit(df_national_analysis_ops, "le Volet national", key_suffix="_volet_national")

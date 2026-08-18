@@ -24,11 +24,15 @@ from utils.treemap import build_hierarchy_treemap
 FONDS, LEVEL1, LEVEL2, LEVEL3 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)", "Type d'intervention"
 
 
-def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, key_suffix="", programme_totals=None):
-    """Rend l'analyse complète d'un ensemble d'opérations déjà filtré : répartition par
-    fonds, courbe cumulée, treemaps, statistiques (dispersion, concentration, outliers,
-    cofinancement). Partagé entre Vue Régionale et Volet National — seule la sélection des
-    opérations en amont diffère entre les deux pages.
+def render_region_ensemble(region_ops, region_label, fonds_breakdown_df=None, key_suffix="", programme_totals=None):
+    """Tronc commun : répartition par fonds, courbe cumulée, treemaps (vue d'ensemble et détail
+    par fonds), structure du portefeuille par type d'intervention — description factuelle,
+    aucune analyse de dispersion/atypie ici (voir render_region_audit). Partagé entre Vue
+    Régionale et Volet National, appelé dans l'onglet "Vue d'ensemble" de chaque page.
+
+    Construit et retourne df_region_ops (colonnes LEVEL1/LEVEL2/LEVEL3 nettoyées des NaN) :
+    les onglets Pilotage et Analyses & contrôle le réutilisent tel quel, pas besoin de
+    reconstruire ce DataFrame trois fois.
 
     fonds_breakdown_df : DataFrame précalculé (colonnes fonds/montant_ue_total/count) pour
     le graphe "Répartition par fonds", à la place du recalcul depuis region_ops — utilisé
@@ -96,32 +100,6 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
     df_region_ops[LEVEL2] = df_region_ops[LEVEL2].fillna("Non spécifié")
     df_region_ops[LEVEL3] = df_region_ops[LEVEL3].fillna("Non spécifié")
 
-    # Répartition par Objectif Stratégique — engagé seul, sans comparaison programmé : le
-    # Tableau 8 de l'Accord de partenariat (source du pilotage par Fonds ci-dessus) ne ventile
-    # les dotations programmées par OS qu'au niveau national, pas par région (voir issue #21,
-    # #28). Pas de dotation régionale par OS disponible à ce jour pour tracer un taux de
-    # consommation ici.
-    st.subheader("Répartition par Objectif Stratégique")
-    df_region_os = (
-        df_region_ops.groupby(LEVEL1).agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count")).reset_index()
-    )
-    fig_region_os = px.bar(
-        df_region_os,
-        x=LEVEL1,
-        y="montant_ue_total",
-        color=LEVEL1,
-        color_discrete_map=OBJECTIF_STRATEGIQUE_COLORS,
-        hover_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)", LEVEL1: "Objectif stratégique", "count": "Nb projets"},
-    )
-    fig_region_os.update_layout(height=400, showlegend=False, xaxis_title=None)
-    fig_region_os.for_each_trace(
-        lambda t: t.update(
-            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
-        )
-    )
-    st.plotly_chart(style_hover(fig_region_os), use_container_width=True)
-
     # Vue d'ensemble : fonds > objectif stratégique > objectif spécifique
     st.subheader("Fonds, objectifs stratégiques et spécifiques")
 
@@ -144,12 +122,60 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
             )
             st.plotly_chart(fig_fonds_detail, use_container_width=True)
 
-    # Analyses statistiques
-    st.subheader("Analyses statistiques")
+    st.markdown("**Structure du portefeuille par type d'intervention**")
     st.caption(
-        "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés plus haut : ils "
-        "renseignent sur la dispersion des montants, la concentration du portefeuille et la cohérence "
-        "des taux de cofinancement — des repères usuels pour l'analyse de dépense publique."
+        "Chaque bulle est une combinaison type d'intervention / objectif stratégique, positionnée par "
+        "nombre de projets (x) et montant UE moyen ou total (y selon le graphique) — utile pour repérer "
+        "si une thématique de financement (couleur) concentre l'essentiel de la valeur sur certains "
+        "types d'intervention (souvent infrastructure) plutôt que sur de nombreux petits projets "
+        "(souvent formation, aides individuelles)."
+    )
+    st.plotly_chart(
+        build_portfolio_scatter_comparison(df_region_ops, LEVEL3, LEVEL1, color_map=OBJECTIF_STRATEGIQUE_COLORS),
+        use_container_width=True,
+    )
+
+    return df_region_ops
+
+
+def render_region_gestion(df_region_ops, region_label):
+    """Espace Autorité de gestion : répartition engagé seul par Objectif Stratégique — le Tableau
+    8 de l'Accord de partenariat (source du pilotage par Fonds, rendu séparément par les pages
+    appelantes juste avant cet onglet) ne ventile les dotations programmées par OS qu'au niveau
+    national, pas par région (voir issue #21, #28). Pas de dotation régionale par OS disponible
+    à ce jour pour tracer un taux de consommation ici, donc engagé seul."""
+    st.subheader("Répartition par Objectif Stratégique")
+    df_region_os = (
+        df_region_ops.groupby(LEVEL1).agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count")).reset_index()
+    )
+    fig_region_os = px.bar(
+        df_region_os,
+        x=LEVEL1,
+        y="montant_ue_total",
+        color=LEVEL1,
+        color_discrete_map=OBJECTIF_STRATEGIQUE_COLORS,
+        hover_data=["count"],
+        labels={"montant_ue_total": "Montant UE (€)", LEVEL1: "Objectif stratégique", "count": "Nb projets"},
+    )
+    fig_region_os.update_layout(height=400, showlegend=False, xaxis_title=None)
+    fig_region_os.for_each_trace(
+        lambda t: t.update(
+            hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{y:,.0f}} €<br>Nb projets : %{{customdata[0]:,.0f}}<extra></extra>"
+        )
+    )
+    st.plotly_chart(style_hover(fig_region_os), use_container_width=True)
+
+
+def render_region_audit(df_region_ops, region_label, key_suffix=""):
+    """Espace Autorité d'audit : dispersion/concentration des montants, opérations atypiques,
+    regroupements par bénéficiaire (dont inter-fonds, #23), cofinancement atypique, cohérence
+    des montants — indicateurs usuels de contrôle de dépense publique, pas de description
+    structurelle (voir render_region_ensemble pour ça)."""
+    st.caption(
+        "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés dans la vue "
+        "d'ensemble : ils renseignent sur la dispersion des montants, la concentration du "
+        "portefeuille et la cohérence des taux de cofinancement — des repères usuels pour l'analyse "
+        "de dépense publique."
     )
 
     st.caption(
@@ -320,19 +346,6 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
     else:
         st.caption("Aucun cas détecté sur le périmètre actuel.")
 
-    st.markdown("**Structure du portefeuille par type d'intervention**")
-    st.caption(
-        "Chaque bulle est une combinaison type d'intervention / objectif stratégique, positionnée par "
-        "nombre de projets (x) et montant UE moyen ou total (y selon le graphique) — utile pour repérer "
-        "si une thématique de financement (couleur) concentre l'essentiel de la valeur sur certains "
-        "types d'intervention (souvent infrastructure) plutôt que sur de nombreux petits projets "
-        "(souvent formation, aides individuelles)."
-    )
-    st.plotly_chart(
-        build_portfolio_scatter_comparison(df_region_ops, LEVEL3, LEVEL1, color_map=OBJECTIF_STRATEGIQUE_COLORS),
-        use_container_width=True,
-    )
-
     st.markdown("**Taux de cofinancement UE**")
     st.caption(
         "Le taux de cofinancement est plafonné réglementairement selon le fonds et la catégorie de région "
@@ -411,5 +424,3 @@ def render_region_analysis(region_ops, region_label, fonds_breakdown_df=None, ke
                 "Taux de cofinancement": taux_col_config,
             },
         )
-
-    return df_region_ops
