@@ -3,6 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 from utils.plot_style import style_hover
+from utils.cofinancement import plafond_categorie
 from utils.stats import (
     build_boxplot,
     build_cumulative_curve,
@@ -14,6 +15,7 @@ from utils.stats import (
     compute_cofinancement_table,
     compute_stats_table,
     detect_cofinancement_outliers,
+    detect_cofinancement_superieur_plafond,
     detect_incoherent_cofinancement,
     detect_outliers,
     detect_regroupements_beneficiaire,
@@ -158,11 +160,17 @@ def render_region_gestion(df_region_ops, region_label):
     st.plotly_chart(style_hover(fig_region_os), use_container_width=True)
 
 
-def render_region_audit(df_region_ops, region_label, key_suffix=""):
+def render_region_audit(df_region_ops, region_label, key_suffix="", region_meta=None):
     """Espace Autorité d'audit : dispersion/concentration des montants, opérations atypiques,
     regroupements par bénéficiaire (dont inter-fonds, #23), cofinancement atypique, cohérence
     des montants — indicateurs usuels de contrôle de dépense publique, pas de description
-    structurelle (voir render_region_ensemble pour ça)."""
+    structurelle (voir render_region_ensemble pour ça).
+
+    region_meta (optionnel, dict avec "categorie_ue"/"ultraperipherique") : permet de comparer
+    le taux de cofinancement observé au plafond réglementaire de la catégorie de région
+    (utils/cofinancement.plafond_categorie) — absent pour le Volet national, qui ne relève
+    d'aucune catégorie de région unique."""
+    plafond = plafond_categorie(region_meta.get("categorie_ue"), region_meta.get("ultraperipherique")) if region_meta else None
     st.caption(
         "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés dans la vue "
         "d'ensemble : ils renseignent sur la dispersion des montants, la concentration du "
@@ -333,25 +341,79 @@ def render_region_audit(df_region_ops, region_label, key_suffix=""):
         st.caption("Aucun cas détecté sur le périmètre actuel.")
 
     st.markdown("**Taux de cofinancement UE**")
-    st.caption(
-        "Le taux de cofinancement est plafonné réglementairement selon le fonds et la catégorie de région "
-        "(plafonds non modélisés ici) ; un taux atypique peut signaler une opération à vérifier."
-    )
+    if plafond is not None:
+        categorie_affichee = region_meta.get("categorie_ue") or "Non classifiée"
+        mention_rup = " + allocation RUP (art. 349 TFUE)" if region_meta.get("ultraperipherique") else ""
+        st.caption(
+            f"Plafond réglementaire de cofinancement UE pour {region_label} ({categorie_affichee}{mention_rup}) : "
+            f"**{plafond:.0%}** (règlement (UE) 2021/1060, art. 112). Un taux observé au-delà de ce plafond est "
+            "un signal réglementaire, pas seulement statistique — voir la sous-section dédiée plus bas."
+        )
+    else:
+        st.caption(
+            "Le taux de cofinancement est plafonné réglementairement selon la catégorie de région "
+            "(plafond non déterminable ici, catégorie non renseignée) ; un taux atypique peut signaler une "
+            "opération à vérifier."
+        )
     taux_col_config = st.column_config.NumberColumn(format="percent")
     cofinancement_fonds_region = compute_cofinancement_table(df_region_ops, FONDS).rename(
         columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
     )
+    if plafond is not None:
+        cofinancement_fonds_region["Écart au plafond"] = cofinancement_fonds_region["Taux moyen"] - plafond
     st.dataframe(
         style_categorical_columns(cofinancement_fonds_region, {FONDS: FONDS_COLORS}),
         hide_index=True,
         use_container_width=True,
         column_config={
             "Taux moyen": st.column_config.ProgressColumn(
-                format="percent", min_value=0, max_value=max(1.0, cofinancement_fonds_region["Taux moyen"].max())
+                format="percent", min_value=0, max_value=max(1.0, plafond or 0, cofinancement_fonds_region["Taux moyen"].max())
             ),
             "Taux médian": taux_col_config,
+            "Écart au plafond": st.column_config.NumberColumn(
+                format="percent", help="Taux moyen observé moins le plafond réglementaire — positif si le taux moyen dépasse le plafond"
+            ),
         },
     )
+
+    if plafond is not None:
+        depassements_plafond = detect_cofinancement_superieur_plafond(df_region_ops, plafond).assign(
+            **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}
+        )
+        st.caption(
+            f"{len(depassements_plafond)} opération(s) dont le taux de cofinancement UE dépasse le plafond "
+            f"réglementaire de {plafond:.0%} — signal réglementaire (pas statistique), potentiel dépassement à "
+            "vérifier plutôt qu'une preuve en soi (marge d'erreur possible sur la catégorie de région retenue, "
+            "voir la note méthodologique de la Vue Régionale)."
+        )
+        if len(depassements_plafond):
+            depassements_plafond_table = depassements_plafond[
+                [
+                    "Intitulé du projet",
+                    "Nom du bénéficiaire",
+                    FONDS,
+                    "Total des dépenses éligibles",
+                    "Montant UE",
+                    "Montant hors UE",
+                    "Taux de cofinancement",
+                ]
+            ].head(50)
+            st.dataframe(
+                style_categorical_columns(depassements_plafond_table, {FONDS: FONDS_COLORS}),
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    **text_widths("Intitulé du projet", "Nom du bénéficiaire"),
+                    "Taux de cofinancement": taux_col_config,
+                    "Total des dépenses éligibles": montant_col_config,
+                    "Montant UE": st.column_config.ProgressColumn(
+                        format="%,d €",
+                        min_value=0,
+                        max_value=int(depassements_plafond_table["Montant UE"].max()),
+                    ),
+                    "Montant hors UE": montant_col_config,
+                },
+            )
 
     cofinancement_outliers_region = detect_cofinancement_outliers(df_region_ops).assign(
         **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}

@@ -13,10 +13,12 @@ from utils.data_loader import (
     load_region_metadata,
     load_transferts_solidarite,
 )
+from utils.cofinancement import bucket_categorie, plafond_categorie
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
 from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage, render_kpi_pilotage
 from utils.stats import (
     build_boxplot,
+    build_cofinancement_categorie_chart,
     build_cumulative_curve,
     build_fonds_barchart,
     build_histogram,
@@ -673,6 +675,37 @@ with tab_audit:
             "Taux médian": taux_col_config,
         },
     )
+
+    st.markdown("**Financement UE vs plafond réglementaire, par catégorie de région**")
+    st.caption(
+        "Chaque catégorie de région (politique de cohésion 2021-2027) a un taux de cofinancement UE "
+        "maximal réglementaire : 50% en région plus développée, 60% en transition, 85% en région moins "
+        "développée ou ultrapériphérique (RUP, art. 349 TFUE) — règlement (UE) 2021/1060, art. 112. Le "
+        "repère losange marque ce plafond ; plus la barre \"Financé par l'UE\" s'en rapproche, plus la "
+        "catégorie consomme sa marge de cofinancement maximale autorisée."
+    )
+    region_metadata_categorie = load_region_metadata()
+    df_categorie_source = df_mono_region.copy()
+    df_categorie_source["Catégorie"] = df_categorie_source["Région"].map(
+        lambda r: bucket_categorie(
+            region_metadata_categorie.get(r, {}).get("categorie_ue"), region_metadata_categorie.get(r, {}).get("ultraperipherique", False)
+        )
+    )
+    df_categorie_source["_plafond"] = df_categorie_source["Région"].map(
+        lambda r: plafond_categorie(
+            region_metadata_categorie.get(r, {}).get("categorie_ue"), region_metadata_categorie.get(r, {}).get("ultraperipherique", False)
+        )
+    )
+    df_categorie = (
+        df_categorie_source.dropna(subset=["_plafond"])
+        .groupby("Catégorie")
+        .agg(montant_ue=("Montant UE", "sum"), total_depenses=("Total des dépenses éligibles", "sum"), plafond=("_plafond", "first"))
+        .reset_index()
+    )
+    if len(df_categorie):
+        st.plotly_chart(build_cofinancement_categorie_chart(df_categorie), use_container_width=True)
+    else:
+        st.caption("Aucune catégorie de région identifiable sur le périmètre actuel.")
 
     cofinancement_outliers = detect_cofinancement_outliers(df_national_ops).assign(
         **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}
