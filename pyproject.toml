@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `data-pipeline/` est ajouté au sys.path par tests/conftest.py : le dossier
+# porte un tiret et ses scripts s'importent entre eux à plat, il n'est pas
+# importable comme paquet.

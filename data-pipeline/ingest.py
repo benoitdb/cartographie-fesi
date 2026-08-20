@@ -3,45 +3,27 @@ import json
 from pathlib import Path
 from datetime import datetime
 from region_mapping import harmonize_region, get_unresolved, reset_unresolved
+from schema_source import build_cols, trouver_fichier_source
 
 # Chemins
-XLSX_PATH = Path(__file__).parent.parent / "data" / "raw" / "20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx"
+RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "processed"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# Millésime le plus récent, pas un chemin codé en dur : le fichier est republié
+# 5 fois par an en « annule et remplace » (issue #47).
+XLSX_PATH = trouver_fichier_source(RAW_DIR)
+
 # Lire le fichier
-print("📖 Lecture du fichier XLSX...")
+print(f"📖 Lecture du fichier XLSX : {XLSX_PATH.name}")
 df = pd.read_excel(XLSX_PATH, sheet_name=0)
 
 print(f"✅ Données chargées: {len(df)} opérations")
 
-# Créer un mapping des colonnes par index (plus fiable que les noms)
-col_list = list(df.columns)
-COLS = {
-    'numero_op': col_list[0],          # Numéro Opération
-    'numcci': col_list[1],             # NUMCCI
-    'libelle_prog': col_list[2],       # Libellé Programme
-    'intitule_proj': col_list[3],      # Intitulé du projet
-    'objectifs_desc': col_list[4],     # Objectifs et réalisations escomptés et effectifs
-    'nom_benef': col_list[5],          # Nom du bénéficiaire
-    'cp_beneficiaire': col_list[6],    # Code postal du bénéficiaire
-    'date_debut': col_list[7],         # Date de début de l'opération
-    'date_fin': col_list[8],           # Date de fin de l'opération
-    'cp_operation': col_list[9],       # Code postal de l'opération
-    'zone': col_list[10],              # Zone
-    'departement': col_list[11],       # Département de l'opération
-    'region': col_list[12],            # Région de l'opération
-    'pays': col_list[13],              # Pays
-    'type_intervention': col_list[14], # Type d'intervention
-    'fonds': col_list[15],             # Fonds
-    'objectif_spec': col_list[16],     # Objectif spécifique
-    'objectif_spec_lib': col_list[17], # Objectif spécifique (Code et libellé)
-    'objectif_strat': col_list[18],    # Objectif stratégique
-    'depenses': col_list[19],          # Total des dépenses éligibles
-    'taux_cofinance': col_list[20],    # Taux de cofinancement
-    'montant_ue': col_list[21],        # Montant UE
-    'date_convention': col_list[22],   # Date première convention
-}
+# Mapping des colonnes par index (plus fiable que les noms), mais vérifié contre
+# les libellés attendus : sans ce contrôle, un réordonnancement du fichier source
+# produirait des données fausses sans erreur (issue #45).
+COLS = build_cols(df.columns)
 
 # Convertir les colonnes de codes postaux en string et nettoyer
 print("🔄 Normalisation des données...")

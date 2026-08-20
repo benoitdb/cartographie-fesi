@@ -1,0 +1,6 @@
+# Environnement de test, à la racine du dépôt : les tests couvrent le pipeline
+# (data-pipeline/requirements.txt) et pourront couvrir le dashboard
+# (dashboard/requirements.txt), qui ont chacun leur propre environnement
+# d'exécution.
+-r data-pipeline/requirements.txt
+pytest>=9.0

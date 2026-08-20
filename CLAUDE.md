@@ -22,8 +22,9 @@ mais **il n'est pas mort** : le dashboard lit ses fichiers géographiques
 
 ## Commandes
 
-Deux environnements distincts, avec leurs propres `requirements.txt` :
-`dashboard/venv/` et le pipeline (pandas, openpyxl, rapidfuzz).
+Trois environnements, chacun avec son `requirements.txt` : `dashboard/venv/`
+pour l'application, le pipeline (pandas, openpyxl, rapidfuzz), et `venv/` à la
+racine pour les tests (`requirements-dev.txt`).
 
 - **Lancer le dashboard** (depuis `dashboard/`, les imports `utils.*` en
   dépendent) :
@@ -46,7 +47,9 @@ Deux environnements distincts, avec leurs propres `requirements.txt` :
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-Pas de suite de tests à ce jour — c'est le manque connu du projet (voir plus bas).
+- **Tests** : `venv/bin/python -m pytest -q` (31 tests, instantanés). Ils sont
+  autonomes : aucun ne lit le XLSX ni les JSON générés, ils tournent sur un
+  clone nu et en CI. Environnement de test à la racine : `requirements-dev.txt`.
 
 ## Quoi (repo map)
 
@@ -73,13 +76,19 @@ Pas de suite de tests à ce jour — c'est le manque connu du projet (voir plus 
   [europe-en-france.gouv.fr — liste des opérations FEDER/FSE+/FTJ 2021-2027](https://www.europe-en-france.gouv.fr/fr/ressources/liste-operations-feder-fse-ftj-2021-2027).
   Version utilisée : `20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx`.
 - **Le fichier est republié 5 fois par an, en « annule et remplace »** — nouveau
-  nom de fichier daté à chaque fois. Or `XLSX_PATH` est **codé en dur** dans
-  `ingest.py` : une mise à jour de la source exige d'éditer ce chemin, sinon le
-  pipeline continue de régénérer les données à partir de l'ancien millésime.
-  Vérifier la date du fichier avant toute conclusion sur des chiffres.
-- **`ingest.py` mappe les colonnes par index, pas par nom** (choix assumé,
-  jugé plus fiable). Un changement d'ordre des colonnes dans le fichier source
-  passera donc totalement inaperçu et produira des données fausses sans erreur.
+  nom de fichier daté à chaque fois. `ingest.py` retient désormais le millésime
+  le plus récent de `data/raw/` et **affiche lequel** au démarrage
+  (`schema_source.trouver_fichier_source`, issue #47) : lire cette ligne avant
+  toute conclusion sur des chiffres. Déposer le nouvel export suffit, mais
+  l'ancien reste présent tant qu'on ne le supprime pas.
+- **`ingest.py` mappe les colonnes par index, pas par nom** (choix assumé, jugé
+  plus fiable que des libellés instables). Ce mapping est **vérifié** contre les
+  libellés attendus au démarrage (`schema_source.build_cols`, issue #45) : un
+  réordonnancement de la source fait échouer le pipeline avec un message qui
+  nomme la position fautive, au lieu de produire des données fausses en silence.
+  La comparaison ignore casse, espaces et type d'apostrophe — le fichier source
+  mélange déjà `'` et `’`. Si la source change légitimement, mettre à jour
+  `COLONNES_ATTENDUES` après avoir vérifié à quoi correspond chaque colonne.
 - **Programmé ≠ engagé.** Les montants programmés viennent de l'Accord de
   partenariat dans sa version **préliminaire** de juin 2022, probablement
   révisée depuis. Tout taux de consommation est une estimation : la réserve
@@ -110,10 +119,12 @@ sont centralisées dans `utils/themes.py` (`FONDS_COLORS`,
 Plotly choisir ses couleurs par défaut — un même fonds doit avoir la même
 couleur sur toutes les pages.
 
-**Vérification** : le dashboard n'a pas de tests, donc toute modification
-touchant un calcul (agrégats, taux, rapprochements) se vérifie en lançant
-réellement l'application et en regardant le résultat, pas en supposant. Ne pas
-annoncer qu'un changement fonctionne sans l'avoir affiché.
+**Vérification** : le pipeline a des tests (harmonisation des régions,
+rapprochement des bénéficiaires, schéma du fichier source) — les lancer et les
+étendre. Le **dashboard n'en a pas** : toute modification touchant un calcul ou
+un affichage s'y vérifie en lançant réellement l'application et en regardant le
+résultat, pas en supposant. Ne pas annoncer qu'un changement fonctionne sans
+l'avoir affiché.
 
 **GitHub issues — AI-driven dev, pas du vibe-coding** : toute limitation
 connue, gotcha, piste d'évolution ou choix technique non trivial pris de façon
@@ -123,8 +134,9 @@ capable d'expliquer et de ré-arbitrer un choix plus tard. Les issues servent
 aussi de backlog de pistes explorées et bloquées (source manquante, donnée
 absente) — les documenter comme telles plutôt que de les abandonner en silence.
 
-**Manque connu, assumé** : aucun test automatisé sur ~5 200 lignes de Python.
-Le risque principal est une régression silencieuse dans les agrégats du
-pipeline ou le rapprochement des bénéficiaires. Priorité quand des tests seront
-ajoutés : les totaux du pipeline et le matching des bénéficiaires, pas la
-couche d'affichage.
+**Couverture de test, état** : le pipeline est couvert sur ses points de
+rupture silencieuse (schéma du fichier source, harmonisation des régions,
+rapprochement des bénéficiaires). **Le dashboard ne l'est pas du tout** —
+~3 000 lignes dans `dashboard/`, dont les calculs de `utils/stats.py`,
+`utils/cofinancement.py` et `utils/pilotage.py`. C'est le prochain manque connu,
+et la couche de calcul y est prioritaire sur la couche d'affichage.

@@ -1,0 +1,29 @@
+name: CI
+
+# Les tests ne valent que s'ils tournent sans qu'on y pense : sans CI, une suite
+# de tests devient un fichier qu'on oublie de lancer.
+#
+# Tous les tests de ce dépôt sont volontairement autonomes : ils ne lisent ni le
+# XLSX source ni les JSON générés (ni l'un ni l'autre n'étant versionnés), ils
+# éprouvent la logique sur des cas construits. La CI tourne donc sur un clone nu.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements-dev.txt
+
+      - name: Tests
+        run: pytest -q
