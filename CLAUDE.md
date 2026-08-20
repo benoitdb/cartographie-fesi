@@ -12,8 +12,11 @@ Dashboard Streamlit multipage fonctionnel (Accueil + Vue Régionale + Volet
 National + Comparateur), alimenté par un pipeline Python qui transforme le
 fichier XLSX source en JSON.
 
-**Le travail se fait sur la branche `streamlit-dashboard`**, en avance de
-4 commits sur `main`. Ne pas repartir de `main` sans le signaler.
+**`main` est la référence** depuis la fusion de `streamlit-dashboard`
+(PR #49, 2026-08-20) : elle porte le dashboard, ce fichier et les tests. Partir
+de `main` et travailler sur une branche dédiée (`feat/...`, `fix/...`,
+`test/...`), fusionnée par PR une fois la CI verte — pas de commit direct sur
+`main` pour du code (les corrections de doc peuvent y aller directement).
 
 `frontend/` est un **prototype React/Vite abandonné** au profit de Streamlit —
 mais **il n'est pas mort** : le dashboard lit ses fichiers géographiques
