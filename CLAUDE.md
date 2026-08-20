@@ -69,7 +69,14 @@ Pas de suite de tests à ce jour — c'est le manque connu du projet (voir plus 
 - **Un clone frais ne tourne pas.** `data/raw/*.xlsx` et les JSON qui en
   dérivent (`data.json`, `operations.json`, `beneficiaires_fuzzy.json`) sont
   gitignorés. Il faut récupérer le XLSX source et relancer le pipeline.
-  <!-- TODO : documenter ici l'URL exacte de la source du XLSX -->
+- **Source du XLSX** :
+  [europe-en-france.gouv.fr — liste des opérations FEDER/FSE+/FTJ 2021-2027](https://www.europe-en-france.gouv.fr/fr/ressources/liste-operations-feder-fse-ftj-2021-2027).
+  Version utilisée : `20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx`.
+- **Le fichier est republié 5 fois par an, en « annule et remplace »** — nouveau
+  nom de fichier daté à chaque fois. Or `XLSX_PATH` est **codé en dur** dans
+  `ingest.py` : une mise à jour de la source exige d'éditer ce chemin, sinon le
+  pipeline continue de régénérer les données à partir de l'ancien millésime.
+  Vérifier la date du fichier avant toute conclusion sur des chiffres.
 - **`ingest.py` mappe les colonnes par index, pas par nom** (choix assumé,
   jugé plus fiable). Un changement d'ordre des colonnes dans le fichier source
   passera donc totalement inaperçu et produira des données fausses sans erreur.
