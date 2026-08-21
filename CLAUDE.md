@@ -53,6 +53,14 @@ racine pour les tests (`requirements-dev.txt`).
 - **Tests** : `venv/bin/python -m pytest -q` (31 tests, instantanés). Ils sont
   autonomes : aucun ne lit le XLSX ni les JSON générés, ils tournent sur un
   clone nu et en CI. Environnement de test à la racine : `requirements-dev.txt`.
+- **Lint** : `ruff check .` (config dans `pyproject.toml`), lancé en CI sur
+  chaque PR. **`ruff format` n'est volontairement pas activé** : reformater 29
+  fichiers sur 38 (~3 300 lignes) sur une couche dashboard sans tests produirait
+  un diff que rien ne valide. À reconsidérer quand les tests couvriront le
+  dashboard.
+  Une ligne de base de règles est ignorée à titre **transitoire**, chacune avec
+  son issue (#50 à #54) — retirer la ligne d'`ignore` fait partie de la
+  correction. Ne pas en ajouter de nouvelles sans ouvrir l'issue qui va avec.
 
 ## Quoi (repo map)
 
