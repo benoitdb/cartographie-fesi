@@ -3,3 +3,48 @@ testpaths = ["tests"]
 # `data-pipeline/` est ajouté au sys.path par tests/conftest.py : le dossier
 # porte un tiret et ses scripts s'importent entre eux à plat, il n'est pas
 # importable comme paquet.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# `dashboard/venv` : environnement virtuel. `frontend` : prototype React abandonné
+# (mais pas mort, cf. CLAUDE.md — le dashboard lit ses fichiers géographiques).
+exclude = ["dashboard/venv", "frontend"]
+
+[tool.ruff.lint]
+# Défaut de ruff (E4/E7/E9 + F) plus I (tri des imports), UP (modernisation),
+# B (pièges courants) et RUF.
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "RUF"]
+
+# RUF001/002/003 signalent les caractères Unicode « ambigus » : ici les
+# apostrophes typographiques et espaces insécables du français, présentes à
+# dessein dans les libellés affichés. Projet francophone assumé.
+#
+# Les règles suivantes sont désactivées à titre TRANSITOIRE : elles sont
+# violées par du code antérieur à la mise en place de ruff. Chacune a son
+# issue ; retirer la ligne d'ignore fait partie de la correction.
+#
+# Décision assumée : le lint est mis en place SANS corriger l'existant, pour que
+# la CI soit verte dès le premier jour. Une CI rouge en permanence est une CI
+# qu'on apprend à ignorer — et elle ne signalerait plus les régressions
+# nouvelles, qui sont l'intérêt principal de l'outil.
+ignore = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "B023",   # issue #50 — analysé : pas un bug, motif fragile (3 occurrences)
+    "B905",   # issue #51 — zip() sans strict, troncature muette (7)
+    "RUF046", # issue #52 — casts int() redondants (11)
+    "RUF005", # issue #53 — concaténations de listes (6)
+    "I001",   # issue #54 — blocs d'imports non triés (14)
+    "F541",   # issue #54 — f-strings sans placeholder (3)
+    "F401",   # issue #54 — imports morts (2)
+    "B007",   # issue #54 — variable de boucle inutilisée (1)
+    "E402",   # issue #54 — import pas en tête de fichier (1)
+]
+
+[tool.ruff.lint.isort]
+# `data-pipeline/` est ajouté au sys.path par tests/conftest.py, il n'est pas
+# importable comme paquet — sans cette liste, ruff classerait ces modules en
+# dépendances tierces.
+known-first-party = ["reference", "utils"]
