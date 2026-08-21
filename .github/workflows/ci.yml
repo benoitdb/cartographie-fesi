@@ -25,5 +25,12 @@ jobs:
       - name: Installer les dépendances
         run: pip install -r requirements-dev.txt
 
+      # Lint seulement : `ruff format` n'est pas activé sur ce dépôt. Reformater
+      # 29 fichiers sur 38 (~3 300 lignes) sur une couche dashboard sans tests
+      # produirait un diff que rien ne valide. À reconsidérer quand la couverture
+      # de tests s'étendra au dashboard.
+      - name: Lint
+        run: ruff check .
+
       - name: Tests
         run: pytest -q
