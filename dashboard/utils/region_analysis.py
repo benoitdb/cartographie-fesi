@@ -108,7 +108,7 @@ def render_region_ensemble(region_ops, region_label, fonds_breakdown_df=None, ke
     fonds_presents = sorted(df_region_ops[FONDS].unique())
     fonds_cols = st.columns(len(fonds_presents))
 
-    for col, fonds in zip(fonds_cols, fonds_presents):
+    for col, fonds in zip(fonds_cols, fonds_presents, strict=True):
         with col:
             st.markdown(f"**{fonds}**")
             df_fonds = df_region_ops[df_region_ops[FONDS] == fonds]

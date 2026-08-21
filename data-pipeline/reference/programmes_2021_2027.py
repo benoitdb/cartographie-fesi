@@ -164,7 +164,11 @@ def _verify_totals():
     )
     tolerances = tuple(_ECART_TOLERE.values())
     for calcule, publie, label in [(totaux_hors_feampa, _TOTAL_FEDER_FSE_FTJ, "FEDER-FSE+-FTJ"), (totaux_tous_fonds, _TOTAL_TOUS_FONDS, "tous fonds")]:
-        for c, p, tol, champ in zip(calcule, publie, tolerances, _ECART_TOLERE):
+        # strict=True : les quatre séquences décrivent les mêmes champs, mais sont
+        # saisies à la main dans trois structures distinctes. Sans strict, ajouter un
+        # champ à _ECART_TOLERE sans l'ajouter aux totaux publiés ferait sauter la
+        # vérification de ce champ sans qu'aucun test ne le signale.
+        for c, p, tol, champ in zip(calcule, publie, tolerances, _ECART_TOLERE, strict=True):
             assert abs(c - p) <= tol, f"Écart inattendu sur {label}/{champ} : calculé={c} publié={p} (tolérance={tol})"
 
 

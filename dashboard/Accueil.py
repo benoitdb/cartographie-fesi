@@ -144,7 +144,9 @@ with col_dromcom:
     dromcom_geojson = load_dromcom_geojson()
 
     dromcom_rows = st.columns(3), st.columns(3)
-    for territory, col in zip(DROM_COM, dromcom_rows[0] + dromcom_rows[1]):
+    # strict=True : les 2x3 colonnes doivent couvrir exactement DROM_COM — ajouter un
+    # territoire sans ajouter la colonne le ferait disparaître de la page en silence.
+    for territory, col in zip(DROM_COM, dromcom_rows[0] + dromcom_rows[1], strict=True):
         values = by_region.get(territory, {"montant_ue_total": 0, "count": 0})
         with col:
             with st.container(border=True):

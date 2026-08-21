@@ -33,7 +33,6 @@ ignore = [
     "RUF002",
     "RUF003",
     "B023",   # issue #50 — analysé : pas un bug, motif fragile (3 occurrences)
-    "B905",   # issue #51 — zip() sans strict, troncature muette (7)
     "RUF046", # issue #52 — casts int() redondants (11)
     "RUF005", # issue #53 — concaténations de listes (6)
     "I001",   # issue #54 — blocs d'imports non triés (14)
