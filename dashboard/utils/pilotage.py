@@ -69,7 +69,7 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
 
     depassement_present = False
     fonds_cols = st.columns(len(df_fonds_pilotage))
-    for col, row in zip(fonds_cols, df_fonds_pilotage.itertuples()):
+    for col, row in zip(fonds_cols, df_fonds_pilotage.itertuples(), strict=True):
         taux_fonds = row.engage / row.programme if row.programme else 0
         depassement = taux_fonds > 1
         depassement_present = depassement_present or depassement
@@ -184,7 +184,7 @@ def build_ranking_programme_vs_engage(df, label_col, engage_col, programme_col, 
     taux = df[engage_col] / df[programme_col]
     depassement = taux > 1
     engage_colors = ["#e34948" if d else "#4C78A8" for d in depassement]
-    text_labels = [f"{t:.0%} ⚠️" if d else f"{t:.0%}" for t, d in zip(taux, depassement)]
+    text_labels = [f"{t:.0%} ⚠️" if d else f"{t:.0%}" for t, d in zip(taux, depassement, strict=True)]
 
     fig = go.Figure()
     fig.add_bar(

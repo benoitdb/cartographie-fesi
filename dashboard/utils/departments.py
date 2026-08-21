@@ -145,7 +145,9 @@ def assign_departments_df(df):
     """Ajoute les colonnes 'dept' et 'dept_source' à un DataFrame d'opérations."""
     df = df.copy()
     assigned = df.apply(assign_departement, axis=1)
-    df["dept"], df["dept_source"] = zip(*assigned) if len(df) else ([], [])
+    # strict=True : assign_departement doit renvoyer un (code, source) pour chaque ligne —
+    # un retour à l'arité différente tronquerait les deux colonnes sans rien signaler.
+    df["dept"], df["dept_source"] = zip(*assigned, strict=True) if len(df) else ([], [])
     return df
 
 

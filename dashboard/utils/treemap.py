@@ -44,7 +44,9 @@ def build_hierarchy_treemap(df, level_cols, amount_col="Montant UE", color_map=N
             values=values,
             branchvalues="total",
             marker=dict(colors=colors),
-            customdata=list(zip(montants_affiches, counts, hover_labels)),
+            # strict=True : les trois listes sont remplies en lock-step dans la boucle
+            # ci-dessus — une divergence décalerait les hovers d'un nœud à l'autre.
+            customdata=list(zip(montants_affiches, counts, hover_labels, strict=True)),
             texttemplate="%{label}<br>%{value:,.0f} €",
             hovertemplate="<b>%{customdata[2]}</b><br>Montant UE : %{customdata[0]}<br>Nb projets : %{customdata[1]}<extra></extra>",
         )
