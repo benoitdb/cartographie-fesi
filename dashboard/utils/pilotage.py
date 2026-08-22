@@ -23,17 +23,35 @@ FSE_DEPASSEMENT_DETAIL = (
 )
 
 
+def reste_a_engager(df_fonds_pilotage):
+    """Somme des restes à engager **par fonds**, chacun plancher à zéro.
+
+    Surtout pas `programme_total - engage_total` : un fonds en dépassement (voir
+    FSE_DEPASSEMENT_DETAIL) rognerait alors le reliquat des autres. Cas constaté qui a
+    motivé la règle : Auvergne-Rhône-Alpes affichait 94% consommé au global alors qu'il
+    restait ~150 M€ de FEDER, le dépassement FSE+ masquant ce reliquat dans l'agrégat.
+
+    Fonction à part plutôt qu'une ligne dans le rendu (issue #62) : c'est une règle
+    métier, elle se teste sans passer par l'affichage.
+    """
+    return (df_fonds_pilotage["programme"] - df_fonds_pilotage["engage"]).clip(lower=0).sum()
+
+
+def taux_consommation(engage, programme):
+    """Part de l'enveloppe programmée déjà engagée, 0 si rien n'est programmé.
+
+    Peut dépasser 1 : le dépassement est un signal à afficher, pas une valeur à
+    plafonner (voir FSE_DEPASSEMENT_DETAIL et build_fonds_mini_bar)."""
+    return engage / programme if programme else 0
+
+
 def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ftj_article=None, assistance_technique=None, color_map=None):
     """Bloc A : montants agrégés (programmé, engagé, reste à engager) + une card par fonds
     avec sa propre barre de progression. N'affiche rien si aucune donnée programmée pour ce
     périmètre (ex. fonds sélectionnés absents du Tableau 9B).
 
-    Le reste à engager agrégé est la somme des restes PAR FONDS (chacun plancher à 0), pas
-    programme_total - engage_total : un fonds en dépassement (ex. FSE+, voir
-    FSE_DEPASSEMENT_DETAIL) ne doit jamais "rogner" sur le reste d'un autre fonds dans ce
-    total — sinon un dépassement FSE+ peut faire disparaître un vrai reliquat FEDER du total
-    affiché (cas constaté : Auvergne-Rhône-Alpes affichait 94% consommé au global alors qu'il
-    restait ~150M€ de FEDER, le dépassement FSE+ masquant ce reliquat dans l'agrégat).
+    Le reste à engager agrégé vient de reste_a_engager() : somme des restes PAR FONDS,
+    chacun plancher à 0 — voir la docstring de cette fonction pour le pourquoi.
 
     ftj_article (optionnel) : {"Article 3": montant, "Article 4": montant} programmés pour ce
     périmètre — classification propre au FTJ (règlement FTJ), sans lien avec les 3 catégories
@@ -53,7 +71,7 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
     if not montant_programme or df_fonds_pilotage.empty:
         return
 
-    reste = (df_fonds_pilotage["programme"] - df_fonds_pilotage["engage"]).clip(lower=0).sum()
+    reste = reste_a_engager(df_fonds_pilotage)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -70,7 +88,7 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
     depassement_present = False
     fonds_cols = st.columns(len(df_fonds_pilotage))
     for col, row in zip(fonds_cols, df_fonds_pilotage.itertuples(), strict=True):
-        taux_fonds = row.engage / row.programme if row.programme else 0
+        taux_fonds = taux_consommation(row.engage, row.programme)
         depassement = taux_fonds > 1
         depassement_present = depassement_present or depassement
         with col:
@@ -112,7 +130,7 @@ def build_fonds_mini_bar(engage, programme, color=None):
     color (optionnel) : couleur de la catégorie (ex. OBJECTIF_STRATEGIQUE_COLORS), pour rester
     cohérent avec les autres graphes de la même dimension — le rouge de dépassement reste
     toujours prioritaire dessus, c'est un signal d'alerte, pas une couleur de catégorie."""
-    taux = engage / programme if programme else 0
+    taux = taux_consommation(engage, programme)
     depassement = taux > 1
     color = "#e34948" if depassement else (color or "#4C78A8")
     x_max = max(engage, programme) * 1.15 if programme else engage * 1.15
