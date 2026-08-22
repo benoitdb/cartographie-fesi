@@ -11,6 +11,7 @@ from schema_source import (
     COLONNES_ATTENDUES,
     SchemaSourceError,
     build_cols,
+    millesime_du_fichier,
     normalise_libelle,
     trouver_fichier_source,
 )
@@ -104,3 +105,17 @@ def test_absence_de_fichier_source_leve_une_erreur_qui_dit_ou_le_trouver(tmp_pat
         trouver_fichier_source(tmp_path)
 
     assert "europe-en-france.gouv.fr" in str(erreur.value)
+
+
+def test_le_millesime_est_extrait_du_prefixe_du_nom_de_fichier(tmp_path):
+    """Cette date est propagée jusqu'au dashboard, qui l'affiche (issue #47) :
+    une erreur ici afficherait une fraîcheur fausse, pire que pas de date."""
+    fichier = tmp_path / "20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx"
+
+    assert millesime_du_fichier(fichier) == "2026-03-16"
+
+
+def test_un_fichier_renomme_a_la_main_reste_exploitable_sans_millesime(tmp_path):
+    """None, pas une exception : le pipeline doit continuer de tourner sur un
+    fichier renommé — il perd seulement l'affichage de sa date."""
+    assert millesime_du_fichier(tmp_path / "liste_operations_conventionnees.xlsx") is None

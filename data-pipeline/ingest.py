@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from agregats import calculer_agregats, partitionner
 from region_mapping import get_unresolved, harmonize_region, reset_unresolved
-from schema_source import build_cols, trouver_fichier_source
+from schema_source import build_cols, millesime_du_fichier, trouver_fichier_source
 
 # Chemins
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
@@ -123,6 +123,11 @@ aggregates = clean_nans(aggregates)
 output_data = {
     'metadata': {
         'generated_at': datetime.now().isoformat(),
+        # Millésime du fichier source, propagé jusqu'au dashboard qui l'affiche :
+        # la source est republiée 5 fois par an, la fraîcheur des chiffres doit se
+        # lire à l'écran et pas seulement dans le log du pipeline (issue #47).
+        'fichier_source': XLSX_PATH.name,
+        'millesime': millesime_du_fichier(XLSX_PATH),
         'total_operations': len(df),
         'nb_regions_harmonized': len(aggregates['by_region']),
         'nb_regions_raw': df[COLS['region']].nunique(),

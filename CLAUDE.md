@@ -50,7 +50,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (112 tests, ~7 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (122 tests, ~10 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent la fixture committée dans `tests/fixtures/` (voir son README —
@@ -100,7 +100,11 @@ racine pour les tests (`requirements-dev.txt`).
   nom de fichier daté à chaque fois. `ingest.py` retient désormais le millésime
   le plus récent de `data/raw/` et **affiche lequel** au démarrage
   (`schema_source.trouver_fichier_source`, issue #47) : lire cette ligne avant
-  toute conclusion sur des chiffres. Déposer le nouvel export suffit, mais
+  toute conclusion sur des chiffres. Le millésime est aussi propagé jusqu'au
+  dashboard (`metadata.millesime` → `utils/millesime.py`), qui l'affiche en pied
+  de barre latérale sur chaque page — **ne pas retirer cet affichage** : c'est
+  la seule chose qui distingue à l'écran des chiffres du jour d'un export vieux
+  de plusieurs mois. Déposer le nouvel export suffit, mais
   l'ancien reste présent tant qu'on ne le supprime pas.
 - **`ingest.py` mappe les colonnes par index, pas par nom** (choix assumé, jugé
   plus fiable que des libellés instables). Ce mapping est **vérifié** contre les

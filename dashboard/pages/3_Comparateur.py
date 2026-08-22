@@ -4,6 +4,7 @@ import streamlit as st
 
 from utils.data_loader import load_data, load_programme_totals, load_region_metadata
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
+from utils.millesime import render_millesime
 from utils.plot_style import style_hover
 from utils.themes import FONDS_COLORS
 
@@ -84,6 +85,7 @@ region_metadata = load_region_metadata()
 programme_totals = load_programme_totals()
 
 selected_fonds = render_fonds_filter()
+render_millesime(data.get("metadata"))
 filtre_actif = set(selected_fonds) != set(FONDS_OPTIONS)
 
 st.title("Comparateur régional")

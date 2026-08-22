@@ -19,6 +19,7 @@ from utils.departments import (
 )
 from utils.dromcom_localisation import build_bubbles_localisation
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
+from utils.millesime import render_millesime
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.plot_style import MAP_CONFIG, build_standalone_colorbar
 from utils.region_analysis import (
@@ -83,6 +84,7 @@ by_region = data["aggregates"]["by_region"]
 by_region_fonds = data["aggregates"]["by_region_fonds"]
 
 selected_fonds = render_fonds_filter()
+render_millesime(data.get("metadata"))
 filtre_actif = set(selected_fonds) != set(FONDS_OPTIONS)
 
 region = st.selectbox("Région", sorted(by_region))

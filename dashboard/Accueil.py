@@ -15,6 +15,7 @@ from utils.data_loader import (
     load_transferts_solidarite,
 )
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
+from utils.millesime import render_millesime
 from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage, render_kpi_pilotage
 from utils.plot_style import (
     MAP_CONFIG,
@@ -53,6 +54,7 @@ data = load_data()
 geojson = load_geojson()
 
 selected_fonds = render_fonds_filter()
+render_millesime(data.get("metadata"))
 filtre_actif = set(selected_fonds) != set(FONDS_OPTIONS)
 
 st.title("Cartographie des projets FESI - Vue Nationale")
