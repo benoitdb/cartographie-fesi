@@ -1,0 +1,30 @@
+{
+  "transferts": [
+    {
+      "categorie_origine": "Plus développées",
+      "montants_par_annee": {
+        "2022": 76477858,
+        "2023": 77709572,
+        "2024": 78966072,
+        "2025": 80248373,
+        "2026": 66502492,
+        "2027": 67837996
+      },
+      "total_publie": 447742362,
+      "part_dotation_transferee": 0.2
+    },
+    {
+      "categorie_origine": "En transition",
+      "montants_par_annee": {
+        "2022": 111621188,
+        "2023": 113417164,
+        "2024": 115245402,
+        "2025": 117117323,
+        "2026": 97057044,
+        "2027": 99019092
+      },
+      "total_publie": 653477213,
+      "part_dotation_transferee": 0.06
+    }
+  ]
+}

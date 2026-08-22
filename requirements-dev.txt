@@ -1,8 +1,9 @@
 # Environnement de test, à la racine du dépôt : les tests couvrent le pipeline
-# (data-pipeline/requirements.txt) et pourront couvrir le dashboard
-# (dashboard/requirements.txt), qui ont chacun leur propre environnement
-# d'exécution.
+# ET le dashboard, qui ont chacun leur propre environnement d'exécution. Les
+# deux requirements sont donc tirés ici — streamlit est nécessaire aux tests de
+# fumée des pages (streamlit.testing.v1.AppTest).
 -r data-pipeline/requirements.txt
+-r dashboard/requirements.txt
 pytest>=9.0
 # Épinglé : la CI et le poste local doivent signaler les mêmes écarts de lint.
 ruff==0.16.3
