@@ -18,6 +18,8 @@ jamais rencontré, et pour signaler explicitement (via UNRESOLVED_FRAGMENTS) tou
 fragment qu'elle n'a pas pu résoudre, plutôt que de le laisser passer en silence.
 """
 
+import pandas as pd
+
 # Régions modernes valides (13 métropole + DOM + Saint-Martin) — sert à repérer les
 # fragments bruts déjà "modernes" et à valider les résolutions par nom.
 MODERN_REGIONS = {
@@ -242,8 +244,3 @@ def harmonize_region(raw_region, libelle_programme):
 
     return (regions_modernes, is_interregional, is_national)
 
-
-# ============================================================================
-# Pour import de pandas dans le contexte du pipeline
-# ============================================================================
-import pandas as pd

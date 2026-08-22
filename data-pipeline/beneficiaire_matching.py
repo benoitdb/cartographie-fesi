@@ -12,8 +12,8 @@ refaire ici. Voir issue #23.
 import re
 import unicodedata
 
-from rapidfuzz import fuzz, process
 import numpy as np
+from rapidfuzz import fuzz, process
 
 SCORE_CUTOFF = 90
 

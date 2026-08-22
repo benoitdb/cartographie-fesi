@@ -1,7 +1,12 @@
 import pandas as pd
 import streamlit as st
 
-from utils.data_loader import load_data, load_programme_detail, load_programme_totals, load_region_metadata
+from utils.data_loader import (
+    load_data,
+    load_programme_detail,
+    load_programme_totals,
+    load_region_metadata,
+)
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.region_analysis import render_region_audit, render_region_ensemble, render_region_gestion

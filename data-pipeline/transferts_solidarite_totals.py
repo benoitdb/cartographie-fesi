@@ -6,7 +6,10 @@
 import json
 from pathlib import Path
 
-from reference.transferts_solidarite import PART_DOTATION_TRANSFEREE, TRANSFERTS_VERS_MOINS_DEVELOPPEES
+from reference.transferts_solidarite import (
+    PART_DOTATION_TRANSFEREE,
+    TRANSFERTS_VERS_MOINS_DEVELOPPEES,
+)
 
 OUTPUT_PATH = Path(__file__).parent.parent / "data" / "processed" / "transferts_solidarite.json"
 

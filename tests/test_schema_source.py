@@ -7,7 +7,6 @@ que rien en aval ne les signale.
 """
 
 import pytest
-
 from schema_source import (
     COLONNES_ATTENDUES,
     SchemaSourceError,

@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from utils.plot_style import format_montant, style_hover, wrap_label
+from utils.plot_style import style_hover, wrap_label
 from utils.table_style import text_widths
 
 
@@ -459,7 +459,7 @@ def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="N
 
     beneficiaire = st.selectbox(
         "Voir le détail des projets d'un bénéficiaire",
-        options=["(choisir un bénéficiaire)"] + top[group_col].tolist(),
+        options=["(choisir un bénéficiaire)", *top[group_col].tolist()],
         key=key,
     )
     if beneficiaire == "(choisir un bénéficiaire)":
@@ -528,8 +528,8 @@ def build_lorenz_beneficiaires(df, group_col="Nom du bénéficiaire", amount_col
     agg["cumule_pct_montant"] = agg[amount_col].cumsum() / total
     agg["cumule_pct_beneficiaires"] = pd.RangeIndex(1, n + 1) / n
 
-    x = [0] + agg["cumule_pct_beneficiaires"].tolist()
-    y = [0] + agg["cumule_pct_montant"].tolist()
+    x = [0, *agg["cumule_pct_beneficiaires"].tolist()]
+    y = [0, *agg["cumule_pct_montant"].tolist()]
 
     fig = go.Figure()
     fig.add_scatter(
@@ -645,9 +645,9 @@ def detect_regroupements_beneficiaire(
             )
 
     common_cols = [beneficiaire_col, "Nb opérations rapprochées", "Montant UE cumulé", "Première date", "Dernière date"]
-    petits_cols = common_cols + ["Opérations", "Programme(s)"]
-    grands_cols = common_cols[:3] + ["Coeff. de variation"] + common_cols[3:]
-    inter_fonds_cols = common_cols[:3] + ["Fonds", "Programme(s)", "Opérations"] + common_cols[3:]
+    petits_cols = [*common_cols, "Opérations", "Programme(s)"]
+    grands_cols = [*common_cols[:3], "Coeff. de variation", *common_cols[3:]]
+    inter_fonds_cols = [*common_cols[:3], "Fonds", "Programme(s)", "Opérations", *common_cols[3:]]
 
     petits = pd.DataFrame(petits_rows, columns=petits_cols) if petits_rows else pd.DataFrame(columns=petits_cols)
     grands = pd.DataFrame(grands_rows, columns=grands_cols) if grands_rows else pd.DataFrame(columns=grands_cols)
@@ -683,7 +683,7 @@ def detect_beneficiaires_multi_region(
     work["_cle"] = work[beneficiaire_col].map(lambda n: fuzzy_clusters.get(n, n))
 
     rows = []
-    for cle, group in work.groupby("_cle"):
+    for _cle, group in work.groupby("_cle"):
         regions = set()
         for r in group[region_col]:
             regions.update(r or [])

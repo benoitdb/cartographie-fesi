@@ -21,7 +21,12 @@ from utils.dromcom_localisation import build_bubbles_localisation
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.plot_style import MAP_CONFIG, build_standalone_colorbar
-from utils.region_analysis import FONDS, render_region_audit, render_region_ensemble, render_region_gestion
+from utils.region_analysis import (
+    FONDS,
+    render_region_audit,
+    render_region_ensemble,
+    render_region_gestion,
+)
 from utils.table_style import text_widths
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 
