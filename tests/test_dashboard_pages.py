@@ -71,11 +71,35 @@ def test_la_fixture_est_bien_la_source_lue(donnees_fixture):
     """Sans ce test, la suite passerait aussi bien en lisant `data/processed/`,
     présent sur le poste de développement mais absent en CI : elle serait verte
     ici et rouge là-bas, ou pire, verte des deux côtés pour deux raisons
-    différentes. On vérifie donc que ce sont bien les 400 opérations de
-    l'échantillon qui arrivent jusqu'au chargeur."""
+    différentes. On vérifie donc que c'est bien l'échantillon qui arrive jusqu'au
+    chargeur — le champ `metadata.fixture` n'existe que dans celui-ci."""
     from utils.data_loader import load_data
 
-    assert len(load_data()["operations"]) == 400
+    data = load_data()
+    assert data["metadata"].get("fixture")
+    assert len(data["operations"]) == data["metadata"]["total_operations"] == 413
+
+
+def test_la_fixture_est_auto_coherente(donnees_fixture):
+    """Ses agrégats décrivent son propre échantillon, plus le jeu complet
+    (issue #60) : chaque opération compte dans exactement une partition, et les
+    totaux par fonds couvrent tout le périmètre. C'est ce qui autorise désormais
+    une assertion sur une valeur lue depuis la fixture."""
+    from utils.data_loader import load_data
+
+    data = load_data()
+    agregats = data["aggregates"]
+
+    par_partition = (
+        sum(v["count"] for v in agregats["by_region"].values())
+        + agregats["national"]["count"]
+        + agregats["interregional"]["count"]
+    )
+    assert par_partition == len(data["operations"])
+
+    montant_total = sum(op["Montant UE"] for op in data["operations"] if op["Montant UE"])
+    montant_par_fonds = sum(v["montant_ue_total"] for v in agregats["by_fonds"].values())
+    assert montant_par_fonds == pytest.approx(montant_total)
 
 
 def test_les_quatre_pages_sont_couvertes():
