@@ -107,3 +107,15 @@ def test_les_quatre_pages_sont_couvertes():
     passerait autrement inaperçue, et la suite resterait verte en ne couvrant
     plus tout le dashboard."""
     assert len(PAGES) == 4, f"pages trouvées : {[p.name for p in PAGES]}"
+
+
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.stem)
+def test_la_fraicheur_des_donnees_est_affichee(page, donnees_fixture):
+    """La source est republiée 5 fois par an : la date de l'export doit être
+    lisible sur **chaque** page, pas seulement sur celle où on a pensé à
+    l'ajouter (issue #47). Ce test échoue si une page nouvelle oublie l'appel."""
+    at = AppTest.from_file(str(page), default_timeout=120).run()
+
+    assert any("export du 16/03/2026" in c.value for c in at.sidebar.caption), (
+        f"{page.name} n'affiche pas le millésime des données"
+    )

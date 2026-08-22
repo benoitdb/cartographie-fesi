@@ -57,6 +57,9 @@ _ESPACES_RE = re.compile(r"\s+")
 
 _MOTIF_FICHIER_SOURCE = "*_liste_operations_conventionnees_*.xlsx"
 
+# Préfixe daté du nom de fichier : « 20260316_liste_operations_... ».
+_MILLESIME_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})_")
+
 
 class SchemaSourceError(Exception):
     """Le fichier source ne correspond pas au schéma attendu."""
@@ -119,3 +122,19 @@ def trouver_fichier_source(repertoire_raw):
             "liste-operations-feder-fse-ftj-2021-2027"
         )
     return fichiers[-1]
+
+
+def millesime_du_fichier(chemin):
+    """Date de l'export, extraite du préfixe du nom de fichier, au format ISO
+    (« 20260316_liste_operations_... » → « 2026-03-16 »).
+
+    Cette date accompagne les données jusqu'au dashboard, qui l'affiche : sans
+    elle, rien à l'écran ne distingue des chiffres du jour d'un millésime vieux
+    de plusieurs mois, alors que la source est republiée 5 fois par an
+    (issue #47).
+
+    Retourne None si le nom ne porte pas ce préfixe — un fichier renommé à la
+    main reste exploitable, il perd seulement l'affichage de sa date.
+    """
+    correspondance = _MILLESIME_RE.match(chemin.name)
+    return "-".join(correspondance.groups()) if correspondance else None

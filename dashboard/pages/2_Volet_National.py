@@ -8,6 +8,7 @@ from utils.data_loader import (
     load_region_metadata,
 )
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
+from utils.millesime import render_millesime
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.region_analysis import render_region_audit, render_region_ensemble, render_region_gestion
 
@@ -16,6 +17,7 @@ st.set_page_config(page_title="Volet National - Cartographie FESI", layout="wide
 data = load_data()
 
 selected_fonds = render_fonds_filter()
+render_millesime(data.get("metadata"))
 filtre_actif = set(selected_fonds) != set(FONDS_OPTIONS)
 
 st.title("Volet National")
