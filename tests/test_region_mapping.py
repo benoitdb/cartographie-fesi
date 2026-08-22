@@ -6,7 +6,6 @@ alors des chiffres plausibles et faux.
 """
 
 import pytest
-
 from region_mapping import get_unresolved, harmonize_region, reset_unresolved
 
 

@@ -2,8 +2,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.plot_style import style_hover
 from utils.cofinancement import plafond_categorie
+from utils.plot_style import style_hover
 from utils.stats import (
     build_boxplot,
     build_cofinancement_categorie_chart,

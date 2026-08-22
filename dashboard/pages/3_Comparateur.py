@@ -3,7 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 from utils.data_loader import load_data, load_programme_totals, load_region_metadata
-from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
+from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.plot_style import style_hover
 from utils.themes import FONDS_COLORS
 

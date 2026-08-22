@@ -2,8 +2,8 @@
 est hétérogène (cf. commentaires dans parse_departement_field) — le pipeline de données
 n'est pas modifié, cette normalisation est propre à l'affichage du dashboard."""
 
-from pathlib import Path
 import json
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px

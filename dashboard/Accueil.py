@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from utils.cofinancement import bucket_categorie, plafond_categorie
 from utils.data_loader import (
     load_beneficiaires_fuzzy,
     load_data,
@@ -13,9 +14,15 @@ from utils.data_loader import (
     load_region_metadata,
     load_transferts_solidarite,
 )
-from utils.cofinancement import bucket_categorie, plafond_categorie
 from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter, summarize_ops
 from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage, render_kpi_pilotage
+from utils.plot_style import (
+    MAP_CONFIG,
+    build_standalone_colorbar,
+    disable_map_interaction,
+    style_hover,
+    style_map_background,
+)
 from utils.stats import (
     build_boxplot,
     build_cofinancement_categorie_chart,
@@ -27,14 +34,13 @@ from utils.stats import (
     build_portfolio_scatter,
     compute_cofinancement_table,
     compute_stats_table,
+    detect_beneficiaires_multi_region,
     detect_cofinancement_outliers,
     detect_incoherent_cofinancement,
-    detect_beneficiaires_multi_region,
     detect_outliers,
     detect_regroupements_beneficiaire,
     render_top_beneficiaires_drilldown,
 )
-from utils.plot_style import MAP_CONFIG, build_standalone_colorbar, disable_map_interaction, style_hover, style_map_background
 from utils.table_style import text_widths
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
 from utils.treemap import build_hierarchy_treemap
