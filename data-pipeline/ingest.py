@@ -78,8 +78,16 @@ def prepare_for_json(df):
 
 df_json = prepare_for_json(df)
 
-# Exporter les opérations brutes
-print("💾 Export des opérations brutes...")
+# Opérations sérialisables, reprises telles quelles dans data.json plus bas.
+#
+# Elles étaient aussi écrites à part dans operations.json, retiré (issue #46) :
+# 44 Mo par régénération pour un fichier que personne ne lisait. Ce n'était pas
+# un vestige du prototype React — il est né avec le dépôt (commit initial, qui ne
+# contenait que le pipeline), data.json embarquait déjà la même liste dès ce
+# commit, et le frontend chargeait data.json, jamais celui-ci. Un doublon dès la
+# première ligne, donc, pas un usage disparu : rien à restaurer si la question
+# se repose.
+print("🧹 Préparation des opérations...")
 operations = df_json.to_dict(orient='records')
 
 # Nettoyer les NaN qui auraient échappé à la conversion
@@ -93,9 +101,6 @@ def clean_nans(obj):
     return obj
 
 operations = clean_nans(operations)
-
-with open(OUTPUT_DIR / "operations.json", 'w', encoding='utf-8') as f:
-    json.dump(operations, f, ensure_ascii=False, indent=2)
 
 # Calculer les agrégats (respecte la structure : by_region, national, interregional, etc.)
 print("📊 Calcul des agrégats harmonisés...")
@@ -257,8 +262,7 @@ with open(OUTPUT_DIR / "data.json", 'w', encoding='utf-8') as f:
 
 print("\n✅ Pipeline terminé !")
 print(f"   📁 Fichiers générés dans: {OUTPUT_DIR}")
-print(f"   - operations.json ({len(operations)} opérations)")
-print("   - data.json (opérations + agrégats harmonisés)")
+print(f"   - data.json ({len(operations)} opérations + agrégats harmonisés)")
 print("\n📊 Résumé harmonisé:")
 print(f"   Régions harmonisées: {len(aggregates['by_region'])} (brutes: {df[COLS['region']].nunique()})")
 print(f"   Fonds: {df[COLS['fonds']].nunique()}")

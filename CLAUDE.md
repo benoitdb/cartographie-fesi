@@ -38,7 +38,7 @@ racine pour les tests (`requirements-dev.txt`).
 - **Régénérer les données** — depuis `data-pipeline/`, `ingest.py` d'abord car
   les autres scripts en dépendent :
   ```
-  python ingest.py                        # XLSX -> data.json + operations.json
+  python ingest.py                        # XLSX -> data.json
   python beneficiaires_fuzzy.py           # lit data.json, écrit beneficiaires_fuzzy.json
   python programme_totals.py              # Tableau 9B  -> programme_totals.json + programme_detail.json
   python dotations_os_totals.py           # Tableau 8   -> dotations_os.json
@@ -88,8 +88,8 @@ racine pour les tests (`requirements-dev.txt`).
 ## Pièges non devinables
 
 - **Un clone frais ne tourne pas.** `data/raw/*.xlsx` et les JSON qui en
-  dérivent (`data.json`, `operations.json`, `beneficiaires_fuzzy.json`) sont
-  gitignorés. Il faut récupérer le XLSX source et relancer le pipeline.
+  dérivent (`data.json`, `beneficiaires_fuzzy.json`) sont gitignorés. Il faut
+  récupérer le XLSX source et relancer le pipeline.
 - **Source du XLSX** :
   [europe-en-france.gouv.fr — liste des opérations FEDER/FSE+/FTJ 2021-2027](https://www.europe-en-france.gouv.fr/fr/ressources/liste-operations-feder-fse-ftj-2021-2027).
   Version utilisée : `20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx`.
