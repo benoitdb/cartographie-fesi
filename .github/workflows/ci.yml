@@ -3,9 +3,10 @@ name: CI
 # Les tests ne valent que s'ils tournent sans qu'on y pense : sans CI, une suite
 # de tests devient un fichier qu'on oublie de lancer.
 #
-# Tous les tests de ce dépôt sont volontairement autonomes : ils ne lisent ni le
-# XLSX source ni les JSON générés (ni l'un ni l'autre n'étant versionnés), ils
-# éprouvent la logique sur des cas construits. La CI tourne donc sur un clone nu.
+# Tous les tests de ce dépôt tournent sur un clone nu : aucun ne lit le XLSX
+# source ni les JSON générés, qui ne sont pas versionnés. Les tests du pipeline
+# éprouvent la logique sur des cas construits ; ceux du dashboard lisent la
+# fixture committée dans tests/fixtures/ (voir son README).
 on:
   push:
     branches: [main]
@@ -26,9 +27,10 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       # Lint seulement : `ruff format` n'est pas activé sur ce dépôt. Reformater
-      # 29 fichiers sur 38 (~3 300 lignes) sur une couche dashboard sans tests
-      # produirait un diff que rien ne valide. À reconsidérer quand la couverture
-      # de tests s'étendra au dashboard.
+      # 29 fichiers sur 38 (~3 300 lignes) produirait un diff que rien ne valide.
+      # Le dashboard a désormais des tests de fumée, mais ils ne prouvent que
+      # l'absence d'exception — pas que l'affichage est inchangé. À reconsidérer
+      # quand la couche de calcul sera couverte.
       - name: Lint
         run: ruff check .
 

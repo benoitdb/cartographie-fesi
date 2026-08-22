@@ -50,9 +50,14 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (31 tests, instantanés). Ils sont
-  autonomes : aucun ne lit le XLSX ni les JSON générés, ils tournent sur un
-  clone nu et en CI. Environnement de test à la racine : `requirements-dev.txt`.
+- **Tests** : `venv/bin/python -m pytest -q` (37 tests, ~6 s). Ils tournent sur
+  un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
+  pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
+  lisent la fixture committée dans `tests/fixtures/` (voir son README —
+  **à régénérer quand le schéma de `data.json` change**).
+  Environnement de test à la racine : `requirements-dev.txt`, qui tire
+  maintenant *aussi* `dashboard/requirements.txt` (streamlit est nécessaire aux
+  tests de fumée).
 - **Lint** : `ruff check .` (config dans `pyproject.toml`), lancé en CI sur
   chaque PR. **`ruff format` n'est volontairement pas activé** : reformater 29
   fichiers sur 38 (~3 300 lignes) sur une couche dashboard sans tests produirait
@@ -134,10 +139,20 @@ couleur sur toutes les pages.
 
 **Vérification** : le pipeline a des tests (harmonisation des régions,
 rapprochement des bénéficiaires, schéma du fichier source) — les lancer et les
-étendre. Le **dashboard n'en a pas** : toute modification touchant un calcul ou
-un affichage s'y vérifie en lançant réellement l'application et en regardant le
-résultat, pas en supposant. Ne pas annoncer qu'un changement fonctionne sans
-l'avoir affiché.
+étendre.
+
+Le dashboard a des **tests de fumée** (`tests/test_dashboard_pages.py`) : ils
+rendent les 4 pages en headless via `streamlit.testing.v1.AppTest` et
+n'attrapent que l'exception — import cassé, colonne renommée, fichier manquant.
+**Ils ne disent rien de la justesse des chiffres ni de l'allure des pages.**
+Toute modification touchant un calcul ou un affichage se vérifie donc toujours
+en lançant réellement l'application et en regardant le résultat. Ne pas
+annoncer qu'un changement fonctionne parce que la suite est verte.
+
+Sur un changement touchant le pipeline, la vérification qui compte est de
+**régénérer `data.json` et de le comparer au bit près** à une copie prise avant
+modification (`aggregates` et `operations`) : les tests ne couvrent pas les
+agrégats.
 
 **GitHub issues — AI-driven dev, pas du vibe-coding** : toute limitation
 connue, gotcha, piste d'évolution ou choix technique non trivial pris de façon
@@ -149,7 +164,11 @@ absente) — les documenter comme telles plutôt que de les abandonner en silenc
 
 **Couverture de test, état** : le pipeline est couvert sur ses points de
 rupture silencieuse (schéma du fichier source, harmonisation des régions,
-rapprochement des bénéficiaires). **Le dashboard ne l'est pas du tout** —
-~3 000 lignes dans `dashboard/`, dont les calculs de `utils/stats.py`,
-`utils/cofinancement.py` et `utils/pilotage.py`. C'est le prochain manque connu,
-et la couche de calcul y est prioritaire sur la couche d'affichage.
+rapprochement des bénéficiaires) — **sauf le calcul d'agrégats**, écrit à plat
+dans `ingest.py` et donc non testable en l'état
+([issue #60](https://github.com/benoitdb/cartographie-fesi/issues/60)).
+
+Le dashboard n'a que des tests de fumée. **La couche de calcul reste non
+couverte** : `utils/stats.py`, `utils/cofinancement.py`, `utils/pilotage.py`.
+C'est le prochain manque connu, et il est prioritaire sur l'affichage — c'est
+là que naissent les chiffres faux.
