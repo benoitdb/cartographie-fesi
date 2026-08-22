@@ -17,23 +17,29 @@ toute future fixture issue de données réelles, le caractère personnel
 s'**investigue avant**, il ne se suppose pas. À défaut : fixture synthétique ou
 sous-ensemble anonymisé.
 
-## Ce que la fixture n'est pas
+## Elle est auto-cohérente
 
-**Elle ne sert pas à des assertions sur des valeurs.** Le bloc `aggregates` de
-`data.json` est repris **tel quel** du fichier complet : il décrit les 16 625
-opérations, pas les 400 de l'échantillon. Un test qui comparerait un total
-affiché à un total attendu serait donc faux — et le champ
-`metadata.fixture` le rappelle dans le fichier lui-même.
+Ses blocs `aggregates` et `metadata` sont **recalculés sur l'échantillon**, par
+le même code que le pipeline (`data-pipeline/agregats.py`) — un total lu dans la
+fixture décrit donc bien ses 413 opérations. C'est ce qui autorise une assertion
+sur une valeur, ce que la version précédente interdisait : elle reprenait le
+bloc `aggregates` du fichier complet, décrivant 16 625 opérations
+([issue #60](https://github.com/benoitdb/cartographie-fesi/issues/60), levée par
+l'extraction du calcul hors d'`ingest.py`).
 
-Rendre la fixture auto-cohérente supposerait de rejouer le calcul d'agrégats,
-qui est aujourd'hui écrit à plat dans `data-pipeline/ingest.py` et n'est pas
-réutilisable ([issue #60](https://github.com/benoitdb/cartographie-fesi/issues/60)).
+`test_la_fixture_est_auto_coherente` le vérifie à chaque exécution : chaque
+opération compte dans exactement une partition, et la somme par fonds couvre
+tout le périmètre.
+
+**Ce qu'elle ne prouve toujours pas** : les tests de fumée n'attrapent que
+l'exception, pas l'allure des pages. Une vérification visuelle reste nécessaire
+sur tout changement d'affichage.
 
 ## Contenu
 
 | Fichier | Origine |
 |---|---|
-| `data.json` | 400 opérations (20 par région, les 3 fonds représentés) + `aggregates` complet. Le champ `Objectifs et réalisations escomptés et effectifs` est tronqué à 200 caractères : il pèse 61,5 % du fichier réel et n'est lu nulle part dans `dashboard/`. |
+| `data.json` | 413 opérations : 20 par région (les 3 fonds représentés) + les 13 interrégionales, trop rares pour survivre à un échantillonnage par région alors que le dashboard lit `aggregates["interregional"]` sans valeur par défaut. `aggregates` et `metadata` recalculés dessus. Le champ `Objectifs et réalisations escomptés et effectifs` est tronqué à 200 caractères : il pèse 61,5 % du fichier réel et n'est lu nulle part dans `dashboard/`. |
 | `beneficiaires_fuzzy.json` | copie intégrale (8 Ko) |
 | `transferts_solidarite.json` | copie intégrale (< 1 Ko) |
 

@@ -50,7 +50,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (95 tests, ~7 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (112 tests, ~7 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent la fixture committée dans `tests/fixtures/` (voir son README —
@@ -74,7 +74,10 @@ racine pour les tests (`requirements-dev.txt`).
 - `dashboard/` — application Streamlit. `Accueil.py` = point d'entrée,
   `pages/` = pages multipage, `utils/` = toute la logique (chargement, calculs,
   styles, thèmes)
-- `data-pipeline/` — scripts de transformation, un par sortie JSON
+- `data-pipeline/` — scripts de transformation, un par sortie JSON.
+  `agregats.py` et `schema_source.py` font exception : ce sont des modules
+  importés (par `ingest.py`, et par le générateur de fixture pour le premier),
+  pas des scripts à lancer.
 - `data-pipeline/reference/` — **données réglementaires saisies à la main**
   depuis l'Accord de partenariat 2021-2027 (tableaux 3A/3B, 8, 9B, 10), NUTS,
   catégories de cohésion UE. C'est la source de vérité des montants *programmés*,
@@ -149,10 +152,11 @@ Toute modification touchant un calcul ou un affichage se vérifie donc toujours
 en lançant réellement l'application et en regardant le résultat. Ne pas
 annoncer qu'un changement fonctionne parce que la suite est verte.
 
-Sur un changement touchant le pipeline, la vérification qui compte est de
+Sur un changement touchant le pipeline, la vérification qui compte reste de
 **régénérer `data.json` et de le comparer au bit près** à une copie prise avant
-modification (`aggregates` et `operations`) : les tests ne couvrent pas les
-agrégats.
+modification (`aggregates` et `operations`). Les tests couvrent désormais le
+calcul d'agrégats, mais sur des cas construits : seule la régénération éprouve
+le pipeline sur les 16 625 opérations réelles.
 
 **GitHub issues — AI-driven dev, pas du vibe-coding** : toute limitation
 connue, gotcha, piste d'évolution ou choix technique non trivial pris de façon
@@ -163,10 +167,12 @@ aussi de backlog de pistes explorées et bloquées (source manquante, donnée
 absente) — les documenter comme telles plutôt que de les abandonner en silence.
 
 **Couverture de test, état** : le pipeline est couvert sur ses points de
-rupture silencieuse (schéma du fichier source, harmonisation des régions,
-rapprochement des bénéficiaires) — **sauf le calcul d'agrégats**, écrit à plat
-dans `ingest.py` et donc non testable en l'état
-([issue #60](https://github.com/benoitdb/cartographie-fesi/issues/60)).
+rupture silencieuse — schéma du fichier source, harmonisation des régions,
+rapprochement des bénéficiaires, et **calcul d'agrégats** depuis son extraction
+dans `data-pipeline/agregats.py` (PR #65, issue #60). Ce module est le seul
+endroit où se calculent les totaux servis au dashboard : `ingest.py` l'appelle,
+et `tests/fixtures/generer_fixture.py` aussi, ce qui rend la fixture de test
+auto-cohérente.
 
 **La couche de calcul est couverte** depuis la PR #63 :
 `tests/test_stats_calculs.py`, `tests/test_cofinancement_regles.py`,
