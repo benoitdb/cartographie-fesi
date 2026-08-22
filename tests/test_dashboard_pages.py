@@ -7,8 +7,9 @@ la plus probable sur ~3 000 lignes de `dashboard/` sans aucun test.
 
 Ce qu'ils ne prouvent PAS : que les chiffres affichés sont justes. La fixture
 n'est pas auto-cohérente (voir tests/fixtures/README.md) et aucune valeur n'est
-comparée ici. Tester la couche de calcul reste le manque connu — et il est
-prioritaire sur l'affichage.
+comparée ici. C'est le rôle des tests de la couche de calcul
+(`test_stats_calculs.py`, `test_cofinancement_regles.py`,
+`test_pilotage_calculs.py`), qui n'affichent rien mais vérifient des valeurs.
 """
 
 import sys

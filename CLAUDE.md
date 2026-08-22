@@ -50,7 +50,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (37 tests, ~6 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (95 tests, ~7 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent la fixture committée dans `tests/fixtures/` (voir son README —
@@ -168,7 +168,21 @@ rapprochement des bénéficiaires) — **sauf le calcul d'agrégats**, écrit à
 dans `ingest.py` et donc non testable en l'état
 ([issue #60](https://github.com/benoitdb/cartographie-fesi/issues/60)).
 
-Le dashboard n'a que des tests de fumée. **La couche de calcul reste non
-couverte** : `utils/stats.py`, `utils/cofinancement.py`, `utils/pilotage.py`.
-C'est le prochain manque connu, et il est prioritaire sur l'affichage — c'est
-là que naissent les chiffres faux.
+**La couche de calcul est couverte** depuis la PR #63 :
+`tests/test_stats_calculs.py`, `tests/test_cofinancement_regles.py`,
+`tests/test_pilotage_calculs.py` (58 tests sur des cas construits, valeurs
+attendues posées à la main). Priorité y est donnée aux invariants documentés et
+aux régressions déjà constatées : bornes IQR par fonds, montant manquant devenu
+`NaN`, reste à engager calculé par fonds, dépassement d'enveloppe jamais
+tronqué. **Chaque test a été vu échouer** sur une mutation du code qu'il
+protège, avant d'être livré — un test vert qui ne peut pas rougir ne protège
+rien.
+
+Un calcul est encore enfoui dans un rendu (`render_kpi_pilotage`) et n'est donc
+testable qu'indirectement, en relisant le texte affiché via `AppTest`
+([issue #62](https://github.com/benoitdb/cartographie-fesi/issues/62)).
+
+Restent hors couverture, sciemment : la mise en forme des figures (couleurs,
+libellés, survols) hors des cas où elle porte un calcul, et les fonctions de
+`stats.py` purement graphiques (histogramme, boîte à moustaches, nuages,
+Pareto, Lorenz) — leur justesse se voit à l'écran, pas dans une assertion.
