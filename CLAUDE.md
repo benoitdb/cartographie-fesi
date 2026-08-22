@@ -58,9 +58,11 @@ racine pour les tests (`requirements-dev.txt`).
   fichiers sur 38 (~3 300 lignes) sur une couche dashboard sans tests produirait
   un diff que rien ne valide. À reconsidérer quand les tests couvriront le
   dashboard.
-  Une ligne de base de règles est ignorée à titre **transitoire**, chacune avec
-  son issue (#50 à #54) — retirer la ligne d'`ignore` fait partie de la
-  correction. Ne pas en ajouter de nouvelles sans ouvrir l'issue qui va avec.
+  La ligne de base transitoire (issues #50 à #54) est **soldée** depuis la
+  PR #59 : `ignore` ne contient plus que `RUF001/002/003`, qui concernent les
+  apostrophes typographiques et espaces insécables du français et sont
+  permanentes. **Ne pas ajouter d'`ignore` sans ouvrir l'issue qui va avec** —
+  et la retirer fait partie de la correction.
 
 ## Quoi (repo map)
 
