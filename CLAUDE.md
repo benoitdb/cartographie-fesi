@@ -50,7 +50,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (122 tests, ~10 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (126 tests, ~11 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent la fixture committée dans `tests/fixtures/` (voir son README —
@@ -188,9 +188,11 @@ tronqué. **Chaque test a été vu échouer** sur une mutation du code qu'il
 protège, avant d'être livré — un test vert qui ne peut pas rougir ne protège
 rien.
 
-Un calcul est encore enfoui dans un rendu (`render_kpi_pilotage`) et n'est donc
-testable qu'indirectement, en relisant le texte affiché via `AppTest`
-([issue #62](https://github.com/benoitdb/cartographie-fesi/issues/62)).
+Les règles de calcul du pilotage (`reste_a_engager`, `taux_consommation`) sont
+sorties du rendu et testées directement (issue #62) ; le test `AppTest` qui reste
+ne garde que le câblage jusqu'à l'écran. **Faire de même pour tout calcul qu'on
+ajouterait dans une fonction `render_*`** : une règle métier ne se teste pas à
+travers une chaîne de caractères affichée.
 
 Restent hors couverture, sciemment : la mise en forme des figures (couleurs,
 libellés, survols) hors des cas où elle porte un calcul, et les fonctions de

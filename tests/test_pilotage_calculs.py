@@ -10,8 +10,11 @@ coup, à la suite d'un chiffre faux constaté à l'écran, et doivent le rester 
   masqués par le dépassement FSE+) ;
 - un dépassement s'affiche (rouge, ⚠️) plutôt que de se faire tronquer à 100%.
 
-`render_kpi_pilotage` étant une fonction de rendu, on l'éprouve via `AppTest`
-sur les valeurs effectivement écrites, pas sur un calcul intermédiaire.
+Ces deux règles se testaient d'abord à travers le rendu, faute de fonction à
+appeler. Elles sont désormais portées par `reste_a_engager` et
+`taux_consommation` (issue #62), testées directement ici ; le test `AppTest` qui
+subsiste ne garde plus que le **câblage** — que la valeur calculée atteigne bien
+l'écran.
 """
 
 import sys
@@ -33,9 +36,40 @@ from utils.pilotage import (  # noqa: E402
     build_fonds_mini_bar,
     build_ranking_programme_vs_engage,
     build_trajectoire,
+    reste_a_engager,
+    taux_consommation,
 )
 
-# --- Bloc KPI : le reste à engager agrégé --------------------------------------
+# --- Règles de calcul, testées directement -------------------------------------
+
+
+def test_le_reste_a_engager_somme_les_restes_par_fonds():
+    """200 M€ (le reliquat FEDER), pas 150 M€ : la soustraction globale
+    (1 100 − 950) laisserait le dépassement FSE+ effacer 50 M€ de FEDER encore à
+    engager."""
+    df = pd.DataFrame(
+        {"fonds": ["FEDER", "FSE+"], "programme": [1_000e6, 100e6], "engage": [800e6, 150e6]}
+    )
+    assert reste_a_engager(df) == 200e6
+
+
+def test_le_reste_d_un_fonds_ne_descend_jamais_sous_zero():
+    df = pd.DataFrame({"fonds": ["FSE+"], "programme": [100.0], "engage": [150.0]})
+    assert reste_a_engager(df) == 0
+
+
+def test_le_taux_de_consommation_depasse_1_sans_etre_plafonne():
+    """Le plafonner ici masquerait le dépassement partout où ce taux est
+    affiché — c'est précisément ce qu'il faut voir."""
+    assert taux_consommation(150.0, 100.0) == 1.5
+
+
+def test_un_taux_sans_enveloppe_programmee_vaut_zero():
+    """Pas une division par zéro, pas None : le taux est affiché tel quel."""
+    assert taux_consommation(500.0, 0) == 0
+
+
+# --- Bloc KPI : le câblage jusqu'à l'écran --------------------------------------
 
 
 def _script_kpi_avec_depassement():
@@ -55,9 +89,10 @@ def _script_kpi_avec_depassement():
     render_kpi_pilotage(df, df["programme"].sum(), df["engage"].sum())
 
 
-def test_un_depassement_sur_un_fonds_ne_masque_pas_le_reste_d_un_autre():
-    """200 M€ (reste FEDER), pas 150 M€ (1 100 − 950 en agrégé) : la soustraction
-    globale ferait disparaître 50 M€ de FEDER encore à engager."""
+def test_le_reste_calcule_atteint_bien_l_ecran():
+    """La règle elle-même est testée plus haut sur `reste_a_engager` ; ce test
+    ne garde que le câblage — c'est le seul endroit où une erreur de branchement
+    (bonne fonction, mauvaise variable affichée) se verrait."""
     at = AppTest.from_function(_script_kpi_avec_depassement, default_timeout=60).run()
 
     assert not at.exception
