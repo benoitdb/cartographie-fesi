@@ -1,0 +1,393 @@
+{
+  "source_id": "2014-2020-synergie",
+  "source_label": "Synergie national (FEDER/FSE/IEJ/FEAD)",
+  "periode": "2014-2020",
+  "fichier_source": "liste_operations_synergie_1420_08_2023.xlsx",
+  "date_source": "2023-08-30",
+  "date_generation": "2026-08-24",
+  "profil": {
+    "volumetrie": {
+      "operations": 24908,
+      "colonnes": 19
+    },
+    "completude": {
+      "numero_operation": {
+        "libelle": "Numéro Opération",
+        "remplis": 24908,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "programme": {
+        "libelle": "Libellé programme",
+        "remplis": 24908,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "beneficiaire": {
+        "libelle": "Nom du bénéficiaire",
+        "remplis": 24908,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "fonds": {
+        "libelle": "Fonds",
+        "remplis": 24908,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "region": {
+        "libelle": "Région de l'opération",
+        "remplis": 4087,
+        "manquants": 20821,
+        "taux": 16.4
+      },
+      "departement": {
+        "libelle": "Département de l’opération",
+        "remplis": 3686,
+        "manquants": 21222,
+        "taux": 14.8
+      },
+      "dimension_thematique": {
+        "libelle": "Domaine d’intervention",
+        "remplis": 0,
+        "manquants": 24908,
+        "taux": 0.0
+      },
+      "date_programmation": {
+        "libelle": "Date de programmation",
+        "remplis": 24904,
+        "manquants": 4,
+        "taux": 100.0
+      },
+      "montant_ue": {
+        "libelle": "Montant UE programmé",
+        "remplis": 24908,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "depenses": {
+        "libelle": "Total des dépenses éligibles programmées",
+        "remplis": 24908,
+        "manquants": 0,
+        "taux": 100.0
+      }
+    },
+    "par_fonds": [
+      {
+        "fonds": "FEDER",
+        "nb": 18094,
+        "montant_ue": 8686548698.810001,
+        "part_nb": 72.6,
+        "part_montant": 70.3
+      },
+      {
+        "fonds": "FSE",
+        "nb": 4126,
+        "montant_ue": 1848119025.8200002,
+        "part_nb": 16.6,
+        "part_montant": 15.0
+      },
+      {
+        "fonds": "FEDER REACT-EU",
+        "nb": 593,
+        "montant_ue": 846347510.1,
+        "part_nb": 2.4,
+        "part_montant": 6.8
+      },
+      {
+        "fonds": "FEAD",
+        "nb": 688,
+        "montant_ue": 487204985.55,
+        "part_nb": 2.8,
+        "part_montant": 3.9
+      },
+      {
+        "fonds": "IEJ",
+        "nb": 1259,
+        "montant_ue": 410444028.18000007,
+        "part_nb": 5.1,
+        "part_montant": 3.3
+      },
+      {
+        "fonds": "FEDER-FSE",
+        "nb": 148,
+        "montant_ue": 82593988.82,
+        "part_nb": 0.6,
+        "part_montant": 0.7
+      }
+    ],
+    "programmes": {
+      "distincts": 30,
+      "top": [
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Centre-Val de Loire 2014-2020",
+          "nb": 2150
+        },
+        {
+          "valeur": "Programme opérationnel FEDER Réunion Conseil Régional 2014-2020",
+          "nb": 2094
+        },
+        {
+          "valeur": "Programme Opérationnel Feder FSE Lorraine et massif des Vosges 2014-2020",
+          "nb": 1890
+        },
+        {
+          "valeur": "Programme Opérationnel FEDER-FSE Languedoc-Roussillon 2014-2020",
+          "nb": 1458
+        },
+        {
+          "valeur": "Programme Opérationnel FEDER-FSE Bourgogne 2014- 2020",
+          "nb": 1448
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Midi-Pyrénées et Garonne 2014-2020",
+          "nb": 1300
+        },
+        {
+          "valeur": "Programme opérationnel régional Auvergne FEDER-FSE 2014-2020",
+          "nb": 1191
+        },
+        {
+          "valeur": "Programme Opérationnel FEDER-FSE Nord-Pas de Calais 2014-2020",
+          "nb": 1126
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Ile-de-France et Bassin de Seine 2014-2020",
+          "nb": 1108
+        },
+        {
+          "valeur": "Programme opérationnel FEDER FSE IEJ Champagne Ardenne 2014-2020",
+          "nb": 1099
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Guadeloupe Conseil Régional 2014-2020",
+          "nb": 1093
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Martinique Conseil Régional 2014-2020",
+          "nb": 1062
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Picardie 2014-2020",
+          "nb": 1017
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Rhône-Alpes 2014-2020",
+          "nb": 994
+        },
+        {
+          "valeur": "Programme opérationnel des Pays de la Loire",
+          "nb": 908
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Franche-Comté et massif du Jura 2014-2020",
+          "nb": 727
+        },
+        {
+          "valeur": "Programme opérationnel FEAD 2014-2020",
+          "nb": 688
+        },
+        {
+          "valeur": "Programme opérationnel FEDER-FSE Guyane 2014-2020",
+          "nb": 483
+        },
+        {
+          "valeur": "Programme opérationnel interrégionnal Massif Central FEDER 2014-2020",
+          "nb": 450
+        },
+        {
+          "valeur": "Programme opérationnel Interrégional FEDER Loire 2014-2020",
+          "nb": 416
+        }
+      ]
+    },
+    "regions": {
+      "colonne_remplie": 4087,
+      "taux_colonne_remplie": 16.4,
+      "valeurs_distinctes": 96,
+      "top": [
+        {
+          "valeur": "26/Bourgogne",
+          "nb": 522
+        },
+        {
+          "valeur": "04/La Réunion",
+          "nb": 475
+        },
+        {
+          "valeur": "22/Picardie",
+          "nb": 276
+        },
+        {
+          "valeur": "31/Nord-Pas-de-Calais",
+          "nb": 252
+        },
+        {
+          "valeur": "91/Languedoc-Roussillon",
+          "nb": 239
+        },
+        {
+          "valeur": "82/Rhône-Alpes",
+          "nb": 234
+        },
+        {
+          "valeur": "11/Île-de-France",
+          "nb": 231
+        },
+        {
+          "valeur": "24/Centre",
+          "nb": 220
+        },
+        {
+          "valeur": "41/Lorraine",
+          "nb": 191
+        },
+        {
+          "valeur": "73/Midi-Pyrénées",
+          "nb": 187
+        },
+        {
+          "valeur": "83/Auvergne",
+          "nb": 184
+        },
+        {
+          "valeur": "43/Franche-Comté",
+          "nb": 184
+        },
+        {
+          "valeur": "01/Guadeloupe",
+          "nb": 129
+        },
+        {
+          "valeur": "42/Alsace",
+          "nb": 125
+        },
+        {
+          "valeur": "21/Champagne-Ardenne",
+          "nb": 123
+        },
+        {
+          "valeur": "52/Pays de la Loire",
+          "nb": 120
+        },
+        {
+          "valeur": "93/Provence-Alpes-Côte d'Azur",
+          "nb": 55
+        },
+        {
+          "valeur": "94/Corse",
+          "nb": 52
+        },
+        {
+          "valeur": "03/Guyane",
+          "nb": 32
+        },
+        {
+          "valeur": "82/Rhône-Alpes | 83/Auvergne",
+          "nb": 23
+        },
+        {
+          "valeur": "43/Franche-Comté | 93/Provence-Alpes-Côte d'Azur | 82/Rhône-Alpes | 26/Bourgogne | 91/Languedoc-Roussillon",
+          "nb": 18
+        },
+        {
+          "valeur": "02/Martinique",
+          "nb": 16
+        },
+        {
+          "valeur": "74/Limousin",
+          "nb": 15
+        },
+        {
+          "valeur": "83/Auvergne | 82/Rhône-Alpes",
+          "nb": 14
+        },
+        {
+          "valeur": "93/Provence-Alpes-Côte d'Azur | 82/Rhône-Alpes | 91/Languedoc-Roussillon",
+          "nb": 14
+        }
+      ],
+      "manquantes_par_fonds": [
+        {
+          "valeur": "FEDER",
+          "nb": 15472
+        },
+        {
+          "valeur": "FSE",
+          "nb": 2908
+        },
+        {
+          "valeur": "IEJ",
+          "nb": 1172
+        },
+        {
+          "valeur": "FEAD",
+          "nb": 683
+        },
+        {
+          "valeur": "FEDER REACT-EU",
+          "nb": 487
+        },
+        {
+          "valeur": "FEDER-FSE",
+          "nb": 99
+        }
+      ]
+    },
+    "region_derivable": {
+      "programmes_distincts": 30,
+      "programmes_avec_region": 23,
+      "operations_resolues": 22690,
+      "taux_operations_resolues": 91.1,
+      "programmes_sans_region_unique": [
+        "PNAT Europ'Act 2014-2020",
+        "Programme opérationnel FEAD 2014-2020",
+        "Programme opérationnel Interrégional FEDER Loire 2014-2020",
+        "Programme opérationnel Interrégional FEDER Pyrénées 2014-2020",
+        "Programme opérationnel Interrégional FEDER Rhône-Saône 2014-2020",
+        "Programme opérationnel Interrégional FEDER du Massif des Alpes 2014-2020",
+        "Programme opérationnel interrégionnal Massif Central FEDER 2014-2020"
+      ]
+    },
+    "dimension_thematique": {
+      "libelle": "Domaine d’intervention",
+      "taux_remplie": 0.0,
+      "distincts": 0,
+      "top": []
+    },
+    "dates": {
+      "illisibles": 4,
+      "annee_min": 2014,
+      "annee_max": 2023,
+      "par_annee": {
+        "2014": 156,
+        "2015": 1899,
+        "2016": 2143,
+        "2017": 2998,
+        "2018": 3627,
+        "2019": 2957,
+        "2020": 3275,
+        "2021": 3233,
+        "2022": 3250,
+        "2023": 1366
+      }
+    },
+    "montants": {
+      "montant_ue_total": 12361258237.280003,
+      "depenses_total": 27282724176.89,
+      "cofinancement_global": 45.3,
+      "montants_ue_negatifs": 0
+    },
+    "cle": {
+      "colonne": "Numéro Opération",
+      "distincts": 24908,
+      "doublons": 0
+    },
+    "pays": [
+      {
+        "valeur": "FRA",
+        "nb": 24908
+      }
+    ]
+  }
+}

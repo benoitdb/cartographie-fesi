@@ -15,6 +15,7 @@ BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuz
 DOTATIONS_OS_PATH = REPO_ROOT / "data" / "processed" / "dotations_os.json"
 INTERREG_PATH = REPO_ROOT / "data" / "processed" / "interreg.json"
 TRANSFERTS_SOLIDARITE_PATH = REPO_ROOT / "data" / "processed" / "transferts_solidarite.json"
+PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 
 
 @st.cache_data
@@ -105,3 +106,25 @@ def load_transferts_solidarite():
     {année: montant}, "total_publie": montant, "part_dotation_transferee": float}]}."""
     with open(TRANSFERTS_SOLIDARITE_PATH, encoding="utf-8") as f:
         return json.load(f)
+
+
+@st.cache_data
+def load_profils_source():
+    """Profils de source par période (data-pipeline/profil_source.py), pour la page
+    « Validation de la source » (issue #69). Découverts par glob : ajouter une
+    période, c'est déposer son `profil_<periode>.json`, sans toucher au dashboard.
+
+    Une entrée par **source** (un fichier) — une même période peut en avoir
+    plusieurs (issue #68). Triée par période décroissante puis par libellé de
+    source. Chaque entrée : {"source_id", "source_label", "periode",
+    "fichier_source", "date_source", "date_generation", "profil": {...}}. Liste
+    vide si aucun profil n'est présent."""
+    profils = []
+    for chemin in PROCESSED_DIR.glob("profil_*.json"):
+        with open(chemin, encoding="utf-8") as f:
+            profils.append(json.load(f))
+    return sorted(
+        profils,
+        key=lambda p: (p.get("periode", ""), p.get("source_label", "")),
+        reverse=True,
+    )
