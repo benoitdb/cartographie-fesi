@@ -153,19 +153,33 @@ def _region_derivable(df, cols, deriver_region):
     qui n'en ont pas *par construction* (ce n'est pas un défaut de donnée). Les
     programmes sans région dérivée sont donc listés à part, sans les qualifier
     d'erreur : c'est à la lecture qu'on distingue le national/interrégional
-    attendu d'un éventuel trou de mapping."""
+    attendu d'un éventuel trou de mapping.
+
+    `operations_couvertes` combine les deux voies (colonne renseignée **ou**
+    programme dérivable) : c'est le seul chiffre qui dit combien d'opérations
+    sont réellement rattachables à une région. Selon la période, c'est l'une ou
+    l'autre voie qui porte l'essentiel — 2014-2020 dépend du programme, 2021-2027
+    de la colonne — et aucune des deux prise seule n'est l'indicateur utile.
+    """
     prog_col = cols["programme"]
     programmes = df[prog_col].dropna().unique()
     avec_region = {prog for prog in programmes if deriver_region(prog) is not None}
-    resolues = int(df[prog_col].isin(avec_region).sum())
+    derivable = df[prog_col].isin(avec_region)
+    resolues = int(derivable.sum())
     n = len(df)
-    return {
+    profil = {
         "programmes_distincts": len(programmes),
         "programmes_avec_region": len(avec_region),
         "operations_resolues": resolues,
         "taux_operations_resolues": _taux(resolues, n),
         "programmes_sans_region_unique": sorted(str(p) for p in programmes if p not in avec_region),
     }
+    if "region" in cols:
+        couvertes = int((df[cols["region"]].notna() | derivable).sum())
+        profil["operations_couvertes"] = couvertes
+        profil["taux_operations_couvertes"] = _taux(couvertes, n)
+        profil["operations_sans_region"] = n - couvertes
+    return profil
 
 
 def _dimension_thematique(df, cols, n):
@@ -183,10 +197,19 @@ def _dimension_thematique(df, cols, n):
 
 
 def _dates(df, cols):
-    dates = pd.to_datetime(df[cols["date_programmation"]], errors="coerce")
+    """Ventilation par année de la date qui marque l'entrée d'une opération.
+
+    Le `libelle` est repris tel quel parce que ce n'est pas la même date d'une
+    période à l'autre — « Date de programmation » en 2014-2020, « Date première
+    convention » en 2021-2027. La page nomme ce qu'elle montre plutôt que de
+    supposer l'une des deux.
+    """
+    col = cols["date_programmation"]
+    dates = pd.to_datetime(df[col], errors="coerce")
     valides = dates.dropna()
     par_annee = valides.dt.year.value_counts().sort_index()
     return {
+        "libelle": col,
         "illisibles": int(dates.isna().sum()),
         "annee_min": int(valides.dt.year.min()) if len(valides) else None,
         "annee_max": int(valides.dt.year.max()) if len(valides) else None,

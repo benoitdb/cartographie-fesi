@@ -42,6 +42,18 @@ def _montant(euros):
     return f"{euros / 1e6:.1f} M€".replace(".", ",")
 
 
+def _nombre(valeur):
+    """Séparateur de milliers en espace fine insécable, comme partout ailleurs."""
+    return f"{valeur:,}".replace(",", " ")
+
+
+def _pourcent(valeur):
+    """« 63,1 % » — virgule décimale française, alignée sur le reste de la page."""
+    if valeur is None:
+        return "—"
+    return f"{valeur:.1f} %".replace(".", ",")
+
+
 def _boite(colonne, label, valeur):
     with colonne, st.container(border=True):
         st.markdown(f"**{label} :** {valeur}")
@@ -84,11 +96,11 @@ vol = profil["volumetrie"]
 montants = profil.get("montants", {})
 cle = profil.get("cle", {})
 kpi = st.columns(4)
-_boite(kpi[0], "Opérations", f"{vol['operations']:,}".replace(",", " "))
+_boite(kpi[0], "Opérations", _nombre(vol["operations"]))
 _boite(kpi[1], "Montant UE total", _montant(montants.get("montant_ue_total")))
 cofi = montants.get("cofinancement_global")
-_boite(kpi[2], "Cofinancement global", f"{cofi:.1f} %".replace(".", ",") if cofi is not None else "—")
-_boite(kpi[3], "Clé — doublons", f"{cle.get('doublons', 0)} (sur {cle.get('distincts', 0)} distincts)")
+_boite(kpi[2], "Cofinancement global", _pourcent(cofi))
+_boite(kpi[3], "Clé — doublons", f"{cle.get('doublons', 0)} (sur {_nombre(cle.get('distincts', 0))} distincts)")
 
 # --- Complétude par champ ---
 st.subheader("Complétude des champs")
@@ -118,14 +130,23 @@ if "region_derivable" in profil:
     st.subheader("Région : colonne brute vs dérivée du programme")
     rd = profil["region_derivable"]
     regions = profil.get("regions", {})
-    gauche, droite = st.columns(2)
-    _boite(gauche, "Colonne « Région » renseignée", f"{regions.get('taux_colonne_remplie', 0)} %")
-    _boite(droite, "Région dérivable du programme", f"{rd['taux_operations_resolues']} %")
+    boites = st.columns(3)
+    _boite(boites[0], "Colonne « Région » renseignée", _pourcent(regions.get("taux_colonne_remplie", 0)))
+    _boite(boites[1], "Région dérivable du programme", _pourcent(rd["taux_operations_resolues"]))
+    _boite(boites[2], "Rattachables au total", _pourcent(rd.get("taux_operations_couvertes", 0)))
     st.caption(
-        f"{rd['operations_resolues']:,}".replace(",", " ")
-        + f" opérations sur {vol['operations']:,}".replace(",", " ")
-        + " sont rattachées à une région via le libellé du programme. Les programmes restants "
-        "sont nationaux ou interrégionaux — ils n'ont pas de région unique par construction :"
+        "Deux voies pour rattacher une opération à une région : la colonne « Région », et le "
+        "libellé du programme quand celui-ci ne couvre qu'une région. Selon la période, c'est "
+        "l'une ou l'autre qui porte l'essentiel — c'est leur réunion qui compte. "
+        + _nombre(rd.get("operations_sans_region", 0))
+        + f" opération(s) sur {_nombre(vol['operations'])}"
+        + " ne passent par aucune des deux."
+    )
+    st.markdown("**Programmes sans région dérivée du libellé :**")
+    st.caption(
+        "Programmes nationaux et interrégionaux — qui n'ont pas de région unique par "
+        "construction — mais aussi, le cas échéant, libellés qu'un mapping ne reconnaît pas. "
+        "La distinction se fait à la lecture, elle n'est pas dans la donnée."
     )
     for prog in rd["programmes_sans_region_unique"]:
         st.markdown(f"- {prog}")
@@ -170,7 +191,7 @@ if "dimension_thematique" in profil:
             "ne porte pas de dimension thématique exploitable en l'état."
         )
     else:
-        st.caption(f"« {dim['libelle']} » renseigné à {dim['taux_remplie']} % · "
+        st.caption(f"« {dim['libelle']} » renseigné à {_pourcent(dim['taux_remplie'])} · "
                    f"{dim['distincts']} valeurs distinctes.")
         st.dataframe(
             pd.DataFrame(dim["top"]).rename(columns={"valeur": dim["libelle"], "nb": "Opérations"}),
@@ -179,8 +200,13 @@ if "dimension_thematique" in profil:
 
 # --- Dates de programmation ---
 if "dates" in profil and profil["dates"]["par_annee"]:
-    st.subheader("Programmation par année")
+    st.subheader("Répartition par année")
     dates = profil["dates"]
+    # La date de référence diffère selon la période (programmation en 2014-2020,
+    # première convention en 2021-2027) : on affiche laquelle plutôt que de
+    # laisser croire à un champ unique. `libelle` absent des profils générés
+    # avant son ajout — on retombe sur un intitulé neutre.
+    st.caption(f"Sur « {dates.get('libelle', 'date de référence')} ».")
     df_annees = pd.DataFrame(
         [{"Année": annee, "Opérations": nb} for annee, nb in dates["par_annee"].items()]
     )
