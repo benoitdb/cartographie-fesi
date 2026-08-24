@@ -73,6 +73,12 @@ _CLES_PROFIL_2014_2020 = {
 #   date_source      — facultative : date d'extraction déclarée, quand le nom de
 #                      fichier ne la porte pas (voir `millesime`)
 #   programme_to_region — table de rattachement par libellé de programme
+#   fichier_sortie   — nom du JSON produit par `ingest.py` dans `data/processed/`.
+#                      Un fichier par période, pas une clé `periode` dans un fichier
+#                      commun : `data.json` pèse déjà 45 Mo pour 16 625 opérations,
+#                      et les 24 908 de 14-20 en feraient autant. Les fusionner
+#                      chargerait ~100 Mo en mémoire Streamlit à chaque page pour
+#                      n'en afficher qu'une période (arbitrage 1 de #12).
 #   cles_profil      — clés sémantiques de `profiler_source` → clés internes du schéma
 SOURCES = {
     "2014-2020-synergie": {
@@ -88,6 +94,7 @@ SOURCES = {
         # déclaration, les données 14-20 arriveraient au dashboard sans millésime
         # et la barre latérale n'afficherait rien (issue #47).
         "date_source": "2023-08-30",  # feuille « Informations » du fichier
+        "fichier_sortie": "data_2014-2020.json",
         "programme_to_region": PROGRAMME_TO_REGION_2014_2020,
         "cles_profil": _CLES_PROFIL_2014_2020,
     },
@@ -104,6 +111,7 @@ SOURCES = {
         # (« 20260316_… »). C'est la source que `ingest.py` transforme en
         # `data.json` : son profil décrit donc la donnée qui alimente réellement
         # le reste du dashboard.
+        "fichier_sortie": "data.json",
         "programme_to_region": PROGRAMME_TO_REGION,
         "cles_profil": _CLES_PROFIL_2021_2027,
     },
