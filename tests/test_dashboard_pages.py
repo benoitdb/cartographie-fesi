@@ -34,6 +34,12 @@ PAGES = [
     *sorted((DASHBOARD / "pages").glob("*.py")),
 ]
 
+# La page « Validation de la source » ne lit pas `data.json` : elle profile
+# d'autres fichiers (2014-2020…) et affiche la fraîcheur de *chaque source* dans
+# son corps, pas le millésime de l'export 2021-2027 en pied de sidebar. Elle est
+# donc hors du test de fraîcheur ci-dessous, qui vaut pour les pages d'analyse.
+PAGES_AVEC_MILLESIME = [p for p in PAGES if p.stem != "4_Validation_source"]
+
 
 @pytest.fixture
 def donnees_fixture(monkeypatch):
@@ -102,14 +108,14 @@ def test_la_fixture_est_auto_coherente(donnees_fixture):
     assert montant_par_fonds == pytest.approx(montant_total)
 
 
-def test_les_quatre_pages_sont_couvertes():
+def test_les_cinq_pages_sont_couvertes():
     """Garde-fou sur le garde-fou : une page ajoutée dans `pages/` sans test
     passerait autrement inaperçue, et la suite resterait verte en ne couvrant
     plus tout le dashboard."""
-    assert len(PAGES) == 4, f"pages trouvées : {[p.name for p in PAGES]}"
+    assert len(PAGES) == 5, f"pages trouvées : {[p.name for p in PAGES]}"
 
 
-@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.stem)
+@pytest.mark.parametrize("page", PAGES_AVEC_MILLESIME, ids=lambda p: p.stem)
 def test_la_fraicheur_des_donnees_est_affichee(page, donnees_fixture):
     """La source est republiée 5 fois par an : la date de l'export doit être
     lisible sur **chaque** page, pas seulement sur celle où on a pensé à

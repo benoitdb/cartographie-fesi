@@ -13,13 +13,22 @@ OBJECTIF_STRATEGIQUE_COLORS = {
     "Non spécifié": "#B0B0B0",
 }
 
-# Couleurs fixes par fonds (FEDER/FSE+/FTJ), même principe que OBJECTIF_STRATEGIQUE_COLORS —
-# évite qu'un même fonds change de couleur d'un graphe à l'autre selon l'ordre d'apparition
-# (trompeur). Palette catégorielle validée CVD-safe (voir skill dataviz), slots 1-3.
+# Couleurs fixes par fonds, même principe que OBJECTIF_STRATEGIQUE_COLORS — évite qu'un même
+# fonds change de couleur d'un graphe à l'autre selon l'ordre d'apparition (trompeur). Palette
+# catégorielle CVD-safe (voir skill dataviz). Les trois premiers sont les fonds 2021-2027 ; les
+# suivants n'apparaissent que sur les données 2014-2020 (issue #12) — jamais dans le même
+# graphe que FSE+/FTJ, qui n'existaient pas à cette période.
 FONDS_COLORS = {
     "FEDER": "#2a78d6",  # bleu
     "FSE+": "#eb6834",  # orange
     "FTJ": "#1baf7a",  # aqua
+    # 2014-2020. FSE partage l'orange de FSE+ : même lignée (fonds social), jamais co-affichés
+    # (périodes distinctes) — garder la continuité de couleur plutôt qu'inventer une teinte.
+    "FSE": "#eb6834",  # orange (lignée sociale, cf. FSE+)
+    "FEDER REACT-EU": "#6aa9e9",  # bleu clair — famille FEDER, instrument de relance covid
+    "IEJ": "#f2b705",  # ambre — Initiative pour l'Emploi des Jeunes
+    "FEAD": "#8172b2",  # violet — aide alimentaire (Fonds européen d'aide aux plus démunis)
+    "FEDER-FSE": "#6b8e5a",  # olive — libellé combiné FEDER+FSE
 }
 
 

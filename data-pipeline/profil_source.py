@@ -1,13 +1,19 @@
-"""Génère le profil JSON d'une source d'opérations, par période.
+"""Génère le profil JSON d'une source d'opérations, une par fichier.
 
-Lit le XLSX brut d'une période dans `data/raw/`, appelle `profiler_source`, et
-écrit `data/processed/profil_<periode>.json`. Idempotent, rejouable à chaque
-nouveau millésime. Le JSON est committé (comme `programme_totals.json`) pour que
-la page « Validation de la source » du dashboard tourne sans le XLSX brut.
+Lit un XLSX brut de `data/raw/`, appelle `profiler_source`, et écrit
+`data/processed/profil_<source>.json`. Idempotent, rejouable à chaque nouveau
+millésime. Le JSON est committé (comme `programme_totals.json`) pour que la page
+« Validation de la source » du dashboard tourne sans le XLSX brut.
+
+La clé est la **source** (un fichier), pas la période : une même période peut
+avoir plusieurs fichiers (2014-2020 a le fichier Synergie national, le fichier
+*programmées*, et à terme les fichiers hors-Synergie régionaux — issue #68), qui
+donnent chacun leur rapport. Ajouter une source, c'est ajouter une entrée à
+`SOURCES` et relancer — le dashboard la découvre par glob.
 
 Usage :
-    python profil_source.py 2014-2020      # défaut
-    python profil_source.py 2021-2027
+    python profil_source.py                       # défaut : 2014-2020-synergie
+    python profil_source.py 2014-2020-synergie
 """
 
 import json
@@ -63,12 +69,15 @@ PROGRAMME_TO_REGION_2014_2020 = {
     "Programme opérationnel Interrégional FEDER Pyrénées 2014-2020": None,
 }
 
-# Un descripteur par période : où trouver le fichier, quelle feuille lire, et
-# comment ses colonnes réelles se mappent aux clés sémantiques de
-# `profiler_source`. Le mapping par période est aussi le germe du schéma
-# multi-période de #12 — à consolider quand l'ingestion 2014-2020 sera câblée.
-PERIODES = {
-    "2014-2020": {
+# Un descripteur par **source** (un fichier) : libellé lisible, période,
+# où trouver le fichier, quelle feuille lire, et comment ses colonnes réelles se
+# mappent aux clés sémantiques de `profiler_source`. Le mapping de colonnes par
+# source est aussi le germe du schéma multi-période de #12 — à consolider quand
+# l'ingestion 2014-2020 sera câblée.
+SOURCES = {
+    "2014-2020-synergie": {
+        "label": "Synergie national (FEDER/FSE/IEJ/FEAD)",
+        "periode": "2014-2020",
         "motif_fichier": "liste_operations_synergie_*.xlsx",
         "feuille": "Liste opérations synergie 14 20",
         "date_source": "2023-08-30",  # feuille « Informations » du fichier
@@ -100,10 +109,10 @@ def trouver_fichier(motif):
     return fichiers[-1]
 
 
-def main(periode):
-    if periode not in PERIODES:
-        raise SystemExit(f"Période inconnue : {periode!r}. Connues : {list(PERIODES)}")
-    conf = PERIODES[periode]
+def main(source_id):
+    if source_id not in SOURCES:
+        raise SystemExit(f"Source inconnue : {source_id!r}. Connues : {list(SOURCES)}")
+    conf = SOURCES[source_id]
 
     chemin = trouver_fichier(conf["motif_fichier"])
     print(f"📖 Lecture : {chemin.name} (feuille « {conf['feuille']} »)")
@@ -114,7 +123,9 @@ def main(periode):
     deriver_region = programme_to_region.get if programme_to_region else None
 
     profil = {
-        "periode": periode,
+        "source_id": source_id,
+        "source_label": conf["label"],
+        "periode": conf["periode"],
         "fichier_source": chemin.name,
         "date_source": conf.get("date_source"),
         "date_generation": date.today().isoformat(),
@@ -122,10 +133,10 @@ def main(periode):
     }
 
     OUTPUT_DIR.mkdir(exist_ok=True)
-    sortie = OUTPUT_DIR / f"profil_{periode}.json"
+    sortie = OUTPUT_DIR / f"profil_{source_id}.json"
     sortie.write_text(json.dumps(profil, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"💾 Profil écrit : {sortie.relative_to(Path(__file__).parent.parent)}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "2014-2020")
+    main(sys.argv[1] if len(sys.argv) > 1 else "2014-2020-synergie")
