@@ -18,6 +18,11 @@ data/processed/**
 !data/processed/dotations_os.json
 # Liste des programmes Interreg (Tableau 10, reference/interreg.py) : même raison.
 !data/processed/interreg.json
+# Profils de source par période (profil_source.py) : photo factuelle de la donnée
+# (volumétrie, complétude, périmètre) affichée par la page « Validation de la source ».
+# Dérivé du XLSX brut — non committé, donc non régénérable sur un clone nu — d'où
+# le versionnement du profil, pour que la page tourne sans le fichier source.
+!data/processed/profil_*.json
 
 # Python
 __pycache__/
