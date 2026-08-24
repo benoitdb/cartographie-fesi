@@ -1,0 +1,386 @@
+{
+  "source_id": "2021-2027-conventionnees",
+  "source_label": "Opérations conventionnées (FEDER/FSE+/FTJ)",
+  "periode": "2021-2027",
+  "fichier_source": "20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx",
+  "date_source": "2026-03-16",
+  "date_generation": "2026-08-24",
+  "profil": {
+    "volumetrie": {
+      "operations": 16625,
+      "colonnes": 23
+    },
+    "completude": {
+      "numero_operation": {
+        "libelle": "Numéro Opération",
+        "remplis": 16625,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "programme": {
+        "libelle": "Libellé Programme",
+        "remplis": 16625,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "beneficiaire": {
+        "libelle": "Nom du bénéficiaire",
+        "remplis": 16625,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "fonds": {
+        "libelle": "Fonds",
+        "remplis": 16625,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "region": {
+        "libelle": "Région de l'opération",
+        "remplis": 10490,
+        "manquants": 6135,
+        "taux": 63.1
+      },
+      "departement": {
+        "libelle": "Département de l’opération",
+        "remplis": 5870,
+        "manquants": 10755,
+        "taux": 35.3
+      },
+      "dimension_thematique": {
+        "libelle": "Objectif stratégique",
+        "remplis": 16619,
+        "manquants": 6,
+        "taux": 100.0
+      },
+      "date_programmation": {
+        "libelle": "Date première convention",
+        "remplis": 8613,
+        "manquants": 8012,
+        "taux": 51.8
+      },
+      "montant_ue": {
+        "libelle": "Montant UE",
+        "remplis": 16625,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "depenses": {
+        "libelle": "Total des dépenses éligibles",
+        "remplis": 16625,
+        "manquants": 0,
+        "taux": 100.0
+      }
+    },
+    "par_fonds": [
+      {
+        "fonds": "FEDER",
+        "nb": 6038,
+        "montant_ue": 4047876667.2200003,
+        "part_nb": 36.3,
+        "part_montant": 51.4
+      },
+      {
+        "fonds": "FSE+",
+        "nb": 10222,
+        "montant_ue": 3379338207.552783,
+        "part_nb": 61.5,
+        "part_montant": 42.9
+      },
+      {
+        "fonds": "FTJ",
+        "nb": 365,
+        "montant_ue": 452606019.613089,
+        "part_nb": 2.2,
+        "part_montant": 5.7
+      }
+    ],
+    "programmes": {
+      "distincts": 21,
+      "top": [
+        {
+          "valeur": "Programme national FSE+ Emploi - Inclusion - Jeunesse - Compétences",
+          "nb": 7803
+        },
+        {
+          "valeur": "Programme FEDER FSE+ Nouvelle-Aquitaine",
+          "nb": 1417
+        },
+        {
+          "valeur": "Programme Grand Est et massif des Vosges FEDER-FSE+-FTJ 2021-2027",
+          "nb": 1304
+        },
+        {
+          "valeur": "Programme FEDER-FSE+ Auvergne-Rhône-Alpes 2021-2027",
+          "nb": 1023
+        },
+        {
+          "valeur": "Programme Occitanie FEDER-FSE+ 2021- 2027",
+          "nb": 685
+        },
+        {
+          "valeur": "Programme Hauts de France FEDER-FSE+-FTJ 2021-2027",
+          "nb": 663
+        },
+        {
+          "valeur": "Programme Normandie FEDER-FSE+-FTJ 2021-2027",
+          "nb": 588
+        },
+        {
+          "valeur": "Programme FEDER-FSE+ Bourgogne Franche-Comté et Massif du Jura 2021-2027",
+          "nb": 556
+        },
+        {
+          "valeur": "Programme FEDER-FSE+ 2021-2027 de La Réunion",
+          "nb": 517
+        },
+        {
+          "valeur": "Programme Centre-Val de Loire et interrégional Loire FEDER-FSE+ 2021-2027",
+          "nb": 415
+        },
+        {
+          "valeur": "Programme Provence-Alpes-Côte d’Azur et Massif des Alpes FEDER-FSE+-FTJ 2021-2027",
+          "nb": 340
+        },
+        {
+          "valeur": "Programme Bretagne FEDER-FSE+ 2021-2027",
+          "nb": 244
+        },
+        {
+          "valeur": "Programme Pays de la Loire  FEDER-FSE+-FTJ 2021-2027",
+          "nb": 230
+        },
+        {
+          "valeur": "Programme national FTJ Emploi - Compétences",
+          "nb": 209
+        },
+        {
+          "valeur": "Programme FEDER-FSE+ Guadeloupe 2021-2027",
+          "nb": 193
+        },
+        {
+          "valeur": "Programme régional Île-de-France et bassin de la Seine FEDER-FSE+ 2021-2027",
+          "nb": 170
+        },
+        {
+          "valeur": "Programme Martinique FEDER-FSE+ 2021-2027",
+          "nb": 125
+        },
+        {
+          "valeur": "Programme FEDER-FSE+ GUYANE 2021-2027",
+          "nb": 82
+        },
+        {
+          "valeur": "Programme Corse FEDER-FSE+ 2021-2027",
+          "nb": 29
+        },
+        {
+          "valeur": "Programme Saint Martin FEDER 2021-2027",
+          "nb": 20
+        }
+      ]
+    },
+    "regions": {
+      "colonne_remplie": 10490,
+      "taux_colonne_remplie": 63.1,
+      "valeurs_distinctes": 70,
+      "top": [
+        {
+          "valeur": "Nouvelle-Aquitaine",
+          "nb": 1093
+        },
+        {
+          "valeur": "Hauts-de-France",
+          "nb": 1045
+        },
+        {
+          "valeur": "Auvergne-Rhône-Alpes",
+          "nb": 854
+        },
+        {
+          "valeur": "Ile-de-France",
+          "nb": 831
+        },
+        {
+          "valeur": "Occitanie",
+          "nb": 702
+        },
+        {
+          "valeur": "Grand Est",
+          "nb": 672
+        },
+        {
+          "valeur": " | 28/Normandie",
+          "nb": 588
+        },
+        {
+          "valeur": "Bretagne",
+          "nb": 523
+        },
+        {
+          "valeur": "Bourgogne-Franche-Comté",
+          "nb": 490
+        },
+        {
+          "valeur": "24/Centre-Val de Loire",
+          "nb": 415
+        },
+        {
+          "valeur": "Normandie",
+          "nb": 405
+        },
+        {
+          "valeur": "Volet national",
+          "nb": 398
+        },
+        {
+          "valeur": "Provence - Alpes - Côte d'azur",
+          "nb": 375
+        },
+        {
+          "valeur": "Pays de la Loire",
+          "nb": 268
+        },
+        {
+          "valeur": "53/Bretagne",
+          "nb": 244
+        },
+        {
+          "valeur": "52/Pays de la Loire",
+          "nb": 230
+        },
+        {
+          "valeur": "Centre-Val de Loire",
+          "nb": 177
+        },
+        {
+          "valeur": "44/Grand Est",
+          "nb": 161
+        },
+        {
+          "valeur": "04/La Réunion",
+          "nb": 140
+        },
+        {
+          "valeur": "76/Occitanie",
+          "nb": 130
+        },
+        {
+          "valeur": "32/Hauts-de-France",
+          "nb": 111
+        },
+        {
+          "valeur": "La Réunion",
+          "nb": 82
+        },
+        {
+          "valeur": "93/Provence-Alpes-Côte d'Azur",
+          "nb": 49
+        },
+        {
+          "valeur": "82/Rhône-Alpes | 83/Auvergne",
+          "nb": 42
+        },
+        {
+          "valeur": "11/Île-de-France",
+          "nb": 34
+        }
+      ],
+      "manquantes_par_fonds": [
+        {
+          "valeur": "FEDER",
+          "nb": 4222
+        },
+        {
+          "valeur": "FSE+",
+          "nb": 1806
+        },
+        {
+          "valeur": "FTJ",
+          "nb": 107
+        }
+      ]
+    },
+    "region_derivable": {
+      "programmes_distincts": 21,
+      "programmes_avec_region": 17,
+      "operations_resolues": 8043,
+      "taux_operations_resolues": 48.4,
+      "programmes_sans_region_unique": [
+        "Programme Pays de la Loire  FEDER-FSE+-FTJ 2021-2027",
+        "Programme Provence-Alpes-Côte d’Azur et Massif des Alpes FEDER-FSE+-FTJ 2021-2027",
+        "Programme national FSE+ Emploi - Inclusion - Jeunesse - Compétences",
+        "Programme national FTJ Emploi - Compétences"
+      ],
+      "operations_couvertes": 16338,
+      "taux_operations_couvertes": 98.3,
+      "operations_sans_region": 287
+    },
+    "dimension_thematique": {
+      "libelle": "Objectif stratégique",
+      "taux_remplie": 100.0,
+      "distincts": 6,
+      "top": [
+        {
+          "valeur": "4. Europe plus sociale",
+          "nb": 10355
+        },
+        {
+          "valeur": "1. Europe plus intelligente",
+          "nb": 2645
+        },
+        {
+          "valeur": "2. Europe plus verte",
+          "nb": 2112
+        },
+        {
+          "valeur": "5. Europe plus proche des citoyens",
+          "nb": 1124
+        },
+        {
+          "valeur": "8. Transition juste",
+          "nb": 365
+        },
+        {
+          "valeur": "3. Europe plus connectée",
+          "nb": 18
+        }
+      ]
+    },
+    "dates": {
+      "libelle": "Date première convention",
+      "illisibles": 8012,
+      "annee_min": 2022,
+      "annee_max": 2028,
+      "par_annee": {
+        "2022": 66,
+        "2023": 1308,
+        "2024": 2933,
+        "2025": 3762,
+        "2026": 540,
+        "2028": 4
+      }
+    },
+    "montants": {
+      "montant_ue_total": 7879820894.385872,
+      "depenses_total": 17952782936.64,
+      "cofinancement_global": 43.9,
+      "montants_ue_negatifs": 0
+    },
+    "cle": {
+      "colonne": "Numéro Opération",
+      "distincts": 16620,
+      "doublons": 5
+    },
+    "pays": [
+      {
+        "valeur": "FRA",
+        "nb": 7136
+      },
+      {
+        "valeur": "France",
+        "nb": 1477
+      }
+    ]
+  }
+}

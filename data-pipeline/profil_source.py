@@ -14,6 +14,7 @@ donnent chacun leur rapport. Ajouter une source, c'est ajouter une entrée à
 Usage :
     python profil_source.py                       # défaut : 2014-2020-synergie
     python profil_source.py 2014-2020-synergie
+    python profil_source.py 2021-2027-conventionnees
 """
 
 import json
@@ -23,6 +24,8 @@ from pathlib import Path
 
 import pandas as pd
 from profilage_source import profiler_source
+from region_mapping import PROGRAMME_TO_REGION
+from schema_source import build_cols, millesime_du_fichier
 
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "processed"
@@ -69,11 +72,56 @@ PROGRAMME_TO_REGION_2014_2020 = {
     "Programme opérationnel Interrégional FEDER Pyrénées 2014-2020": None,
 }
 
+# --- 2021-2027 : les colonnes viennent du garde-fou d'ingestion, pas d'une copie ---
+#
+# Correspondance clé sémantique de `profiler_source` → clé interne de
+# `schema_source.COLONNES_ATTENDUES`. On ne recopie pas les libellés réels ici :
+# la source 2021-2027 est republiée 5 fois par an et mélange déjà les deux
+# apostrophes (`schema_source`). Passer par `build_cols` fait profiter le profil
+# du même contrôle que `ingest.py` — un réordonnancement de la source fait
+# échouer la génération avec un message qui nomme la position fautive, au lieu de
+# produire un profil faux en silence (issues #45, #69).
+_CLES_SEMANTIQUES_2021_2027 = {
+    "numero_operation": "numero_op",
+    "programme": "libelle_prog",
+    "beneficiaire": "nom_benef",
+    "fonds": "fonds",
+    "region": "region",
+    "departement": "departement",
+    # 2021-2027 porte des objectifs stratégiques/spécifiques ; 2014-2020 un
+    # « Domaine d'intervention ». La clé sémantique est commune, le libellé
+    # affiché par la page vient du profil — les deux périodes ne sont pas
+    # comparables pour autant (cf. #68).
+    "dimension_thematique": "objectif_strat",
+    # Il n'y a pas de date de *programmation* dans cette source : la date qui
+    # marque l'entrée d'une opération est celle de sa première convention. Le
+    # profil expose le libellé réel pour que la page nomme ce qu'elle montre.
+    "date_programmation": "date_convention",
+    "montant_ue": "montant_ue",
+    "depenses": "depenses",
+    "pays": "pays",
+}
+
+
+def cols_2021_2027(df):
+    """Mapping des colonnes 2021-2027, vérifié par `schema_source.build_cols`."""
+    cols_internes = build_cols(df.columns)
+    return {
+        semantique: cols_internes[interne]
+        for semantique, interne in _CLES_SEMANTIQUES_2021_2027.items()
+    }
+
+
 # Un descripteur par **source** (un fichier) : libellé lisible, période,
 # où trouver le fichier, quelle feuille lire, et comment ses colonnes réelles se
 # mappent aux clés sémantiques de `profiler_source`. Le mapping de colonnes par
 # source est aussi le germe du schéma multi-période de #12 — à consolider quand
 # l'ingestion 2014-2020 sera câblée.
+#
+# Champs : `feuille` accepte un nom ou un index (2021-2027 date le nom de sa
+# feuille à chaque export : « LISTE OPERATION AU 16 03 2026 » — seul l'index est
+# stable) ; `cols` accepte un dict figé ou un callable `df -> dict` ; `date_source`
+# est facultative et retombe sinon sur le préfixe daté du nom de fichier.
 SOURCES = {
     "2014-2020-synergie": {
         "label": "Synergie national (FEDER/FSE/IEJ/FEAD)",
@@ -95,6 +143,18 @@ SOURCES = {
             "depenses": "Total des dépenses éligibles programmées",
             "pays": "Pays",
         },
+    },
+    "2021-2027-conventionnees": {
+        "label": "Opérations conventionnées (FEDER/FSE+/FTJ)",
+        "periode": "2021-2027",
+        "motif_fichier": "*_liste_operations_conventionnees_*.xlsx",
+        "feuille": 0,
+        # `date_source` omise : le nom du fichier porte le millésime de l'export
+        # (« 20260316_… »), déjà lu par `schema_source.millesime_du_fichier`.
+        # C'est la source que `ingest.py` transforme en `data.json` : son profil
+        # décrit donc la donnée qui alimente réellement le reste du dashboard.
+        "programme_to_region": PROGRAMME_TO_REGION,
+        "cols": cols_2021_2027,
     },
 }
 
@@ -119,6 +179,10 @@ def main(source_id):
     df = pd.read_excel(chemin, sheet_name=conf["feuille"])
     print(f"✅ {len(df)} opérations, {df.shape[1]} colonnes")
 
+    # `cols` figé (2014-2020) ou calculé depuis les colonnes réelles (2021-2027,
+    # via le contrôle de schéma) — voir le commentaire de SOURCES.
+    cols = conf["cols"](df) if callable(conf["cols"]) else conf["cols"]
+
     programme_to_region = conf.get("programme_to_region")
     deriver_region = programme_to_region.get if programme_to_region else None
 
@@ -127,9 +191,11 @@ def main(source_id):
         "source_label": conf["label"],
         "periode": conf["periode"],
         "fichier_source": chemin.name,
-        "date_source": conf.get("date_source"),
+        # À défaut d'une date déclarée (feuille « Informations » du fichier
+        # Synergie), le préfixe daté du nom de fichier fait foi.
+        "date_source": conf.get("date_source") or millesime_du_fichier(chemin),
         "date_generation": date.today().isoformat(),
-        "profil": profiler_source(df, conf["cols"], deriver_region=deriver_region),
+        "profil": profiler_source(df, cols, deriver_region=deriver_region),
     }
 
     OUTPUT_DIR.mkdir(exist_ok=True)

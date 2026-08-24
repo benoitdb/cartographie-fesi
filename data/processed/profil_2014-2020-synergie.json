@@ -347,7 +347,10 @@
         "Programme opérationnel Interrégional FEDER Rhône-Saône 2014-2020",
         "Programme opérationnel Interrégional FEDER du Massif des Alpes 2014-2020",
         "Programme opérationnel interrégionnal Massif Central FEDER 2014-2020"
-      ]
+      ],
+      "operations_couvertes": 23003,
+      "taux_operations_couvertes": 92.4,
+      "operations_sans_region": 1905
     },
     "dimension_thematique": {
       "libelle": "Domaine d’intervention",
@@ -356,6 +359,7 @@
       "top": []
     },
     "dates": {
+      "libelle": "Date de programmation",
       "illisibles": 4,
       "annee_min": 2014,
       "annee_max": 2023,

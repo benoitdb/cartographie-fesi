@@ -92,6 +92,10 @@ def test_dimension_thematique_vide_a_100pct(df):
 
 def test_dates_separe_illisibles_et_ventile_par_annee(df):
     dates = profiler_source(df, COLS)["dates"]
+    # Le libellé réel est repris : ce n'est pas la même date d'une période à
+    # l'autre (programmation en 2014-2020, première convention en 2021-2027) et
+    # la page doit nommer ce qu'elle affiche.
+    assert dates["libelle"] == "date"
     assert dates["illisibles"] == 1
     assert dates["annee_min"] == 2015
     assert dates["annee_max"] == 2016
@@ -107,6 +111,38 @@ def test_region_derivable_distingue_national_du_regional(df):
     assert rd["taux_operations_resolues"] == 66.7
     # PN (national) listé sans être qualifié d'erreur.
     assert rd["programmes_sans_region_unique"] == ["PN"]
+
+
+def test_couverture_combine_les_deux_voies(df):
+    """La colonne région et la dérivation par programme se complètent : ni l'une
+    ni l'autre prise seule ne dit combien d'opérations sont rattachables. Ici N3
+    a sa région mais son programme PA la donne aussi (déjà comptée), tandis que
+    N4 et N5 (programme national PN, région vide) restent sans région."""
+    deriver = {"PA": "Occitanie", "PN": None}.get
+    rd = profiler_source(df, COLS, deriver_region=deriver)["region_derivable"]
+    assert rd["operations_resolues"] == 4  # via le programme seul
+    assert rd["operations_couvertes"] == 4  # aucune opération hors PA n'a de région
+    assert rd["operations_sans_region"] == 2  # N4, N5
+    assert rd["taux_operations_couvertes"] == 66.7
+
+
+def test_couverture_compte_une_region_brute_sans_programme_derivable(df):
+    """Le cas inverse — celui de 2021-2027, où la colonne porte l'essentiel :
+    aucun programme n'est dérivable, mais les deux opérations qui ont une région
+    restent rattachables."""
+    rd = profiler_source(df, COLS, deriver_region=lambda _: None)["region_derivable"]
+    assert rd["operations_resolues"] == 0
+    assert rd["operations_couvertes"] == 2  # N1, N3
+    assert rd["operations_sans_region"] == 4
+
+
+def test_couverture_absente_sans_colonne_region(df):
+    """Sans colonne région mappée, la réunion des deux voies n'a pas de sens :
+    la section garde la dérivation seule plutôt qu'un chiffre trompeur."""
+    cols_sans_region = {k: v for k, v in COLS.items() if k != "region"}
+    rd = profiler_source(df, cols_sans_region, deriver_region={"PA": "Occitanie"}.get)
+    assert "operations_couvertes" not in rd["region_derivable"]
+    assert rd["region_derivable"]["operations_resolues"] == 4
 
 
 def test_regions_ventile_les_manquantes_par_fonds(df):
