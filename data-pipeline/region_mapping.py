@@ -19,6 +19,7 @@ fragment qu'elle n'a pas pu résoudre, plutôt que de le laisser passer en silen
 """
 
 import pandas as pd
+from schema_source import normalise_libelle
 
 # Régions modernes valides (13 métropole + DOM + Saint-Martin) — sert à repérer les
 # fragments bruts déjà "modernes" et à valider les résolutions par nom.
@@ -142,6 +143,53 @@ PROGRAMME_TO_REGION = {
     # Programmes nationaux sont volontairement absents — pas de fallback région unique
 }
 
+# Le rattachement par programme se fait sur un libellé **normalisé**, pas sur la chaîne
+# brute (issue #71). La source écrit `Provence-Alpes-Côte d’Azur` avec l'apostrophe
+# typographique là où la table ci-dessus a l'apostrophe droite, et glisse une espace
+# insécable dans `Programme Pays de la Loire  FEDER-FSE+-FTJ 2021-2027` : comparées au
+# caractère près, 287 opérations PACA sans région retombaient sur le Volet national
+# (265 M€ au mauvais endroit). Corriger les deux graphies à la main ne tiendrait pas —
+# elles se re-décaleraient au prochain export. C'est le même problème, et donc la même
+# normalisation, que pour les libellés de colonnes (`schema_source`).
+
+
+def indexer_programmes(mapping):
+    """Index {libellé normalisé: région} d'une table programme → région.
+
+    Lève ValueError si deux libellés distincts se normalisent en un même libellé
+    avec des régions différentes : la normalisation doit élargir la comparaison,
+    jamais confondre deux programmes.
+    """
+    index = {}
+    for libelle, region in mapping.items():
+        cle = normalise_libelle(libelle)
+        if cle in index and index[cle] != region:
+            raise ValueError(
+                f"Deux libellés de programme se normalisent en {cle!r} avec des régions "
+                f"différentes ({index[cle]!r} et {region!r}) : la table est ambiguë."
+            )
+        index[cle] = region
+    return index
+
+
+PROGRAMME_INDEX = indexer_programmes(PROGRAMME_TO_REGION)
+
+
+def region_du_programme(libelle_programme, index=None):
+    """Région d'un programme mono-région, ou None si le programme n'en a pas une seule.
+
+    None couvre deux cas que la donnée ne distingue pas : le programme national ou
+    interrégional (pas de région unique **par construction**) et le libellé qu'aucune
+    table ne connaît. `index` permet de passer une autre période que 2021-2027.
+    """
+    if libelle_programme is None or (
+        isinstance(libelle_programme, float) and pd.isna(libelle_programme)
+    ):
+        return None
+    index = PROGRAMME_INDEX if index is None else index
+    return index.get(normalise_libelle(libelle_programme))
+
+
 # Fragments bruts que ni le code, ni le nom, ni la normalisation n'ont su résoudre avec
 # certitude (résolus quand même via le nom brut, en dernier recours, pour ne pas faire
 # planter le pipeline) — à examiner après chaque ingestion : reset_unresolved() puis
@@ -186,9 +234,10 @@ def harmonize_region(raw_region, libelle_programme):
 
     # Cas 1 : région manquante
     if not raw_region or (isinstance(raw_region, float) and pd.isna(raw_region)):
-        # Fallback via le programme si c'est un programme régional
-        if libelle_programme in PROGRAMME_TO_REGION:
-            region = PROGRAMME_TO_REGION[libelle_programme]
+        # Fallback via le programme si c'est un programme régional (comparaison sur
+        # libellé normalisé, cf. region_du_programme)
+        region = region_du_programme(libelle_programme)
+        if region is not None:
             return ([region], False, False)
         # Sinon : Volet national ou programme national sans région
         return ([], False, True)
