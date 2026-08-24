@@ -38,7 +38,8 @@ racine pour les tests (`requirements-dev.txt`).
 - **Régénérer les données** — depuis `data-pipeline/`, `ingest.py` d'abord car
   les autres scripts en dépendent :
   ```
-  python ingest.py                        # XLSX -> data.json
+  python ingest.py                        # XLSX 2021-2027 -> data.json
+  python ingest.py 2014-2020-synergie     # XLSX Synergie  -> data_2014-2020.json
   python beneficiaires_fuzzy.py           # lit data.json, écrit beneficiaires_fuzzy.json
   python programme_totals.py              # Tableau 9B  -> programme_totals.json + programme_detail.json
   python dotations_os_totals.py           # Tableau 8   -> dotations_os.json
@@ -57,7 +58,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (183 tests, ~11 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (196 tests, ~11 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent la fixture committée dans `tests/fixtures/` (voir son README —
@@ -96,9 +97,11 @@ racine pour les tests (`requirements-dev.txt`).
   catégories de cohésion UE. C'est la source de vérité des montants *programmés*,
   par opposition aux montants *engagés* qui viennent du XLSX.
 - `data/raw/` — le XLSX source, **non versionné**
-- `data/processed/` — JSON générés ; seuls ceux qui ne dépendent ni du réseau
-  ni du XLSX sont committés (voir les commentaires du `.gitignore`, qui
-  expliquent le choix fichier par fichier)
+- `data/processed/` — JSON générés, **un par période** (`data.json` =
+  2021-2027, `data_2014-2020.json`) : les fusionner chargerait ~100 Mo en
+  mémoire Streamlit à chaque page pour n'en afficher qu'une. Seuls ceux qui ne
+  dépendent ni du réseau ni du XLSX sont committés (voir les commentaires du
+  `.gitignore`, qui expliquent le choix fichier par fichier)
 - `docs/sources/` — notes de travail sur les documents de référence, non versionné
 
 ## Pièges non devinables
@@ -146,6 +149,29 @@ racine pour les tests (`requirements-dev.txt`).
   région n'y étant remplie qu'à 16,4 %. Oublier de passer l'index de la période
   ne lève rien : ça rattache 20 821 opérations au Volet national. `ingest.py` le
   passe explicitement, depuis le descripteur de source.
+- **2014-2020 n'est pas 2021-2027 en plus vieux** (issue #12). Un seul pipeline,
+  paramétré par source — pas un second script. Ce qui change, et qui se paie
+  cher si on l'oublie :
+  - les données sont sur la **2ᵉ feuille** du fichier Synergie, la feuille 0
+    étant une notice (lire l'index 0 par défaut donnerait un DataFrame de
+    notice, sans erreur) ;
+  - **pas de dimension thématique** : la colonne `Domaine d'intervention` est
+    vide à 0,0 %. Les blocs `by_objectif_strategique` / `by_region_objectif` /
+    `by_fonds_objectif` sont **absents** de la sortie, et `metadata` porte
+    `dimension_thematique: null`. Ne jamais inventer de « Non spécifié » pour
+    homogénéiser la forme entre périodes ;
+  - **six fonds** — FEDER, FSE, IEJ, FEAD, FEDER REACT-EU, FEDER-FSE — et non
+    FEDER/FSE+/FTJ. REACT-EU reste un fonds distinct, avec son propre régime
+    (financement possible à 100 %), donc **les plafonds de cofinancement de
+    `utils/cofinancement.py` ne lui sont pas applicables** ;
+  - la colonne région n'est remplie qu'à **16,4 %** : c'est le libellé du
+    programme qui rattache le reste ;
+  - **le périmètre Synergie est incomplet** (#68) : Bretagne (3 opérations) et
+    Nouvelle-Aquitaine (25) n'apparaissent qu'à la marge, leurs autorités de
+    gestion n'utilisant pas SynergieCDM. Ne pas lire ces totaux comme la
+    réalité de ces régions ;
+  - les 5 programmes interrégionaux tombent au Volet national (#77), et les
+    sources de référence de la période restent à réunir (#79).
 - **Programmé ≠ engagé.** Les montants programmés viennent de l'Accord de
   partenariat dans sa version **préliminaire** de juin 2022, probablement
   révisée depuis. Tout taux de consommation est une estimation : la réserve

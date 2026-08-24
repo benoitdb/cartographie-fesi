@@ -72,7 +72,15 @@ def calculer_agregats(df, cols, partitions=None):
     region_principale = _region_principale(df_mono_region)
     regions_mono = sorted(region_principale.dropna().unique())
     fonds_tous = sorted(df[cols["fonds"]].unique())
-    objectifs_tous = sorted(df[cols["objectif_strat"]].dropna().unique())
+
+    # La dimension thématique n'existe pas dans toutes les périodes : 2021-2027 a
+    # des objectifs stratégiques, 2014-2020 un « Domaine d'intervention » vide à
+    # 100 % dans le fichier Synergie (issues #12, #73). Ses trois blocs sont donc
+    # **absents** du résultat quand la clé l'est, plutôt que remplis d'une
+    # catégorie « Non spécifié » inventée : une dimension absente de la source ne
+    # doit pas ressembler à une dimension mesurée et vide.
+    a_objectif = "objectif_strat" in cols
+    objectifs_tous = sorted(df[cols["objectif_strat"]].dropna().unique()) if a_objectif else []
 
     aggregates = {}
 
@@ -98,11 +106,12 @@ def calculer_agregats(df, cols, partitions=None):
     for fonds in fonds_tous:
         aggregates["by_fonds"][fonds] = _resume(df[df[cols["fonds"]] == fonds], cols)
 
-    aggregates["by_objectif_strategique"] = {}
-    for objectif in objectifs_tous:
-        aggregates["by_objectif_strategique"][objectif] = _resume(
-            df[df[cols["objectif_strat"]] == objectif], cols
-        )
+    if a_objectif:
+        aggregates["by_objectif_strategique"] = {}
+        for objectif in objectifs_tous:
+            aggregates["by_objectif_strategique"][objectif] = _resume(
+                df[df[cols["objectif_strat"]] == objectif], cols
+            )
 
     # Croisements : clé "a|b" plutôt qu'un dict imbriqué, pour rester à plat en
     # JSON. Seuls les couples non vides sont écrits.
@@ -120,30 +129,31 @@ def calculer_agregats(df, cols, partitions=None):
                     "montant_ue_total": float(subset[cols["montant_ue"]].sum()),
                 }
 
-    aggregates["by_region_objectif"] = {}
-    for region in regions_mono:
-        for objectif in objectifs_tous:
-            subset = df_mono_region[
-                (region_principale == region) & (df_mono_region[cols["objectif_strat"]] == objectif)
-            ]
-            if len(subset) > 0:
-                aggregates["by_region_objectif"][f"{region}|{objectif}"] = {
-                    "region": region,
-                    "objectif_strategique": objectif,
-                    "count": len(subset),
-                    "montant_ue_total": float(subset[cols["montant_ue"]].sum()),
-                }
+    if a_objectif:
+        aggregates["by_region_objectif"] = {}
+        for region in regions_mono:
+            for objectif in objectifs_tous:
+                subset = df_mono_region[
+                    (region_principale == region) & (df_mono_region[cols["objectif_strat"]] == objectif)
+                ]
+                if len(subset) > 0:
+                    aggregates["by_region_objectif"][f"{region}|{objectif}"] = {
+                        "region": region,
+                        "objectif_strategique": objectif,
+                        "count": len(subset),
+                        "montant_ue_total": float(subset[cols["montant_ue"]].sum()),
+                    }
 
-    aggregates["by_fonds_objectif"] = {}
-    for fonds in fonds_tous:
-        for objectif in objectifs_tous:
-            subset = df[(df[cols["fonds"]] == fonds) & (df[cols["objectif_strat"]] == objectif)]
-            if len(subset) > 0:
-                aggregates["by_fonds_objectif"][f"{fonds}|{objectif}"] = {
-                    "fonds": fonds,
-                    "objectif_strategique": objectif,
-                    "count": len(subset),
-                    "montant_ue_total": float(subset[cols["montant_ue"]].sum()),
-                }
+        aggregates["by_fonds_objectif"] = {}
+        for fonds in fonds_tous:
+            for objectif in objectifs_tous:
+                subset = df[(df[cols["fonds"]] == fonds) & (df[cols["objectif_strat"]] == objectif)]
+                if len(subset) > 0:
+                    aggregates["by_fonds_objectif"][f"{fonds}|{objectif}"] = {
+                        "fonds": fonds,
+                        "objectif_strategique": objectif,
+                        "count": len(subset),
+                        "montant_ue_total": float(subset[cols["montant_ue"]].sum()),
+                    }
 
     return aggregates

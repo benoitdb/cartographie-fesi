@@ -14,6 +14,8 @@ L'invariant central est le découpage : une opération compte dans **une seule**
 partition géographique, mais dans **tous** les agrégats non géographiques.
 """
 
+import json
+
 import pandas as pd
 import pytest
 from agregats import calculer_agregats, partitionner
@@ -270,3 +272,83 @@ def test_les_categories_sont_triees_pour_une_sortie_reproductible():
 
     assert list(agregats["by_region"]) == ["Bretagne", "Occitanie"]
     assert list(agregats["by_fonds"]) == ["FEDER", "FSE+"]
+
+
+# --- Période sans dimension thématique (2014-2020) -----------------------------
+#
+# Le fichier Synergie 14-20 n'a pas d'objectif stratégique : sa dimension
+# thématique est le `Domaine d'intervention`, vide à 100 % (issues #12, #73).
+# `cols` n'y porte donc pas la clé `objectif_strat`.
+
+COLS_SANS_OBJECTIF = {cle: valeur for cle, valeur in COLS.items() if cle != "objectif_strat"}
+
+BLOCS_OBJECTIF = {"by_objectif_strategique", "by_region_objectif", "by_fonds_objectif"}
+
+
+def df_sans_objectif(*ops):
+    """Les mêmes opérations, sans la colonne d'objectif stratégique — comme le
+    DataFrame que produit la lecture du fichier 14-20."""
+    return df_operations(*ops).drop(columns=["Objectif stratégique"])
+
+
+def test_sans_dimension_thematique_les_blocs_objectif_sont_absents():
+    """Absents, pas vides : une clé présente à `{}` se lit comme « dimension
+    mesurée, aucune valeur », alors qu'elle n'existe pas dans la source."""
+    agregats = calculer_agregats(
+        df_sans_objectif(
+            operation("A", montant=100.0),
+            operation("B", regions=("Corse",), montant=50.0),
+            operation("C", national=True, montant=10.0),
+        ),
+        COLS_SANS_OBJECTIF,
+    )
+
+    assert BLOCS_OBJECTIF.isdisjoint(agregats)
+
+
+def test_sans_dimension_thematique_les_autres_agregats_restent_complets():
+    """Le reste du calcul ne doit pas être amputé au passage : c'est tout ce que
+    le dashboard peut afficher pour cette période."""
+    agregats = calculer_agregats(
+        df_sans_objectif(
+            operation("A", montant=100.0),
+            operation("B", regions=("Corse",), fonds="FSE", montant=50.0),
+            operation("C", regions=("Corse", "Occitanie"), interregional=True, montant=7.0),
+            operation("D", national=True, montant=10.0),
+        ),
+        COLS_SANS_OBJECTIF,
+    )
+
+    assert set(agregats) == {"by_region", "national", "interregional", "by_fonds", "by_region_fonds"}
+    assert agregats["by_region"]["Occitanie"]["montant_ue_total"] == 100.0
+    assert agregats["by_fonds"]["FSE"]["montant_ue_total"] == 50.0
+    assert agregats["by_region_fonds"]["Corse|FSE"]["montant_ue_total"] == 50.0
+    assert agregats["national"]["montant_ue_total"] == 10.0
+    assert agregats["interregional"]["montant_ue_total"] == 7.0
+
+
+def test_aucune_categorie_thematique_n_est_inventee():
+    """Le piège serait de remplir la dimension d'un « Non spécifié » pour garder
+    la même forme de sortie entre périodes : ce serait une catégorie qui n'existe
+    dans aucune source, affichée comme si elle avait été mesurée."""
+    agregats = calculer_agregats(
+        df_sans_objectif(operation("A"), operation("B", national=True)),
+        COLS_SANS_OBJECTIF,
+    )
+
+    assert "Non spécifié" not in json.dumps(agregats, ensure_ascii=False)
+
+
+def test_avec_dimension_thematique_les_blocs_objectif_sont_toujours_la():
+    """Garde-fou de non-régression : rendre les blocs conditionnels ne doit rien
+    retirer à la période qui porte la dimension."""
+    agregats = calculer_agregats(
+        df_operations(
+            operation("A", objectif="OS1"),
+            operation("B", regions=("Corse",), objectif="OS2"),
+        ),
+        COLS,
+    )
+
+    assert BLOCS_OBJECTIF <= set(agregats)
+    assert set(agregats["by_objectif_strategique"]) == {"OS1", "OS2"}
