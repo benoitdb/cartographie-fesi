@@ -45,12 +45,19 @@ racine pour les tests (`requirements-dev.txt`).
   python interreg_totals.py               # Tableau 10  -> interreg.json
   python transferts_solidarite_totals.py  # Tableau 3A/3B -> transferts_solidarite.json
   ```
+- **Profil d'une source** (page « Validation de la source »), un JSON **committé**
+  par fichier source, à régénérer à chaque nouveau millésime :
+  ```
+  python profil_source.py 2021-2027-conventionnees
+  python profil_source.py 2014-2020-synergie
+  ```
+  Les identifiants sont les clés de `sources.SOURCES`.
 - **`region_metadata.py`** est un script **one-shot** qui appelle Wikidata par
   le réseau. Ne pas le lancer dans une régénération de routine : son résultat
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (126 tests, ~11 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (164 tests, ~11 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent la fixture committée dans `tests/fixtures/` (voir son README —
@@ -75,9 +82,15 @@ racine pour les tests (`requirements-dev.txt`).
   `pages/` = pages multipage, `utils/` = toute la logique (chargement, calculs,
   styles, thèmes)
 - `data-pipeline/` — scripts de transformation, un par sortie JSON.
-  `agregats.py` et `schema_source.py` font exception : ce sont des modules
-  importés (par `ingest.py`, et par le générateur de fixture pour le premier),
-  pas des scripts à lancer.
+  `agregats.py`, `schema_source.py` et `sources.py` font exception : ce sont des
+  modules importés (par `ingest.py`, et par le générateur de fixture pour le
+  premier), pas des scripts à lancer.
+  **`sources.py` décrit chaque fichier source une seule fois** — motif de nom,
+  feuille, période (donc schéma), date d'extraction, table programme → région.
+  `ingest.py` et `profil_source.py` le lisent tous les deux : les deux doivent
+  lire le même fichier de la même façon, sinon le profil atteste une donnée qui
+  n'est pas celle qu'on a ingérée. Ajouter une source = une entrée dans
+  `SOURCES`, pas un second script.
 - `data-pipeline/reference/` — **données réglementaires saisies à la main**
   depuis l'Accord de partenariat 2021-2027 (tableaux 3A/3B, 8, 9B, 10), NUTS,
   catégories de cohésion UE. C'est la source de vérité des montants *programmés*,
@@ -99,7 +112,7 @@ racine pour les tests (`requirements-dev.txt`).
 - **Le fichier est republié 5 fois par an, en « annule et remplace »** — nouveau
   nom de fichier daté à chaque fois. `ingest.py` retient désormais le millésime
   le plus récent de `data/raw/` et **affiche lequel** au démarrage
-  (`schema_source.trouver_fichier_source`, issue #47) : lire cette ligne avant
+  (`sources.trouver_fichier`, issue #47) : lire cette ligne avant
   toute conclusion sur des chiffres. Le millésime est aussi propagé jusqu'au
   dashboard (`metadata.millesime` → `utils/millesime.py`), qui l'affiche en pied
   de barre latérale sur chaque page — **ne pas retirer cet affichage** : c'est
@@ -112,8 +125,21 @@ racine pour les tests (`requirements-dev.txt`).
   réordonnancement de la source fait échouer le pipeline avec un message qui
   nomme la position fautive, au lieu de produire des données fausses en silence.
   La comparaison ignore casse, espaces et type d'apostrophe — le fichier source
-  mélange déjà `'` et `’`. Si la source change légitimement, mettre à jour
-  `COLONNES_ATTENDUES` après avoir vérifié à quoi correspond chaque colonne.
+  mélange déjà `'` et `’`. Si la source change légitimement, mettre à jour le
+  schéma de sa période (`schema_source.SCHEMAS`) après avoir vérifié à quoi
+  correspond chaque colonne.
+- **Le schéma dépend de la période, pas du projet** (issue #12) :
+  `schema_source.SCHEMAS` porte une liste de colonnes par période — 23 colonnes
+  en 2021-2027, 19 en 2014-2020, dans un ordre différent. Les clés internes sont
+  communes quand la colonne l'est, mais **2014-2020 n'a ni objectif stratégique,
+  ni taux de cofinancement, ni date de première convention** (sa dimension
+  thématique est le `Domaine d'intervention`, et sa date de référence celle de la
+  programmation) : tout code aval doit tester la présence d'une clé, jamais la
+  supposer. `build_cols(colonnes)` sans schéma reste 2021-2027.
+  Les libellés de 2014-2020 sont vérifiés dans les tests contre un **relevé
+  indépendant** des colonnes du fichier : les tests dérivant leurs libellés du
+  schéma lui-même ne peuvent pas voir une transcription fausse (constaté par
+  mutation). Reconduire ce relevé pour toute nouvelle période.
 - **Programmé ≠ engagé.** Les montants programmés viennent de l'Accord de
   partenariat dans sa version **préliminaire** de juin 2022, probablement
   révisée depuis. Tout taux de consommation est une estimation : la réserve

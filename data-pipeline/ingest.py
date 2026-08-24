@@ -5,27 +5,33 @@ from pathlib import Path
 import pandas as pd
 from agregats import calculer_agregats, partitionner
 from region_mapping import get_unresolved, harmonize_region, reset_unresolved
-from schema_source import build_cols, millesime_du_fichier, trouver_fichier_source
+from sources import cols_internes, millesime, source, trouver_fichier
 
 # Chemins
-RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "processed"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# Le fichier, sa feuille et son schéma sont décrits une seule fois, dans
+# `sources.py`, partagé avec `profil_source.py` : les deux doivent lire le même
+# fichier de la même façon, sinon le profil atteste une donnée qui n'est pas
+# celle qu'on a ingérée (issue #12). L'ingestion 2014-2020 réutilisera ce même
+# chemin de code, paramétré par source (étape D).
+SOURCE = source("2021-2027-conventionnees")
+
 # Millésime le plus récent, pas un chemin codé en dur : le fichier est republié
 # 5 fois par an en « annule et remplace » (issue #47).
-XLSX_PATH = trouver_fichier_source(RAW_DIR)
+XLSX_PATH = trouver_fichier(SOURCE)
 
 # Lire le fichier
 print(f"📖 Lecture du fichier XLSX : {XLSX_PATH.name}")
-df = pd.read_excel(XLSX_PATH, sheet_name=0)
+df = pd.read_excel(XLSX_PATH, sheet_name=SOURCE["feuille"])
 
 print(f"✅ Données chargées: {len(df)} opérations")
 
 # Mapping des colonnes par index (plus fiable que les noms), mais vérifié contre
-# les libellés attendus : sans ce contrôle, un réordonnancement du fichier source
-# produirait des données fausses sans erreur (issue #45).
-COLS = build_cols(df.columns)
+# les libellés attendus de la période : sans ce contrôle, un réordonnancement du
+# fichier source produirait des données fausses sans erreur (issue #45).
+COLS = cols_internes(SOURCE, df.columns)
 
 # Convertir les colonnes de codes postaux en string et nettoyer
 print("🔄 Normalisation des données...")
@@ -127,7 +133,9 @@ output_data = {
         # la source est republiée 5 fois par an, la fraîcheur des chiffres doit se
         # lire à l'écran et pas seulement dans le log du pipeline (issue #47).
         'fichier_source': XLSX_PATH.name,
-        'millesime': millesime_du_fichier(XLSX_PATH),
+        # Date déclarée par la source si elle en a une (le fichier Synergie
+        # 14-20 n'a pas de préfixe daté), sinon le préfixe du nom de fichier.
+        'millesime': millesime(SOURCE, XLSX_PATH),
         'total_operations': len(df),
         'nb_regions_harmonized': len(aggregates['by_region']),
         'nb_regions_raw': df[COLS['region']].nunique(),
