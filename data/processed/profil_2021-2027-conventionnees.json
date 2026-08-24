@@ -303,18 +303,16 @@
     },
     "region_derivable": {
       "programmes_distincts": 21,
-      "programmes_avec_region": 17,
-      "operations_resolues": 8043,
-      "taux_operations_resolues": 48.4,
+      "programmes_avec_region": 19,
+      "operations_resolues": 8613,
+      "taux_operations_resolues": 51.8,
       "programmes_sans_region_unique": [
-        "Programme Pays de la Loire  FEDER-FSE+-FTJ 2021-2027",
-        "Programme Provence-Alpes-Côte d’Azur et Massif des Alpes FEDER-FSE+-FTJ 2021-2027",
         "Programme national FSE+ Emploi - Inclusion - Jeunesse - Compétences",
         "Programme national FTJ Emploi - Compétences"
       ],
-      "operations_couvertes": 16338,
-      "taux_operations_couvertes": 98.3,
-      "operations_sans_region": 287
+      "operations_couvertes": 16625,
+      "taux_operations_couvertes": 100.0,
+      "operations_sans_region": 0
     },
     "dimension_thematique": {
       "libelle": "Objectif stratégique",

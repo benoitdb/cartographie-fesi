@@ -99,3 +99,52 @@ def test_une_region_vide_est_traitee_comme_absente():
 
     assert regions == []
     assert national
+
+
+def test_apostrophe_typographique_du_programme_rattache_quand_meme():
+    """Issue #71 : le fichier source écrit PACA avec l'apostrophe typographique
+    (U+2019), la table de rattachement avec l'apostrophe droite (U+0027). Comparés
+    au caractère près, 287 opérations sans région retombaient sur le Volet
+    national — 265 M€ au mauvais endroit.
+
+    Les deux graphies étant indiscernables à l'œil — ce qui a rendu le défaut
+    invisible —, le test vérifie explicitement laquelle il emploie."""
+    programme_source = (
+        "Programme Provence-Alpes-Côte d’Azur et Massif des Alpes FEDER-FSE+-FTJ 2021-2027"
+    )
+    assert "’" in programme_source
+
+    regions, _, national = harmonize_region(None, programme_source)
+
+    assert regions == ["Provence-Alpes-Côte d'Azur"]
+    assert not national
+
+
+def test_espace_insecable_du_programme_rattache_quand_meme():
+    """Même classe de défaut, latente celle-là : le libellé source de Pays de la
+    Loire porte une espace insécable là où la table a une espace ordinaire. Ses
+    opérations ont toutes leur région renseignée aujourd'hui — le repli se
+    réveillerait au premier export où elle serait vide."""
+    regions, _, national = harmonize_region(
+        None, "Programme Pays de la Loire\xa0 FEDER-FSE+-FTJ 2021-2027"
+    )
+
+    assert regions == ["Pays de la Loire"]
+    assert not national
+
+
+def test_le_rattachement_par_programme_ignore_la_casse():
+    """Corollaire de la normalisation : ce qui vaut pour les apostrophes et les
+    espaces vaut pour la casse, comme pour les libellés de colonnes."""
+    regions, _, _ = harmonize_region(None, "programme corse feder-fse+ 2021-2027")
+
+    assert regions == ["Corse"]
+
+
+def test_un_programme_inconnu_ne_devient_pas_regional_par_normalisation():
+    """La normalisation élargit la comparaison, elle ne doit pas rapprocher deux
+    programmes distincts : un libellé absent de la table reste national."""
+    regions, _, national = harmonize_region(None, "Programme Corse FEDER 2007-2013")
+
+    assert regions == []
+    assert national

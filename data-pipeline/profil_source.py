@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 from profilage_source import profiler_source
-from region_mapping import PROGRAMME_TO_REGION
+from region_mapping import PROGRAMME_TO_REGION, indexer_programmes, region_du_programme
 from schema_source import build_cols, millesime_du_fichier
 
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
@@ -183,8 +183,17 @@ def main(source_id):
     # via le contrôle de schéma) — voir le commentaire de SOURCES.
     cols = conf["cols"](df) if callable(conf["cols"]) else conf["cols"]
 
+    # Rattachement par programme sur libellé **normalisé**, comme `ingest.py` : un
+    # `.get` direct comparerait les libellés au caractère près et le profil
+    # signalerait comme non rattachables des opérations que le pipeline rattache
+    # (issue #71). La page « Validation de la source » a trouvé ce défaut : elle
+    # doit en refléter la correction, pas la reproduire.
     programme_to_region = conf.get("programme_to_region")
-    deriver_region = programme_to_region.get if programme_to_region else None
+    deriver_region = None
+    if programme_to_region:
+        index = indexer_programmes(programme_to_region)
+        def deriver_region(libelle):
+            return region_du_programme(libelle, index)
 
     profil = {
         "source_id": source_id,
