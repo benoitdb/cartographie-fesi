@@ -51,6 +51,8 @@ OLD_TO_MODERN = {
     '26': 'Bourgogne-Franche-Comté',      # ex-Bourgogne
     '27': 'Bourgogne-Franche-Comté',
     '28': 'Normandie',
+    '23': 'Normandie',                    # ex-Haute-Normandie
+    '25': 'Normandie',                    # ex-Basse-Normandie
     '31': 'Hauts-de-France',              # ex-Nord-Pas-de-Calais
     '32': 'Hauts-de-France',
     '41': 'Grand Est',                    # ex-Lorraine
@@ -59,14 +61,27 @@ OLD_TO_MODERN = {
     '44': 'Grand Est',
     '52': 'Pays de la Loire',
     '53': 'Bretagne',
+    '54': 'Nouvelle-Aquitaine',           # ex-Poitou-Charentes
+    '72': 'Nouvelle-Aquitaine',           # ex-Aquitaine
     '73': 'Occitanie',                    # ex-Midi-Pyrénées
+    '74': 'Nouvelle-Aquitaine',           # ex-Limousin
     '76': 'Occitanie',
     '82': 'Auvergne-Rhône-Alpes',         # ex-Rhône-Alpes
     '83': 'Auvergne-Rhône-Alpes',         # ex-Auvergne
     '84': 'Auvergne-Rhône-Alpes',
+    '91': 'Occitanie',                    # ex-Languedoc-Roussillon
     '93': 'Provence-Alpes-Côte d\'Azur',
     '94': 'Corse',
 }
+
+# Les six codes 23, 25, 54, 72, 74 et 91 viennent du fichier Synergie 2014-2020
+# (issue #12) et suivent la même règle que les autres : aucun n'est ajouté « au
+# cas où ». Chacun n'apparaît dans les 96 valeurs distinctes de ce fichier
+# qu'associé à **un seul** nom (`23/Haute-Normandie`, `91/Languedoc-Roussillon`,
+# …), et ce nom résout déjà vers la même région moderne par OLD_NAME_TO_MODERN :
+# le code ne fait que confirmer par le code ce que le nom donnait en repli. Ils
+# n'apparaissent pas en 2021-2027, dont le fichier porte les codes post-2016
+# (27, 28, 32, 44, 76, 84).
 
 # Filet de sécurité par nom : noms d'anciennes régions (réforme territoriale de 2016,
 # fait public bien établi) → région moderne, plus une identité pour les régions
@@ -152,8 +167,9 @@ PROGRAMME_TO_REGION = {
 # Les programmes **nationaux** (FEAD, PNAT Europ'Act) et **interrégionaux**
 # (Massif Central, Loire, Massif des Alpes, Rhône-Saône, Pyrénées) valent `None`
 # explicitement : pas de région unique par construction, ce n'est pas un trou de
-# mapping. Les 5 interrégionaux tombent donc au Volet national en v1, faute de la
-# liste des régions de chaque massif — donnée de référence à sourcer.
+# mapping. Les 5 interrégionaux tombent donc au Volet national en v1 (1 123 op.,
+# 137,0 M€), faute de la liste des régions de chaque massif — donnée de référence
+# à sourcer, pas correction de code : issue #77.
 PROGRAMME_TO_REGION_2014_2020 = {
     'Programme opérationnel FEDER-FSE Centre-Val de Loire 2014-2020': 'Centre-Val de Loire',
     'Programme opérationnel FEDER Réunion Conseil Régional 2014-2020': 'La Réunion',
@@ -262,13 +278,24 @@ def _resolve_named_fragment(code, name):
     return name, False
 
 
-def harmonize_region(raw_region, libelle_programme):
+def harmonize_region(raw_region, libelle_programme, programme_index=None):
     """
     Normalise une valeur région brute en liste de régions modernes.
 
     Args:
         raw_region (str or None): Valeur brute du champ "Région de l'opération"
         libelle_programme (str): Libellé du programme (pour fallback si région vide)
+        programme_index (dict or None): Index programme → région de la période, tel
+            que retourné par `indexer_programmes`. Défaut : 2021-2027.
+
+    En 2014-2020, ce n'est pas un simple repli : la colonne région n'y est remplie
+    qu'à 16,4 % (4 087 opérations sur 24 908), et le libellé du programme est la
+    voie de rattachement principale (issue #12). D'où le paramètre — la table de
+    la période est portée par le descripteur de source (`sources.SOURCES`).
+
+    L'index est passé **construit** plutôt que la table brute : `harmonize_region`
+    est appelée une fois par opération, et normaliser les 30 libellés de la table
+    à chaque appel coûterait 24 908 fois le même travail.
 
     Returns:
         tuple: (regions_modernes: list[str], is_interregional: bool, is_national: bool)
@@ -279,12 +306,17 @@ def harmonize_region(raw_region, libelle_programme):
 
     # Cas 1 : région manquante
     if not raw_region or (isinstance(raw_region, float) and pd.isna(raw_region)):
-        # Fallback via le programme si c'est un programme régional (comparaison sur
+        # Rattachement via le programme s'il est mono-région (comparaison sur
         # libellé normalisé, cf. region_du_programme)
-        region = region_du_programme(libelle_programme)
+        region = region_du_programme(libelle_programme, programme_index)
         if region is not None:
             return ([region], False, False)
-        # Sinon : Volet national ou programme national sans région
+        # Sinon : Volet national, ou programme national **ou interrégional** sans
+        # région unique. En 2014-2020, les 5 programmes interrégionaux (Massif
+        # Central, Loire, Massif des Alpes, Rhône-Saône, Pyrénées) tombent donc
+        # ici : la donnée ne dit pas quelles régions couvre chaque massif, et
+        # cette liste de référence reste à sourcer. Choix de v1 assumé, tracé en
+        # issue #77 — les inventer serait pire que les compter à part.
         return ([], False, True)
 
     # Cas 2 : région présente → parser et normaliser

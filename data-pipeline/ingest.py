@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pandas as pd
 from agregats import calculer_agregats, partitionner
-from region_mapping import get_unresolved, harmonize_region, reset_unresolved
+from region_mapping import (
+    get_unresolved,
+    harmonize_region,
+    indexer_programmes,
+    reset_unresolved,
+)
 from sources import cols_internes, millesime, source, trouver_fichier
 
 # Chemins
@@ -46,10 +51,18 @@ for col in df.columns:
 # Harmoniser les régions avec la fonction de mapping
 print("🌍 Harmonisation des régions (pré-2016 → modernes)...")
 reset_unresolved()
+
+# Table programme → région de la période, prise dans le descripteur et indexée
+# **une fois** : `harmonize_region` est appelée une fois par opération. Passée
+# explicitement même pour 2021-2027, où c'est déjà le défaut — l'implicite
+# rattacherait toute la période 14-20 au Volet national sans lever d'erreur.
+PROGRAMME_INDEX_SOURCE = indexer_programmes(SOURCE['programme_to_region'])
+
 def apply_harmonize(row):
     regions_modernes, is_interregional, is_national = harmonize_region(
         row[COLS['region']],
-        row[COLS['libelle_prog']]
+        row[COLS['libelle_prog']],
+        PROGRAMME_INDEX_SOURCE,
     )
     return pd.Series({
         'regions_modernes': regions_modernes,

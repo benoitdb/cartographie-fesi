@@ -6,7 +6,13 @@ alors des chiffres plausibles et faux.
 """
 
 import pytest
-from region_mapping import get_unresolved, harmonize_region, reset_unresolved
+from region_mapping import (
+    PROGRAMME_TO_REGION_2014_2020,
+    get_unresolved,
+    harmonize_region,
+    indexer_programmes,
+    reset_unresolved,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -145,6 +151,149 @@ def test_un_programme_inconnu_ne_devient_pas_regional_par_normalisation():
     """La normalisation élargit la comparaison, elle ne doit pas rapprocher deux
     programmes distincts : un libellé absent de la table reste national."""
     regions, _, national = harmonize_region(None, "Programme Corse FEDER 2007-2013")
+
+    assert regions == []
+    assert national
+
+
+# --- 2014-2020 : la période où le rattachement par programme porte l'essentiel ---
+#
+# Fragments repris **tels quels** du fichier Synergie 14-20, pas inventés : sa
+# colonne région n'est remplie qu'à 16,4 %, et les 83,6 % restants ne sont
+# rattachés que par le libellé du programme (issue #12).
+
+INDEX_2014_2020 = indexer_programmes(PROGRAMME_TO_REGION_2014_2020)
+
+
+@pytest.mark.parametrize(
+    ("fragment", "attendu"),
+    [
+        ("91/Languedoc-Roussillon", "Occitanie"),
+        ("74/Limousin", "Nouvelle-Aquitaine"),
+        ("23/Haute-Normandie", "Normandie"),
+        ("25/Basse-Normandie", "Normandie"),
+        ("54/Poitou-Charentes", "Nouvelle-Aquitaine"),
+        ("72/Aquitaine", "Nouvelle-Aquitaine"),
+    ],
+)
+def test_les_codes_2014_2020_sont_resolus_par_le_code(fragment, attendu):
+    """Ces six codes pré-2016 n'existent que dans le fichier 14-20. Ils étaient
+    résolus par le repli sur le nom ; ils le sont désormais par le code, comme
+    les autres — chacun confirmé par la donnée, où il n'apparaît qu'associé à un
+    seul nom.
+
+    Le nom est **remplacé par un intrus** : avec le vrai nom, le repli résout
+    aussi bien et le test resterait vert en retirant le code de la table (vu par
+    mutation). Seul un nom que rien ne reconnaît prouve que c'est le code qui a
+    répondu."""
+    code = fragment.split("/", 1)[0]
+    regions, _, _ = harmonize_region(f"{code}/Nom absent de toute table", None)
+
+    assert regions == [attendu]
+    assert get_unresolved() == [], "le code seul doit suffire, sans repli sur le nom"
+
+
+@pytest.mark.parametrize(
+    ("fragment", "attendu"),
+    [
+        ("91/Languedoc-Roussillon", "Occitanie"),
+        ("74/Limousin", "Nouvelle-Aquitaine"),
+        ("23/Haute-Normandie", "Normandie"),
+        ("25/Basse-Normandie", "Normandie"),
+        ("54/Poitou-Charentes", "Nouvelle-Aquitaine"),
+        ("72/Aquitaine", "Nouvelle-Aquitaine"),
+    ],
+)
+def test_les_fragments_2014_2020_reels_donnent_la_bonne_region(fragment, attendu):
+    """Les mêmes fragments, tels qu'écrits dans le fichier : code et nom doivent
+    dire la même chose, sinon l'un des deux est faux."""
+    regions, _, _ = harmonize_region(fragment, None)
+
+    assert regions == [attendu]
+    assert get_unresolved() == []
+
+
+def test_les_96_valeurs_region_2014_2020_sont_toutes_resolues():
+    """Échantillon des formes réellement présentes, dont les multi-régions
+    séparées par `|`. Un fragment non résolu passe quand même (repli sur le nom
+    brut) : c'est `UNRESOLVED_FRAGMENTS` qui le dit, et personne d'autre."""
+    for valeur in [
+        "91/Languedoc-Roussillon",
+        "82/Rhône-Alpes | 83/Auvergne",
+        "26/Bourgogne | 43/Franche-Comté",
+        "72/Aquitaine | 54/Poitou-Charentes | 74/Limousin",
+        "23/Haute-Normandie | 25/Basse-Normandie",
+    ]:
+        harmonize_region(valeur, None)
+
+    assert get_unresolved() == []
+
+
+def test_deux_anciennes_regions_fusionnees_ne_font_pas_une_interregionale():
+    """Aquitaine, Poitou-Charentes et Limousin sont **une** région depuis 2016 :
+    les compter comme interrégionales sortirait l'opération des agrégats de
+    Nouvelle-Aquitaine pour la ranger dans un « à cheval » qui n'existe plus."""
+    regions, interregional, _ = harmonize_region(
+        "72/Aquitaine | 54/Poitou-Charentes | 74/Limousin", None
+    )
+
+    assert regions == ["Nouvelle-Aquitaine"]
+    assert not interregional
+
+
+def test_un_programme_2014_2020_rattache_l_operation_a_sa_region():
+    """Le cas majoritaire de la période : région absente, programme connu."""
+    regions, _, national = harmonize_region(
+        None,
+        "Programme Opérationnel FEDER-FSE Languedoc-Roussillon 2014-2020",
+        INDEX_2014_2020,
+    )
+
+    assert regions == ["Occitanie"]
+    assert not national
+
+
+def test_sans_index_de_periode_un_programme_2014_2020_reste_national():
+    """Le paramètre n'est pas cosmétique : oublier de passer l'index de la
+    période rattacherait 20 821 opérations 14-20 au Volet national sans lever la
+    moindre erreur."""
+    regions, _, national = harmonize_region(
+        None, "Programme Opérationnel FEDER-FSE Languedoc-Roussillon 2014-2020"
+    )
+
+    assert regions == []
+    assert national
+
+
+def test_un_programme_interregional_2014_2020_reste_au_volet_national():
+    """Choix de v1 (issue #12, étape C4) : les 5 programmes interrégionaux valent
+    `None` dans la table, faute de la liste des régions de chaque massif. Ils
+    sont comptés à part, pas répartis au jugé."""
+    regions, interregional, national = harmonize_region(
+        None, "Programme opérationnel Interrégional FEDER Pyrénées 2014-2020", INDEX_2014_2020
+    )
+
+    assert regions == []
+    assert not interregional
+    assert national
+
+
+def test_un_programme_national_2014_2020_reste_national():
+    regions, _, national = harmonize_region(
+        None, "Programme opérationnel FEAD 2014-2020", INDEX_2014_2020
+    )
+
+    assert regions == []
+    assert national
+
+
+def test_les_deux_periodes_ne_se_rattachent_pas_l_une_a_l_autre():
+    """Chaque index ne connaît que ses programmes : un libellé 21-27 passé avec
+    l'index 14-20 (ou l'inverse) doit rester non rattaché, pas retomber sur une
+    région approchante."""
+    regions, _, national = harmonize_region(
+        None, "Programme Corse FEDER-FSE+ 2021-2027", INDEX_2014_2020
+    )
 
     assert regions == []
     assert national

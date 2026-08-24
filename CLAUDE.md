@@ -57,7 +57,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (164 tests, ~11 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (183 tests, ~11 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent la fixture committée dans `tests/fixtures/` (voir son README —
@@ -140,6 +140,12 @@ racine pour les tests (`requirements-dev.txt`).
   indépendant** des colonnes du fichier : les tests dérivant leurs libellés du
   schéma lui-même ne peuvent pas voir une transcription fausse (constaté par
   mutation). Reconduire ce relevé pour toute nouvelle période.
+- **`harmonize_region` prend la table programme → région de sa période**
+  (`programme_index`, construit une fois par `indexer_programmes`). En 2021-2027
+  c'est un repli marginal ; en **2014-2020 c'est la voie principale**, la colonne
+  région n'y étant remplie qu'à 16,4 %. Oublier de passer l'index de la période
+  ne lève rien : ça rattache 20 821 opérations au Volet national. `ingest.py` le
+  passe explicitement, depuis le descripteur de source.
 - **Programmé ≠ engagé.** Les montants programmés viennent de l'Accord de
   partenariat dans sa version **préliminaire** de juin 2022, probablement
   révisée depuis. Tout taux de consommation est une estimation : la réserve
