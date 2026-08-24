@@ -143,6 +143,51 @@ PROGRAMME_TO_REGION = {
     # Programmes nationaux sont volontairement absents — pas de fallback région unique
 }
 
+# Même table pour 2014-2020 (issue #12). Elle compte parce que la colonne
+# `Région de l'opération` n'y est remplie qu'à 16 % : le libellé du programme est
+# la voie de rattachement principale, pas un repli. Régions **modernes**
+# post-2016, cohérentes avec `MODERN_REGIONS` — les programmes, eux, portent les
+# anciennes régions dans leur nom.
+#
+# Les programmes **nationaux** (FEAD, PNAT Europ'Act) et **interrégionaux**
+# (Massif Central, Loire, Massif des Alpes, Rhône-Saône, Pyrénées) valent `None`
+# explicitement : pas de région unique par construction, ce n'est pas un trou de
+# mapping. Les 5 interrégionaux tombent donc au Volet national en v1, faute de la
+# liste des régions de chaque massif — donnée de référence à sourcer.
+PROGRAMME_TO_REGION_2014_2020 = {
+    'Programme opérationnel FEDER-FSE Centre-Val de Loire 2014-2020': 'Centre-Val de Loire',
+    'Programme opérationnel FEDER Réunion Conseil Régional 2014-2020': 'La Réunion',
+    'Programme Opérationnel Feder FSE Lorraine et massif des Vosges 2014-2020': 'Grand Est',
+    'Programme Opérationnel FEDER-FSE Languedoc-Roussillon 2014-2020': 'Occitanie',
+    'Programme Opérationnel FEDER-FSE Bourgogne 2014- 2020': 'Bourgogne-Franche-Comté',
+    'Programme opérationnel FEDER-FSE Midi-Pyrénées et Garonne 2014-2020': 'Occitanie',
+    'Programme opérationnel régional Auvergne FEDER-FSE 2014-2020': 'Auvergne-Rhône-Alpes',
+    'Programme Opérationnel FEDER-FSE Nord-Pas de Calais 2014-2020': 'Hauts-de-France',
+    'Programme opérationnel FEDER-FSE Ile-de-France et Bassin de Seine 2014-2020': 'Île-de-France',
+    'Programme opérationnel FEDER FSE IEJ Champagne Ardenne 2014-2020': 'Grand Est',
+    'Programme opérationnel FEDER-FSE Guadeloupe Conseil Régional 2014-2020': 'Guadeloupe',
+    'Programme opérationnel FEDER-FSE Martinique Conseil Régional 2014-2020': 'Martinique',
+    'Programme opérationnel FEDER-FSE Picardie 2014-2020': 'Hauts-de-France',
+    'Programme opérationnel FEDER-FSE Rhône-Alpes 2014-2020': 'Auvergne-Rhône-Alpes',
+    'Programme opérationnel des Pays de la Loire': 'Pays de la Loire',
+    'Programme opérationnel FEDER-FSE Franche-Comté et massif du Jura 2014-2020': 'Bourgogne-Franche-Comté',
+    'Programme opérationnel FEDER-FSE Guyane 2014-2020': 'Guyane',
+    'Programme Opérationnel FEDER Alsace 2014-2020': 'Grand Est',
+    'Programme Opérationnel FEDER-FSE Provence Alpes Côte d\'Azur 2014-2020': 'Provence-Alpes-Côte d\'Azur',
+    'Programme Opérationnel FSE Alsace 2014-2020': 'Grand Est',
+    'PO FEDER-FSE Corse 2014-2020': 'Corse',
+    'Programme Opérationnel FEDER Mayotte 2014-2020': 'Mayotte',
+    'Programme opérationnel FEDER Guadeloupe et Saint-Martin Etat 2014-2020': 'Guadeloupe',
+    # Nationaux / interrégionaux : pas de région unique (None), pas un trou.
+    'Programme opérationnel FEAD 2014-2020': None,
+    'PNAT Europ\'Act 2014-2020': None,
+    'Programme opérationnel interrégionnal Massif Central FEDER 2014-2020': None,
+    'Programme opérationnel Interrégional FEDER Loire 2014-2020': None,
+    'Programme opérationnel Interrégional FEDER du Massif des Alpes 2014-2020': None,
+    'Programme opérationnel Interrégional FEDER Rhône-Saône 2014-2020': None,
+    'Programme opérationnel Interrégional FEDER Pyrénées 2014-2020': None,
+}
+
 # Le rattachement par programme se fait sur un libellé **normalisé**, pas sur la chaîne
 # brute (issue #71). La source écrit `Provence-Alpes-Côte d’Azur` avec l'apostrophe
 # typographique là où la table ci-dessus a l'apostrophe droite, et glisse une espace
