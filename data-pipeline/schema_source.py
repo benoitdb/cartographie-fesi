@@ -149,11 +149,42 @@ COLONNES_NOUVELLE_AQUITAINE_2014_2020 = [
     ("region", "Région"),  # Dérivée, voir docstring ci-dessus.
 ]
 
+# Fichier Bretagne hors-Synergie (issue #68) : liste régionale publiée par
+# europe.bzh, l'autorité de gestion n'utilisant pas SynergieCDM. Deux feuilles
+# séparées (FEDER, FSE) au même schéma — lues et concaténées par
+# `sources.lire_dataframe` (champ `feuilles`), qui pose `Fonds` à une valeur
+# constante par feuille avant de les recoller (aucune colonne `Fonds` dans le
+# fichier lui-même). Ni numéro d'opération, ni montant UE direct : seul le
+# taux de cofinancement l'est, le montant UE se calcule (dépenses × taux) dans
+# le `pretraitement` du descripteur — pas ici, ce module ne fait que décrire
+# des colonnes qui existent réellement dans le fichier ou que le
+# pretraitement pose avant la vérification de schéma.
+COLONNES_BRETAGNE_2014_2020 = [
+    ("nom_benef", "Nom du bénéficiaire"),
+    ("intitule_proj", "Nom de l'opération"),
+    ("resume_op", "Résumé de l'opération"),
+    ("date_debut", "Date de début de l'opération"),
+    ("date_fin", "Date de fin de l'opération"),
+    ("date_crpe", "Date de CRPE"),
+    ("depenses", "Total des dépenses éligibles"),
+    ("taux_cofinance", "Taux de cofinancement UE"),
+    ("localisation", "Lieu"),
+    ("pays", "Pays"),
+    ("categorie_intervention_ref", "Réf. Catégorie d'intervention"),
+    ("domaine_intervention", "Catégorie d'intervention dont relève l'opération"),
+    ("date_maj", "date de dernière mise à jour"),
+    ("fonds", "Fonds"),  # Posée par feuille, voir docstring ci-dessus.
+    ("libelle_prog", "Libellé programme"),  # Dérivée, voir sources.py.
+    ("region", "Région"),  # Constante, voir sources.py.
+    ("montant_ue", "Montant UE"),  # Calculée, voir sources.py.
+]
+
 SCHEMAS = {
     "2021-2027": COLONNES_2021_2027,
     "2014-2020": COLONNES_2014_2020,
     "2014-2020-pon-fse": COLONNES_PON_FSE_2014_2020,
     "2014-2020-nouvelle-aquitaine": COLONNES_NOUVELLE_AQUITAINE_2014_2020,
+    "2014-2020-bretagne": COLONNES_BRETAGNE_2014_2020,
 }
 
 # Le fichier source mélange les deux apostrophes (U+0027 dans "Région de
