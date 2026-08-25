@@ -1,0 +1,158 @@
+{
+  "source_id": "2014-2020-bretagne",
+  "source_label": "Bretagne (hors Synergie)",
+  "periode": "2014-2020",
+  "fichier_source": "bretagne_14_20.xlsx",
+  "date_source": "2022-06-09",
+  "date_generation": "2026-08-25",
+  "profil": {
+    "volumetrie": {
+      "operations": 846,
+      "colonnes": 17
+    },
+    "completude": {
+      "programme": {
+        "libelle": "Libellé programme",
+        "remplis": 846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "beneficiaire": {
+        "libelle": "Nom du bénéficiaire",
+        "remplis": 846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "fonds": {
+        "libelle": "Fonds",
+        "remplis": 846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "region": {
+        "libelle": "Région",
+        "remplis": 846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "dimension_thematique": {
+        "libelle": "Catégorie d'intervention dont relève l'opération",
+        "remplis": 846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "montant_ue": {
+        "libelle": "Montant UE",
+        "remplis": 846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "depenses": {
+        "libelle": "Total des dépenses éligibles",
+        "remplis": 846,
+        "manquants": 0,
+        "taux": 100.0
+      }
+    },
+    "par_fonds": [
+      {
+        "fonds": "FEDER",
+        "nb": 840,
+        "montant_ue": 218147323.67815286,
+        "part_nb": 99.3,
+        "part_montant": 74.3
+      },
+      {
+        "fonds": "FSE",
+        "nb": 6,
+        "montant_ue": 75464967.11,
+        "part_nb": 0.7,
+        "part_montant": 25.7
+      }
+    ],
+    "programmes": {
+      "distincts": 2,
+      "top": [
+        {
+          "valeur": "Programme opérationnel Bretagne FEDER 2014-2020",
+          "nb": 840
+        },
+        {
+          "valeur": "Programme opérationnel Bretagne FSE 2014-2020",
+          "nb": 6
+        }
+      ]
+    },
+    "regions": {
+      "colonne_remplie": 846,
+      "taux_colonne_remplie": 100.0,
+      "valeurs_distinctes": 1,
+      "top": [
+        {
+          "valeur": "Bretagne",
+          "nb": 846
+        }
+      ],
+      "manquantes_par_fonds": []
+    },
+    "dimension_thematique": {
+      "libelle": "Catégorie d'intervention dont relève l'opération",
+      "taux_remplie": 100.0,
+      "distincts": 37,
+      "top": [
+        {
+          "valeur": "058-Infrastructures de recherche et d'innovation (publiques)",
+          "nb": 193
+        },
+        {
+          "valeur": "062-Transfert de technologies et coopération entre universités et entreprises, principalement au profit des PME",
+          "nb": 110
+        },
+        {
+          "valeur": "014-Rénovation en vue d'accroître l'efficacité énergétique du parc de logements existant, projets de démonstration et actions de soutien",
+          "nb": 78
+        },
+        {
+          "valeur": "054-Infrastructures de logement",
+          "nb": 71
+        },
+        {
+          "valeur": "060-Activités de recherche et d'innovation dans les centres de recherche publics et les centres de compétence, y compris la mise en réseau",
+          "nb": 70
+        },
+        {
+          "valeur": "001-Investissement productif générique dans les petites et moyennes entreprises («PME»)",
+          "nb": 69
+        },
+        {
+          "valeur": "061-Activités de recherche et d'innovation dans les centres de recherche privés, y compris la mise en réseau",
+          "nb": 49
+        },
+        {
+          "valeur": "080-Services et applications en matière d'inclusion en ligne, d'accessibilité en ligne, d'apprentissage et d'éducation en ligne, culture numérique",
+          "nb": 34
+        },
+        {
+          "valeur": "048-TIC: Autres types d'infrastructures TIC/ressources informatiques à grande échelle/ équipements (y compris les infrastructures en ligne, les centres de données et les capteurs; également lorsqu",
+          "nb": 32
+        },
+        {
+          "valeur": "036-Transports multimodaux",
+          "nb": 27
+        }
+      ]
+    },
+    "montants": {
+      "montant_ue_total": 293612290.7881529,
+      "depenses_total": 1074613442.9699998,
+      "cofinancement_global": 27.3,
+      "montants_ue_negatifs": 0
+    },
+    "pays": [
+      {
+        "valeur": "France",
+        "nb": 846
+      }
+    ]
+  }
+}

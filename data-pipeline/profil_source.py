@@ -33,7 +33,11 @@ def main(source_id):
     conf = source(source_id)
 
     chemin = trouver_fichier(conf)
-    print(f"📖 Lecture : {chemin.name} (feuille « {conf['feuille']} »)")
+    if "feuilles" in conf:
+        noms_feuilles = ", ".join(f["nom"] for f in conf["feuilles"])
+        print(f"📖 Lecture : {chemin.name} (feuilles « {noms_feuilles} »)")
+    else:
+        print(f"📖 Lecture : {chemin.name} (feuille « {conf['feuille']} »)")
     df = lire_dataframe(conf, chemin)
     print(f"✅ {len(df)} opérations, {df.shape[1]} colonnes")
 

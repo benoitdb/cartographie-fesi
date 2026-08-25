@@ -138,6 +138,13 @@ def test_chaque_source_declare_les_champs_dont_ingest_a_besoin(source_id):
     ingestion de plusieurs minutes, après lecture du XLSX."""
     conf = SOURCES[source_id]
 
-    for champ in ("label", "periode", "motif_fichier", "feuille", "fichier_sortie",
+    for champ in ("label", "periode", "motif_fichier", "fichier_sortie",
                   "programme_to_region", "cles_profil", "url_source"):
         assert champ in conf, f"{source_id} : champ {champ!r} manquant"
+
+    # Une source lit soit une feuille unique (`feuille`), soit plusieurs
+    # feuilles à concaténer (`feuilles`, issue #68 — Bretagne) : jamais ni
+    # l'une ni l'autre.
+    assert ("feuille" in conf) != ("feuilles" in conf), (
+        f"{source_id} : doit déclarer exactement un de 'feuille'/'feuilles'"
+    )

@@ -80,6 +80,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "liste_operations_synergie_1420_08_2023.xlsx",
         "pon_fse_2014_2020.xls",
         "nouvelle_aquitaine_14_20.xlsx",
+        "bretagne_14_20.xlsx",
     ]
     for nom in fichiers:
         (tmp_path / nom).touch()
@@ -89,6 +90,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "2014-2020-synergie": 1,
         "2014-2020-pon-fse": 1,
         "2014-2020-nouvelle-aquitaine": 1,
+        "2014-2020-bretagne": 1,
     }
     for source_id, conf in SOURCES.items():
         matches = sorted(p.name for p in tmp_path.glob(conf["motif_fichier"]))
@@ -191,6 +193,82 @@ def test_nouvelle_aquitaine_deriver_region_pose_une_region_constante():
     df_pretraite = SOURCES["2014-2020-nouvelle-aquitaine"]["pretraitement"](df)
 
     assert list(df_pretraite["Région"]) == ["Nouvelle-Aquitaine"]
+
+
+def test_le_profil_bretagne_pointe_les_bonnes_colonnes():
+    """Ni numéro d'opération ni montant UE direct dans ce fichier (issue #68) :
+    `montant_ue` doit suivre la colonne calculée par le `pretraitement`, pas
+    une colonne du fichier qui n'existe pas."""
+    cols = cols_profil(source("2014-2020-bretagne"), colonnes_de("2014-2020-bretagne"))
+
+    assert cols["montant_ue"] == "Montant UE"
+    assert cols["depenses"] == "Total des dépenses éligibles"
+    assert cols["region"] == "Région"
+    assert cols["fonds"] == "Fonds"
+    assert "numero_operation" not in cols
+
+
+def test_bretagne_deriver_pose_une_region_constante_et_calcule_le_montant_ue():
+    """Le fichier ne couvre que la Bretagne (issue #68), comme la
+    Nouvelle-Aquitaine ; contrairement à elle, il ne porte pas de montant UE
+    direct — seul le taux de cofinancement l'est, le montant se calcule."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-bretagne")
+    df.loc[0, "Total des dépenses éligibles"] = 1000.0
+    df.loc[0, "Taux de cofinancement UE"] = 0.5
+    df.loc[0, "Fonds"] = "FEDER"
+
+    df_pretraite = SOURCES["2014-2020-bretagne"]["pretraitement"](df)
+
+    assert list(df_pretraite["Région"]) == ["Bretagne"]
+    assert df_pretraite["Montant UE"].iloc[0] == 500.0
+    assert df_pretraite["Libellé programme"].iloc[0] == (
+        "Programme opérationnel Bretagne FEDER 2014-2020"
+    )
+
+
+def test_bretagne_deriver_uniformise_la_date_de_mise_a_jour_mixte():
+    """La feuille FEDER exporte cette colonne en texte, la feuille FSE en date
+    Excel réelle — un artefact d'export par feuille, découvert en régénérant
+    `data_2014-2020_bretagne.json` (la sérialisation JSON plantait sur un
+    `Timestamp` non converti). Sans ce reparsing, la colonne reste `object`
+    après concaténation des deux feuilles."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-bretagne")
+    df = pd.concat([df, df], ignore_index=True)
+    df.loc[0, "date de dernière mise à jour"] = "05/08/2022"  # feuille FEDER
+    df.loc[1, "date de dernière mise à jour"] = pd.Timestamp("2019-12-31")  # feuille FSE
+
+    df_pretraite = SOURCES["2014-2020-bretagne"]["pretraitement"](df)
+
+    assert pd.api.types.is_datetime64_any_dtype(df_pretraite["date de dernière mise à jour"])
+    assert df_pretraite["date de dernière mise à jour"].iloc[0] == pd.Timestamp("2022-08-05")
+
+
+def test_lire_dataframe_concatene_les_feuilles_declarees(tmp_path):
+    """`feuilles` (pluriel) lit et recolle plusieurs feuilles du même fichier,
+    en posant `Fonds` à sa valeur déclarée par feuille — Bretagne publie FEDER
+    et FSE séparément, sans colonne `Fonds` dans le fichier (issue #68)."""
+    from sources import lire_dataframe
+
+    colonnes = [libelle for cle, libelle in SCHEMAS["2014-2020-bretagne"] if cle != "fonds"]
+    ligne = ["x"] * len(colonnes)
+    fichier = tmp_path / "test_feuilles.xlsx"
+    with pd.ExcelWriter(fichier) as writer:
+        pd.DataFrame([ligne], columns=colonnes).to_excel(writer, sheet_name="F", index=False)
+        pd.DataFrame([ligne, ligne], columns=colonnes).to_excel(
+            writer, sheet_name="S", index=False
+        )
+
+    conf = {
+        "feuilles": [{"nom": "F", "fonds": "FEDER"}, {"nom": "S", "fonds": "FSE"}],
+    }
+    df = lire_dataframe(conf, fichier)
+
+    assert len(df) == 3  # 1 ligne (F) + 2 lignes (S)
+    assert list(df["Fonds"]) == ["FEDER", "FSE", "FSE"]
 
 
 def test_les_libelles_reels_sont_suivis_pas_recopies():

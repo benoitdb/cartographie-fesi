@@ -87,6 +87,19 @@ _CLES_PROFIL_NOUVELLE_AQUITAINE_2014_2020 = {
     "pays": "pays",
 }
 
+# Ni numéro d'opération, ni département dans ce fichier (issue #68) — voir
+# COLONNES_BRETAGNE_2014_2020.
+_CLES_PROFIL_BRETAGNE_2014_2020 = {
+    "programme": "libelle_prog",
+    "beneficiaire": "nom_benef",
+    "fonds": "fonds",
+    "region": "region",
+    "montant_ue": "montant_ue",
+    "depenses": "depenses",
+    "dimension_thematique": "domaine_intervention",
+    "pays": "pays",
+}
+
 
 def _deriver_fonds_pon_fse(df):
     """`Fonds` n'existe pas dans le fichier PON FSE : seul `Libellé_po` distingue
@@ -117,6 +130,37 @@ def _deriver_region_nouvelle_aquitaine(df):
     colonnes numériques/date en `object`."""
     df = df.copy()
     df["Région"] = "Nouvelle-Aquitaine"
+    return df
+
+
+def _deriver_bretagne(df):
+    """Trois colonnes absentes du fichier, posées ici (voir
+    COLONNES_BRETAGNE_2014_2020) :
+
+    - `Libellé programme`, à partir de `Fonds` (déjà posée par
+      `lire_dataframe` à la lecture des deux feuilles) — reprend le titre réel
+      de chaque feuille (« Programme opérationnel Bretagne FEDER/FSE 2014-2020 »).
+    - `Région`, constante : le fichier ne couvre que la Bretagne (source
+      régionale, pas Synergie), comme pour la Nouvelle-Aquitaine.
+    - `Montant UE`, calculée (`Total des dépenses éligibles` × `Taux de
+      cofinancement UE`) : ce fichier ne porte pas de montant UE direct,
+      seul le taux l'est (issue #68).
+
+    En plus de ces trois ajouts, `date de dernière mise à jour` est reparsée
+    en date : la feuille FEDER l'exporte en texte (« 05/08/2022 »), la feuille
+    FSE en date Excel réelle — un artefact d'export, pas une différence entre
+    fonds. Sans ce reparsing la colonne reste `object` après concaténation des
+    deux feuilles (types mélangés str/Timestamp) et fait échouer la
+    sérialisation JSON en aval."""
+    df = df.copy()
+    df["Libellé programme"] = df["Fonds"].map(
+        lambda fonds: f"Programme opérationnel Bretagne {fonds} 2014-2020"
+    )
+    df["Région"] = "Bretagne"
+    df["Montant UE"] = df["Total des dépenses éligibles"] * df["Taux de cofinancement UE"]
+    df["date de dernière mise à jour"] = pd.to_datetime(
+        df["date de dernière mise à jour"], dayfirst=True
+    )
     return df
 
 # Champs d'un descripteur :
@@ -238,6 +282,42 @@ SOURCES = {
         "cles_profil": _CLES_PROFIL_NOUVELLE_AQUITAINE_2014_2020,
         "pretraitement": _deriver_region_nouvelle_aquitaine,
     },
+    # Troisième source hors-Synergie (issue #68) : liste régionale Bretagne,
+    # publiée par europe.bzh, deux feuilles séparées (FEDER/FSE) au même
+    # schéma. Sortie séparée, comme les deux précédentes : fusionner ces
+    # sources à `data_2014-2020.json` attend un consommateur (#83).
+    "2014-2020-bretagne": {
+        "label": "Bretagne (hors Synergie)",
+        "periode": "2014-2020",
+        "schema": "2014-2020-bretagne",
+        "motif_fichier": "bretagne_14_20*.xlsx",
+        "url_source": (
+            "https://www.bretagne.bzh/app/uploads/sites/5/"
+            "FEDER_Beneficiaires_CRPE_2022-06-09_A_publier.xlsx"
+        ),
+        "feuilles": [
+            {"nom": "Bretagne- FEDER", "fonds": "FEDER"},
+            {"nom": "Bretagne- FSE", "fonds": "FSE"},
+        ],
+        # Ligne 0 = titre fusionné, ligne 1 (index) = en-têtes français, ligne
+        # 2 = blanc, ligne 3 = traduction anglaise des en-têtes — sautées
+        # toutes les deux avant l'inférence de type par pandas (même piège que
+        # Nouvelle-Aquitaine, voir `lire_dataframe`).
+        "header": 1,
+        "skiprows": [2, 3],
+        # Le fichier déposé dans data/raw/ est renommé (`bretagne_14_20.xlsx`),
+        # sans préfixe daté exploitable par `millesime_du_fichier` ; sa colonne
+        # `date de dernière mise à jour` varie par ligne, pas d'export unique à
+        # y lire non plus. La date déclarée ici vient du nom d'origine du
+        # fichier téléchargé (« FEDER_Beneficiaires_CRPE_2022-06-09_A_publier.xlsx »).
+        "date_source": "2022-06-09",
+        "fichier_sortie": "data_2014-2020_bretagne.json",
+        # Chaque ligne est en Bretagne par construction (voir
+        # `_deriver_bretagne`) : pas de repli par programme à fournir ici.
+        "programme_to_region": {},
+        "cles_profil": _CLES_PROFIL_BRETAGNE_2014_2020,
+        "pretraitement": _deriver_bretagne,
+    },
 }
 
 
@@ -289,14 +369,40 @@ def lire_dataframe(conf, chemin):
     exactement le défaut que `sources.py` existe pour éviter (voir docstring de
     ce module).
 
-    `skiprows`, quand le descripteur le déclare, saute des lignes **avant** que
-    pandas n'infère le type des colonnes : les retirer après lecture (ex. via
-    `.iloc[1:]` dans un `pretraitement`) est trop tard, la ligne fautive a déjà
-    forcé les colonnes numériques/date en `object` pour toute la colonne
-    (constaté sur Nouvelle-Aquitaine, dont la ligne 1 est la traduction
-    française des en-têtes anglais — issue #68).
+    `skiprows`/`header`, quand le descripteur les déclare, s'appliquent
+    **avant** que pandas n'infère le type des colonnes : les retirer après
+    lecture (ex. via `.iloc[1:]` dans un `pretraitement`) est trop tard, la
+    ligne fautive a déjà forcé les colonnes numériques/date en `object` pour
+    toute la colonne (constaté sur Nouvelle-Aquitaine, dont la ligne 1 est la
+    traduction française des en-têtes anglais — issue #68).
+
+    `feuilles` (pluriel), quand le descripteur le déclare à la place de
+    `feuille`, lit et concatène plusieurs feuilles du même fichier — Bretagne
+    publie FEDER et FSE dans deux feuilles séparées au même schéma (issue #68).
+    Chaque élément est `{"nom": ..., "fonds": ...}` : `fonds` pose une colonne
+    `Fonds` à cette valeur constante avant de recoller les feuilles, le fichier
+    n'en portant aucune lui-même.
     """
-    df = pd.read_excel(chemin, sheet_name=conf["feuille"], skiprows=conf.get("skiprows"))
+    feuilles = conf.get("feuilles")
+    if feuilles:
+        parties = []
+        for feuille in feuilles:
+            partie = pd.read_excel(
+                chemin,
+                sheet_name=feuille["nom"],
+                skiprows=conf.get("skiprows"),
+                header=conf.get("header", 0),
+            )
+            partie["Fonds"] = feuille["fonds"]
+            parties.append(partie)
+        df = pd.concat(parties, ignore_index=True)
+    else:
+        df = pd.read_excel(
+            chemin,
+            sheet_name=conf["feuille"],
+            skiprows=conf.get("skiprows"),
+            header=conf.get("header", 0),
+        )
     pretraitement = conf.get("pretraitement")
     return pretraitement(df) if pretraitement else df
 
