@@ -81,6 +81,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "pon_fse_2014_2020.xls",
         "nouvelle_aquitaine_14_20.xlsx",
         "bretagne_14_20.xlsx",
+        "normandie_14_20.xlsx",
     ]
     for nom in fichiers:
         (tmp_path / nom).touch()
@@ -91,6 +92,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "2014-2020-pon-fse": 1,
         "2014-2020-nouvelle-aquitaine": 1,
         "2014-2020-bretagne": 1,
+        "2014-2020-normandie": 1,
     }
     for source_id, conf in SOURCES.items():
         matches = sorted(p.name for p in tmp_path.glob(conf["motif_fichier"]))
@@ -269,6 +271,98 @@ def test_lire_dataframe_concatene_les_feuilles_declarees(tmp_path):
 
     assert len(df) == 3  # 1 ligne (F) + 2 lignes (S)
     assert list(df["Fonds"]) == ["FEDER", "FSE", "FSE"]
+
+
+def test_le_profil_normandie_pointe_les_bonnes_colonnes():
+    """Montant UE direct, contrairement à Bretagne (issue #68) : `montant_ue`
+    doit suivre la colonne du fichier, pas une colonne calculée."""
+    cols = cols_profil(source("2014-2020-normandie"), colonnes_de("2014-2020-normandie"))
+
+    assert cols["montant_ue"] == "Montant UE programmé"
+    assert cols["depenses"] == "Total des dépenses éligibles - Total eligible costs"
+    assert cols["region"] == "Région"
+    assert cols["fonds"] == "Fond"
+    assert cols["numero_operation"] == "n° Dossier"
+    assert "departement" not in cols
+
+
+def test_normandie_deriver_pose_une_region_constante_et_un_libelle_par_territoire():
+    """Le fichier ne couvre que la Normandie (issue #68), comme Bretagne et
+    Nouvelle-Aquitaine ; `Libellé programme` est dérivé de `Programme` (BN/HN/
+    REACT) pour satisfaire `ingest.harmoniser_regions`, qui lit toujours cette
+    clé même quand `Région` est déjà renseignée."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-normandie")
+    df.loc[0, "n° Dossier"] = "17E01579"
+    df.loc[0, "Programme"] = "HN"
+
+    df_pretraite = SOURCES["2014-2020-normandie"]["pretraitement"](df)
+
+    assert list(df_pretraite["Région"]) == ["Normandie"]
+    assert df_pretraite["Libellé programme"].iloc[0] == (
+        "Programme opérationnel Haute-Normandie 2014-2020"
+    )
+
+
+def test_normandie_deriver_retire_la_ligne_de_total():
+    """La dernière ligne de la feuille `PO BN & REACT` est un total (toutes
+    colonnes vides sauf le montant UE) : ce n'est pas une opération, elle ne
+    doit pas atterrir dans `data_2014-2020_normandie.json` avec un dossier et
+    un bénéficiaire vides."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-normandie")
+    df.loc[0, "n° Dossier"] = "17E01579"
+    ligne_totale = pd.DataFrame([[None] * len(df.columns)], columns=df.columns)
+    ligne_totale.loc[0, "Montant UE programmé"] = 352302354.45
+    df = pd.concat([df, ligne_totale], ignore_index=True)
+
+    df_pretraite = SOURCES["2014-2020-normandie"]["pretraitement"](df)
+
+    assert len(df_pretraite) == 1
+    assert df_pretraite["n° Dossier"].iloc[0] == "17E01579"
+
+
+def test_normandie_deriver_corrige_les_dates_mixtes_et_rejette_les_incoherentes():
+    """La colonne mélange, à l'intérieur d'une même feuille, des `datetime`
+    réels, des numéros de série Excel bruts et quelques erreurs de saisie
+    irrécupérables (constaté sur ~130 lignes du fichier réel) : une année à 3
+    chiffres (« 01/10/219 ») doit devenir `NaT`, pas l'an 219."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-normandie")
+    df = pd.concat([df] * 3, ignore_index=True)
+    df.loc[0, "n° Dossier"] = "1"
+    df.loc[0, "date début op. / start"] = pd.Timestamp("2015-01-01")
+    df.loc[1, "n° Dossier"] = "2"
+    df.loc[1, "date début op. / start"] = 42370  # numéro de série Excel
+    df.loc[2, "n° Dossier"] = "3"
+    df.loc[2, "date début op. / start"] = "01/10/219"  # année à 3 chiffres
+
+    df_pretraite = SOURCES["2014-2020-normandie"]["pretraitement"](df)
+
+    assert df_pretraite["date début op. / start"].iloc[0] == pd.Timestamp("2015-01-01")
+    assert df_pretraite["date début op. / start"].iloc[1] == pd.Timestamp("2016-01-01")
+    assert pd.isna(df_pretraite["date début op. / start"].iloc[2])
+
+
+def test_lire_dataframe_concatene_les_feuilles_sans_forcer_fonds(tmp_path):
+    """`feuilles` sans clé `fonds` (Normandie) doit garder la colonne `Fonds`
+    déjà présente dans chaque feuille, contrairement à Bretagne qui la pose par
+    feuille faute d'en avoir une dans le fichier (issue #68) : la forcer ici
+    écraserait FEDER/FEDER REACT-EU/FSE/IEJ mélangés dans la même feuille."""
+    from sources import lire_dataframe
+
+    fichier = tmp_path / "test_feuilles_sans_fonds.xlsx"
+    with pd.ExcelWriter(fichier) as writer:
+        pd.DataFrame({"Fonds": ["FEDER", "FSE"]}).to_excel(writer, sheet_name="F", index=False)
+        pd.DataFrame({"Fonds": ["IEJ"]}).to_excel(writer, sheet_name="S", index=False)
+
+    conf = {"feuilles": [{"nom": "F"}, {"nom": "S"}]}
+    df = lire_dataframe(conf, fichier)
+
+    assert list(df["Fonds"]) == ["FEDER", "FSE", "IEJ"]
 
 
 def test_les_libelles_reels_sont_suivis_pas_recopies():

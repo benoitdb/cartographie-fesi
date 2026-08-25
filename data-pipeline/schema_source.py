@@ -179,12 +179,43 @@ COLONNES_BRETAGNE_2014_2020 = [
     ("montant_ue", "Montant UE"),  # Calculée, voir sources.py.
 ]
 
+# Quatrième et dernière source hors-Synergie (issue #68) : liste régionale
+# Normandie, publiée par europe-en-normandie.eu (page bloquée au scraping
+# automatisé — pare-feu Akamai, fichier fourni manuellement). Deux feuilles au
+# même schéma, une par ex-région pré-2016 (« PO BN & REACT » = Basse-Normandie
+# + REACT-EU, « PO HN » = Haute-Normandie) — lues et concaténées par
+# `sources.lire_dataframe` (champ `feuilles`), sans forcer `Fonds` par feuille
+# cette fois : contrairement à Bretagne, ce fichier porte déjà une colonne
+# `Fond` renseignée ligne à ligne (FEDER/FEDER REACT-EU/FSE/IEJ mélangés dans
+# la même feuille). Seul fichier hors-Synergie des quatre à porter un montant
+# UE direct (pas de calcul dépenses × taux à faire, contrairement à Bretagne).
+COLONNES_NORMANDIE_2014_2020 = [
+    ("territoire", "Programme"),
+    ("numero_op", "n° Dossier"),
+    ("intitule_proj", "Intitulé du projet - Operation name"),
+    ("nom_benef", "Nom du bénéficiaire - Beneficiary name"),
+    ("siret", "Code SIRET"),
+    ("cp_beneficiaire", "CP / zip code"),
+    ("ville_beneficiaire", "Siège / City"),
+    ("resume_op", "Contexte, présentation générale de l'opération"),
+    ("depenses", "Total des dépenses éligibles - Total eligible costs"),
+    ("montant_ue", "Montant UE programmé"),
+    ("taux_cofinance", "taux de cofinancement UE - EU co-financing rate"),
+    ("date_debut", "date début op. / start"),
+    ("date_fin", "date fin d'op. / end"),
+    ("domaine_intervention", "Catégorie d'intervention - Intervention field"),
+    ("fonds", "Fond"),
+    ("region", "Région"),  # Dérivée, constante — voir sources.py.
+    ("libelle_prog", "Libellé programme"),  # Dérivée, voir sources.py.
+]
+
 SCHEMAS = {
     "2021-2027": COLONNES_2021_2027,
     "2014-2020": COLONNES_2014_2020,
     "2014-2020-pon-fse": COLONNES_PON_FSE_2014_2020,
     "2014-2020-nouvelle-aquitaine": COLONNES_NOUVELLE_AQUITAINE_2014_2020,
     "2014-2020-bretagne": COLONNES_BRETAGNE_2014_2020,
+    "2014-2020-normandie": COLONNES_NORMANDIE_2014_2020,
 }
 
 # Le fichier source mélange les deux apostrophes (U+0027 dans "Région de
