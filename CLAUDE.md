@@ -20,9 +20,16 @@ logiques de programmation ont changé et REACT-EU a déformé la fin de période
 Les libellés de colonnes sont adaptés au chargement par `utils/periodes.py` ; ce
 que la période n'a pas y est déclaré dans `CAPACITES` et retiré de l'écran, avec
 son explication. Les **plafonds de cofinancement de la période** y sont câblés
-depuis l'issue #81 (`categories_ue_2014_2020.json`, décision 2014/99) ; restent
-absents le pilotage, faute des dotations de l'Accord de partenariat 14-20
-(#93), et la dimension thématique, absente de la source (#82).
+depuis l'issue #81 (`categories_ue_2014_2020.json`, décision 2014/99), et le
+**pilotage** depuis l'issue #93 (dotations de l'Accord de partenariat 14-20 et
+maquettes REACT-EU transcrites). Reste absente la dimension thématique, que la
+source ne porte pas (#82).
+
+Le pilotage 14-20 n'est **pas** affiché partout : il est masqué, avec son
+explication à l'écran, sur les quatre périmètres que l'extraction Synergie ne
+couvre pas — Bretagne, Normandie, Nouvelle-Aquitaine et le volet national
+(#68, reprise suivie en #95). Un taux calculé sur un engagé partiel afficherait
+une donnée manquante comme une sous-consommation.
 
 **`main` est la référence** depuis la fusion de `streamlit-dashboard`
 (PR #49, 2026-08-20) : elle porte le dashboard, ce fichier et les tests. Partir
@@ -58,6 +65,9 @@ racine pour les tests (`requirements-dev.txt`).
   python interreg_totals.py               # Tableau 10  -> interreg.json
   python transferts_solidarite_totals.py  # Tableau 3A/3B -> transferts_solidarite.json
   python categories_ue_2014_2020.py       # Décision 2014/99 -> categories_ue_2014_2020.json
+  python programme_totals_2014_2020.py    # Accord 14-20 + maquettes REACT-EU
+                                          #   -> programme_totals_2014_2020.json
+                                          #    + programme_detail_2014_2020.json
   ```
 - **Profil d'une source** (page « Validation de la source »), un JSON **committé**
   par fichier source, à régénérer à chaque nouveau millésime :
@@ -71,7 +81,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (236 tests, ~15 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (333 tests, ~20 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent les fixtures committées dans `tests/fixtures/` (**une par période** —
@@ -191,13 +201,34 @@ racine pour les tests (`requirements-dev.txt`).
     Nouvelle-Aquitaine (25) n'apparaissent qu'à la marge, leurs autorités de
     gestion n'utilisant pas SynergieCDM. Ne pas lire ces totaux comme la
     réalité de ces régions ;
-  - les 5 programmes interrégionaux tombent au Volet national (#77), et les
-    sources de référence de la période restent à réunir (#79).
-- **Programmé ≠ engagé.** Les montants programmés viennent de l'Accord de
-  partenariat dans sa version **préliminaire** de juin 2022, probablement
-  révisée depuis. Tout taux de consommation est une estimation : la réserve
-  méthodologique (`utils.pilotage.RESERVE_METHODO`) doit rester affichée à
-  côté, ne jamais la retirer pour gagner de la place.
+  - les 5 programmes interrégionaux tombent au Volet national (#77) ;
+  - **l'IEJ compte double.** La ligne `IEJ` de l'Accord ne porte que
+    l'allocation spécifique (471 474 337 € au national) ; la contrepartie FSE,
+    de montant quasi égal (473 185 393 €), est sur la ligne `FSE` du même
+    programme (§1.4.2 et table 1.10). Une opération IEJ consomme les deux : le
+    dénominateur IEJ les additionne, et le FSE en est diminué d'autant, sinon
+    la contrepartie est comptée deux fois et l'IEJ affiche ~200 % ;
+  - **le libellé `FEDER REACT-EU` n'existe que dans les DROM** (Guadeloupe,
+    La Réunion, Martinique, Mayotte). En métropole les mêmes opérations sont
+    rangées sous `FEDER` — le FEDER métropolitain y dépasse sa dotation de 26 à
+    87 %, d'un excédent qui vaut à peu près la maquette REACT-EU de la région.
+    D'où `periodes.fusionner_enveloppes_sans_libelle` : une enveloppe rejoint le
+    fonds qui porte ses opérations, et à défaut son fonds d'origine (#96) ;
+  - **deux fonds engagés n'ont aucune enveloppe**, et doivent rester absents de
+    tout rapprochement plutôt qu'affichés à zéro : le **FEAD** (transfert hors
+    enveloppe structurelle, art. 94) et le **FEDER-FSE**, qui n'est pas un fonds
+    mais le libellé des opérations du PNAT Europ'Act.
+- **Programmé ≠ engagé.** En 2021-2027 les montants programmés viennent de
+  l'Accord de partenariat dans sa version **préliminaire** de juin 2022,
+  probablement révisée depuis. Tout taux de consommation est une estimation : la
+  réserve méthodologique (`utils.pilotage.RESERVE_METHODO`) doit rester affichée
+  à côté, ne jamais la retirer pour gagner de la place.
+  En 2014-2020 la provenance est **double et de natures différentes** : dotations
+  de l'Accord 14-20 (texte négocié en amont, version 4 d'octobre 2019) pour le
+  FEDER, le FSE et l'IEJ, et maquettes REACT-EU relevées par une **évaluation**
+  (ANCT, décembre 2024), donc constatées en fin de période après décisions
+  modificatives. `periodes.MENTION_PROVENANCE_ENVELOPPES` le dit à l'écran et
+  tient le même rôle que `RESERVE_METHODO` : ne pas la retirer.
 - **L'allocation Ultrapériphérique (RUP)** est comptée dans le total de la
   catégorie de base des DROM, car les opérations engagées ne disent pas de
   quelle enveloppe elles proviennent. Le détail RUP seul est exposé à part.

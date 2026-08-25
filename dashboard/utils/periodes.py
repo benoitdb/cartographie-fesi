@@ -88,10 +88,12 @@ CAPACITES = {
     PERIODE_2014_2020: {
         # `Domaine d'intervention` vide à 100 % dans le fichier Synergie (#82).
         "dimension_thematique": False,
-        # L'Accord de partenariat 2014-2020 est disponible (docs/sources/), mais
-        # ses dotations par programme ne sont pas encore transcrites en données
-        # comme l'est le Tableau 9B de 2021-2027 (#93).
-        "montants_programmes": False,
+        # Dotations de l'Accord de partenariat 14-20 (section 1.6) et maquettes
+        # REACT-EU (rapport d'évaluation ANCT 2024) transcrites — issue #93. La
+        # capacité est vraie pour la période, mais pas pour tous ses périmètres :
+        # voir `pilotage_disponible()`, quatre d'entre eux restent sans pilotage
+        # faute d'un engagé comparable à l'enveloppe (#95).
+        "montants_programmes": True,
         # Règle de la période (1303/2013 art. 120 §3) et rattachement région →
         # catégorie de l'époque (décision 2014/99, via
         # data/processed/categories_ue_2014_2020.json) désormais tous deux
@@ -141,12 +143,6 @@ EXPLICATIONS_ABSENCES = {
         "dimension thématique de cette source est le « Domaine d'intervention », vide à "
         "100 % dans le fichier Synergie (issue #82)."
     ),
-    "montants_programmes": (
-        "**Pilotage : % consommé, reste à engager, trajectoire** : ils rapprochent l'engagé "
-        "des enveloppes programmées. L'Accord de partenariat 2014-2020 est en main et sa "
-        "table de dotations par programme identifiée, mais elle n'est pas encore transcrite "
-        "en données exploitables (issue #93)."
-    ),
 }
 
 # Réserve permanente sur les plafonds 2014-2020, à afficher partout où ils servent de
@@ -175,6 +171,126 @@ MENTION_PLAFOND_PAR_AXE = (
     "ou par développement local (§5). Le fichier ne portant pas l'axe prioritaire, l'écart "
     "est un point à expliquer, pas un constat."
 )
+
+# --- Pilotage 2014-2020 (issue #93) -------------------------------------------
+
+# D'où viennent les enveloppes rapprochées de l'engagé, à afficher avec tout taux de
+# consommation de la période. Deux provenances, et elles ne sont pas de même nature :
+# l'Accord est un texte négocié en amont, le rapport d'évaluation un constat de fin de
+# période. Les confondre ferait passer une maquette révisée pour une dotation initiale.
+MENTION_PROVENANCE_ENVELOPPES = (
+    "Les enveloppes proviennent de deux sources distinctes : les **dotations de l'Accord "
+    "de partenariat 2014-2020** (version 4 du 16/10/2019, section 1.6, par programme, fonds "
+    "et année) pour le FEDER, le FSE et l'IEJ ; et les **maquettes REACT-EU** relevées par "
+    "l'évaluation de l'initiative REACT-EU en France (ANCT, 20/12/2024) — l'Accord, antérieur "
+    "à REACT-EU, n'en porte aucune trace. Les premières sont des dotations arrêtées en amont, "
+    "les secondes des maquettes constatées en fin de période, après décisions modificatives."
+)
+
+# Trois particularités de fonds, à porter là où les cards par fonds s'affichent : sans
+# elles, un fonds absent du bloc se lit comme un oubli et l'IEJ comme une anomalie.
+MENTION_FONDS_HORS_RAPPROCHEMENT = (
+    "**Deux fonds engagés n'ont pas d'enveloppe en face** et sont donc absents de ce bloc, "
+    "plutôt qu'affichés à zéro : le **FEAD**, qui n'est pas un Fonds ESI mais un transfert "
+    "hors enveloppe structurelle (art. 94, règlement 223/2014), absent de l'Accord ; et le "
+    "**FEDER-FSE**, qui n'est pas un fonds mais le libellé porté par les opérations du "
+    "programme national d'assistance technique Europ'Act.\n\n"
+    "L'**IEJ**, lui, est compté pour sa ressource entière : l'Accord n'inscrit sur sa ligne "
+    "que l'allocation spécifique (471,5 M€ au national), la contrepartie FSE de montant "
+    "équivalent (473,2 M€) étant portée par la ligne FSE. Une opération IEJ consomme les "
+    "deux ; l'enveloppe FSE est donc diminuée d'autant, pour ne rien compter deux fois."
+)
+
+# Pourquoi un dépassement ne se lit pas ici comme en 2021-2027 : la période est close, et
+# ses maquettes ont été révisées en cours de route.
+MENTION_DEPASSEMENT_2014_2020 = (
+    "Un taux au-delà de 100 % ne signale pas une surconsommation : la programmation est "
+    "close et les maquettes ont été révisées en cours de période, quand les dotations "
+    "affichées ici sont celles de l'Accord de 2019 pour tout ce qui n'est pas REACT-EU. "
+    "Le rapport d'évaluation ANCT relève d'ailleurs 16 programmes sur 25 dont les montants "
+    "REACT-EU FEDER certifiés atteignent ou dépassent leur maquette."
+)
+
+# Les quatre périmètres où le pilotage reste masqué : leur engagé vient d'une extraction
+# Synergie qui ne les couvre pas (#68), quand leur enveloppe, elle, est complète. Le taux
+# affiché serait une donnée manquante déguisée en sous-consommation.
+#
+# « Ensemble national » et « Volet national » en font partie pour la même raison : le
+# programme opérationnel national FSE pèse 4,1 Md€ d'engagements absents de Synergie.
+#
+# Ce masquage est une mesure d'attente, pas une propriété de la période — d'où une
+# constante ici plutôt qu'une capacité dans CAPACITES : ce qui manque n'est pas la donnée
+# de référence (elle est transcrite) mais un engagé comparable. Reprise suivie en #95.
+PERIMETRES_SANS_PILOTAGE = frozenset({"Bretagne", "Normandie", "Nouvelle-Aquitaine"})
+
+MENTION_PILOTAGE_MASQUE = (
+    "**Pas de taux de consommation sur ce périmètre.** Son enveloppe programmée est connue, "
+    "mais l'engagé qu'on lui opposerait vient de l'extraction Synergie, qui ne couvre pas "
+    "les autorités de gestion concernées — programme opérationnel national FSE, "
+    "Nouvelle-Aquitaine, Bretagne, Normandie (issue #68). Leurs opérations sont publiées à "
+    "part et visibles sur la page « Validation de la source », mais ne sont pas fusionnées "
+    "ici : un taux calculé sans elles afficherait une donnée manquante comme une "
+    "sous-consommation. La reprise de ce point est suivie en issue #95."
+)
+
+
+# Enveloppe -> fonds qui l'absorbe quand aucune opération du périmètre ne porte son
+# libellé. Constaté sur l'extraction Synergie : **seuls les quatre DROM** (Guadeloupe,
+# La Réunion, Martinique, Mayotte) étiquettent leurs opérations `FEDER REACT-EU` ; en
+# métropole les mêmes opérations sont rangées sous `FEDER`.
+#
+# La lecture des chiffres ne laisse guère de doute : en métropole le FEDER engagé dépasse
+# son enveloppe de 30 à 90 % (Île-de-France 187 %, Hauts-de-France 134 %) et l'excédent
+# vaut à peu près la maquette REACT-EU de la région (Occitanie : 204 M€ d'excédent pour
+# 199 M€ de maquette) ; dans les DROM il colle à son enveloppe (103 à 120 %) pendant que
+# le libellé REACT-EU en porte 100 à 106 %.
+#
+# Garder les deux enveloppes séparées afficherait donc, en métropole, une carte REACT-EU
+# à 0 % — que le rapport d'évaluation ANCT dément (86,5 % de taux de certification moyen)
+# — et un FEDER mécaniquement gonflé. La règle appliquée est donc la même que pour le
+# REACT-EU FSE, qui n'a de libellé nulle part : **une enveloppe rejoint le fonds qui porte
+# ses opérations ; sans libellé pour la porter, elle rejoint son fonds d'origine.**
+FUSIONS_ENVELOPPES_SANS_LIBELLE = {"FEDER REACT-EU": "FEDER"}
+
+MENTION_REACT_EU_FONDU = (
+    "Sur ce périmètre, les opérations **FEDER REACT-EU** ne portent pas de libellé de fonds "
+    "distinct dans l'extraction Synergie — seuls les DROM en ont un. Sa maquette est donc "
+    "comptée avec l'enveloppe FEDER, puisque c'est là que se trouvent les opérations "
+    "correspondantes. Les distinguer afficherait un REACT-EU à 0 % et un FEDER gonflé "
+    "d'autant."
+)
+
+
+def fusionner_enveloppes_sans_libelle(enveloppes, fonds_engages):
+    """Regroupe les enveloppes dont aucun libellé de fonds ne porte d'opération ici.
+
+    `enveloppes` : {fonds: montant}. `fonds_engages` : les libellés de fonds réellement
+    présents dans les opérations du périmètre. Renvoie (enveloppes, fonds_fusionnés) —
+    le second pour pouvoir dire à l'écran ce qui a été regroupé, plutôt que de le faire
+    en silence.
+
+    Ne fusionne que si le fonds d'accueil existe côté enveloppes : sinon la maquette
+    disparaîtrait dans un fonds qui n'a pas de dotation, au lieu d'être visible.
+    """
+    resultat = dict(enveloppes)
+    fusionnes = []
+    for fonds, accueil in FUSIONS_ENVELOPPES_SANS_LIBELLE.items():
+        if fonds in resultat and fonds not in fonds_engages and accueil in resultat:
+            resultat[accueil] += resultat.pop(fonds)
+            fusionnes.append(fonds)
+    return resultat, fusionnes
+
+
+def pilotage_disponible(perimetre, est_national=False):
+    """Le pilotage a-t-il un sens sur ce périmètre ?
+
+    `est_national` couvre les deux périmètres agrégés de la page (« Ensemble national » et
+    « Volet national »), qui ne sont pas des régions et ne peuvent donc pas être reconnus
+    par leur seul nom. Séparer les deux arguments évite d'avoir à réimporter ici les
+    libellés de ces périmètres, définis par la page.
+    """
+    return not est_national and perimetre not in PERIMETRES_SANS_PILOTAGE
+
 
 MENTION_REGION_MIXTE = (
     "Cette région réunit des anciennes régions de **catégories différentes**. Les "

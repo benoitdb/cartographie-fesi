@@ -1,0 +1,109 @@
+{
+  "Île-de-France": {
+    "FEDER": 185396968,
+    "FSE": 290231300,
+    "IEJ": 7929102,
+    "FEDER REACT-EU": 101321953
+  },
+  "Guadeloupe": {
+    "FEDER": 560461175,
+    "FSE": 280701219,
+    "IEJ": 7401901,
+    "FEDER REACT-EU": 204401656
+  },
+  "national": {
+    "FSE": 3653131266,
+    "IEJ": 660033176,
+    "FEDER": 205702590,
+    "FEDER REACT-EU": 7822019
+  },
+  "Grand Est": {
+    "FSE": 157581313,
+    "IEJ": 28153648,
+    "FEDER": 605506426,
+    "FEDER REACT-EU": 173425967
+  },
+  "Guyane": {
+    "FSE": 163607181,
+    "FEDER": 338100501,
+    "FEDER REACT-EU": 133534305
+  },
+  "Martinique": {
+    "FSE": 228080611,
+    "FEDER": 445101522,
+    "IEJ": 7575924,
+    "FEDER REACT-EU": 159103812
+  },
+  "La Réunion": {
+    "FSE": 649201795,
+    "FEDER": 1130456061,
+    "FEDER REACT-EU": 340948106
+  },
+  "Nouvelle-Aquitaine": {
+    "FEDER": 717232052,
+    "FSE": 158217337,
+    "IEJ": 20144734,
+    "FEDER REACT-EU": 184856815
+  },
+  "Auvergne-Rhône-Alpes": {
+    "FEDER": 579533408,
+    "FSE": 202125023,
+    "IEJ": 12160993,
+    "FEDER REACT-EU": 160539061
+  },
+  "Centre-Val de Loire": {
+    "FEDER": 179865447,
+    "FSE": 47176344,
+    "IEJ": 32896832,
+    "FEDER REACT-EU": 89557007
+  },
+  "Normandie": {
+    "FEDER": 413244582,
+    "FSE": 83056909,
+    "IEJ": 24372872,
+    "FEDER REACT-EU": 115720121
+  },
+  "Occitanie": {
+    "FEDER": 690328793,
+    "FSE": 153911798,
+    "IEJ": 48610770,
+    "FEDER REACT-EU": 198938096
+  },
+  "Hauts-de-France": {
+    "FEDER": 893282172,
+    "FSE": 179760052,
+    "IEJ": 89253887,
+    "FEDER REACT-EU": 266814734
+  },
+  "Provence-Alpes-Côte d'Azur": {
+    "FEDER": 284316236,
+    "FSE": 187303268,
+    "FEDER REACT-EU": 95044857
+  },
+  "Bourgogne-Franche-Comté": {
+    "FEDER": 334469513,
+    "FSE": 83181994,
+    "IEJ": 6125890,
+    "FEDER REACT-EU": 103006592
+  },
+  "Bretagne": {
+    "FEDER": 307307301,
+    "FSE": 62192699,
+    "FEDER REACT-EU": 92779237
+  },
+  "Corse": {
+    "FEDER": 104054391,
+    "FSE": 11586065,
+    "FEDER REACT-EU": 31996069
+  },
+  "Pays de la Loire": {
+    "FEDER": 302748728,
+    "FSE": 95711272,
+    "FEDER REACT-EU": 67369800
+  },
+  "Mayotte": {
+    "FEDER": 148872908,
+    "FSE": 82641320,
+    "FEDER REACT-EU": 119115539
+  }
+}

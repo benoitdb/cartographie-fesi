@@ -35,6 +35,8 @@ from utils.data_loader import (
     load_dromcom_codes_postaux,
     load_dromcom_geojson,
     load_geojson,
+    load_programme_detail_2014_2020,
+    load_programme_totals_2014_2020,
     load_region_metadata,
 )
 from utils.departments import (
@@ -50,15 +52,27 @@ from utils.filters import compute_by_region, render_fonds_filter, summarize_ops
 from utils.millesime import render_millesime
 from utils.periodes import (
     AVERTISSEMENT_PERIMETRE,
+    MENTION_DEPASSEMENT_2014_2020,
+    MENTION_FONDS_HORS_RAPPROCHEMENT,
     MENTION_MONTANTS_PROGRAMMES,
+    MENTION_PILOTAGE_MASQUE,
     MENTION_PLAFOND_PAR_AXE,
     MENTION_PLAFONDS_PERIODE,
+    MENTION_PROVENANCE_ENVELOPPES,
+    MENTION_REACT_EU_FONDU,
     MENTION_REGION_MIXTE,
     PERIODE_2014_2020,
     absences_expliquees,
     capacites,
+    fusionner_enveloppes_sans_libelle,
     libelle_montant,
     normaliser_operations,
+    pilotage_disponible,
+)
+from utils.pilotage import (
+    build_ranking_programme_vs_engage,
+    build_trajectoire,
+    render_kpi_pilotage,
 )
 from utils.plot_style import (
     MAP_CONFIG,
@@ -380,10 +394,12 @@ else:
 
 # ---------------------------------------------------------------- Analyses
 
-# Deux onglets, et non les trois des pages 2021-2027 : leur onglet « Pilotage »
-# compare l'engagé au programmé de l'Accord de partenariat, qui n'existe pas
-# encore pour cette période (#79). Un onglet vide vaudrait moins que pas d'onglet.
-tab_ensemble, tab_audit = st.tabs(["Vue d'ensemble", "Analyses & contrôle"])
+# Trois onglets comme les pages 2021-2027 depuis que les dotations de la période
+# sont transcrites (#93). L'onglet Pilotage existe sur tous les périmètres, mais il
+# n'affiche un taux que là où l'engagé est comparable à l'enveloppe : ailleurs il
+# porte l'explication à la place. C'est l'arbitrage inverse de #83 — un onglet
+# absent ne s'explique pas, un onglet qui dit pourquoi il est vide, si.
+tab_ensemble, tab_pilotage, tab_audit = st.tabs(["Vue d'ensemble", "Pilotage", "Analyses & contrôle"])
 
 with tab_ensemble:
     st.subheader("Répartition par fonds")
@@ -470,6 +486,86 @@ with tab_ensemble:
         "Le programme est ce qui rattache une opération à sa région sur cette période, et ce "
         "qui la situe dans une programmation — pas sa date."
     )
+
+with tab_pilotage:
+    st.subheader("Pilotage : programmé vs engagé")
+
+    if not pilotage_disponible(perimetre, est_national=perimetre in (ENSEMBLE_NATIONAL, VOLET_NATIONAL)):
+        st.info(MENTION_PILOTAGE_MASQUE)
+    else:
+        enveloppes_perimetre = load_programme_totals_2014_2020().get(perimetre, {})
+        # Une enveloppe dont aucun libellé de fonds ne porte d'opération ici rejoint son
+        # fonds d'origine : sans ça, la métropole afficherait un FEDER REACT-EU à 0 % et
+        # un FEDER gonflé de la même somme (voir la règle et ses chiffres dans periodes.py).
+        enveloppes_perimetre, fonds_fusionnes = fusionner_enveloppes_sans_libelle(
+            enveloppes_perimetre, set(df_ops[FONDS].unique())
+        )
+        # Fonds rapprochables = ceux qui ont une enveloppe **et** sont sélectionnés.
+        # Le FEAD et le FEDER-FSE n'en ont pas (voir MENTION_FONDS_HORS_RAPPROCHEMENT) :
+        # ils sortent du rapprochement des deux côtés à la fois, numérateur compris —
+        # les laisser dans l'engagé gonflerait le taux d'un montant sans dénominateur,
+        # exactement le piège que l'issue #93 devait éviter pour REACT-EU.
+        fonds_rapprochables = [f for f in sorted(enveloppes_perimetre) if f in selected_fonds]
+        engage_par_fonds = df_ops.groupby(FONDS)[MONTANT].sum().to_dict()
+
+        df_fonds_pilotage = pd.DataFrame(
+            [
+                {"fonds": f, "engage": engage_par_fonds.get(f, 0), "programme": enveloppes_perimetre[f]}
+                for f in fonds_rapprochables
+            ]
+        )
+
+        if df_fonds_pilotage.empty:
+            st.info(
+                "Aucun des fonds sélectionnés n'a d'enveloppe programmée sur ce périmètre. "
+                "Sélectionnez le FEDER, le FSE, l'IEJ ou le FEDER REACT-EU pour afficher un "
+                "taux de consommation."
+            )
+        else:
+            montant_programme = int(df_fonds_pilotage["programme"].sum())
+            montant_engage = int(df_fonds_pilotage["engage"].sum())
+            render_kpi_pilotage(
+                df_fonds_pilotage,
+                montant_programme,
+                montant_engage,
+                color_map=FONDS_COLORS,
+                libelle_programme="Programmé 2014-2020",
+                reserve_methodo=MENTION_PROVENANCE_ENVELOPPES,
+                mention_depassement=MENTION_DEPASSEMENT_2014_2020,
+            )
+            st.caption(MENTION_FONDS_HORS_RAPPROCHEMENT)
+            if fonds_fusionnes:
+                st.caption(MENTION_REACT_EU_FONDU)
+
+            part_react_eu = load_programme_detail_2014_2020()["react_eu"].get(perimetre, {})
+            part_react_eu = {f: v for f, v in part_react_eu.items() if f in fonds_rapprochables}
+            if part_react_eu:
+                detail = ", ".join(f"{f} {v / 1e6:,.1f} M€".replace(",", " ") for f, v in sorted(part_react_eu.items()))
+                st.caption(
+                    f"Dont maquettes REACT-EU incluses dans les enveloppes ci-dessus : {detail}. "
+                    "Leur provenance (évaluation ANCT, 2024) diffère de celle du reste "
+                    "(Accord de partenariat, 2019)."
+                )
+
+            traj_col, bullet_col = st.columns(2)
+            with traj_col:
+                # `Date de programmation` et non la date de début : sur cette période c'est
+                # elle qui date l'engagement, la date de référence n'étant pas la même qu'en
+                # 2021-2027 (première convention) — cf. profil de source, issue #69.
+                st.plotly_chart(
+                    build_trajectoire(
+                        df_ops[df_ops[FONDS].isin(fonds_rapprochables)],
+                        montant_programme,
+                        date_col="Date de programmation",
+                    ),
+                    use_container_width=True,
+                )
+            with bullet_col:
+                st.plotly_chart(
+                    build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
+                    use_container_width=True,
+                )
+
 
 with tab_audit:
     st.caption(

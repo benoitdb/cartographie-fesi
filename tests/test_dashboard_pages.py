@@ -134,3 +134,46 @@ def test_la_fraicheur_des_donnees_est_affichee(page, donnees_fixture):
     assert any(attendu in c.value for c in at.sidebar.caption), (
         f"{page.name} n'affiche pas le millésime attendu ({attendu})"
     )
+
+
+# --- Onglet Pilotage de l'espace 2014-2020 (issue #93) ------------------------
+
+PAGE_2014_2020 = DASHBOARD / "pages" / "5_Période_2014-2020.py"
+
+
+def _rendre_perimetre_2014_2020(perimetre):
+    """Rend la page 2014-2020 sur un périmètre donné, avec une instance neuve.
+
+    Une instance neuve par périmètre, jamais réutilisée d'un appel à l'autre : un
+    `AppTest` rejoué sur plusieurs valeurs successives lève des `KeyError` sur les clés
+    de widget des fragments, artefact du harnais et non bug de la page (constaté sur la
+    Vue Régionale)."""
+    at = AppTest.from_file(str(PAGE_2014_2020), default_timeout=120).run()
+    at.selectbox(key="perimetre_2014_2020").set_value(perimetre).run()
+    assert not at.exception, f"{perimetre} a levé : {at.exception[0].value if at.exception else ''}"
+    return at
+
+
+def test_pilotage_affiche_sur_une_region_couverte_par_synergie(donnees_fixture):
+    """Le chemin qui rend réellement le bloc de pilotage. Le test de fumée général ne
+    l'exerce pas : la page s'ouvre sur « Ensemble national », justement l'un des
+    périmètres où le pilotage est masqué."""
+    at = _rendre_perimetre_2014_2020("Corse")
+    textes = " ".join(el.value for el in at.markdown)
+    assert "Programmé 2014-2020" in textes
+    # La provenance des enveloppes doit accompagner le taux, jamais être décrochée.
+    captions = " ".join(el.value for el in at.caption)
+    assert "Accord de partenariat 2014-2020" in captions
+    assert "REACT-EU" in captions
+
+
+@pytest.mark.parametrize("perimetre", ["Bretagne", "Nouvelle-Aquitaine", "Ensemble national"])
+def test_pilotage_masque_sur_les_perimetres_hors_synergie(perimetre, donnees_fixture):
+    """Masqué **avec son explication**, et sans jamais afficher de taux : un 0 % ou un
+    taux calculé sur un engagé partiel se lirait comme une sous-consommation alors que
+    c'est une donnée manquante (issues #68, #95)."""
+    at = _rendre_perimetre_2014_2020(perimetre)
+    infos = " ".join(el.value for el in at.info)
+    assert "Pas de taux de consommation sur ce périmètre" in infos
+    textes = " ".join(el.value for el in at.markdown)
+    assert "Programmé 2014-2020" not in textes
