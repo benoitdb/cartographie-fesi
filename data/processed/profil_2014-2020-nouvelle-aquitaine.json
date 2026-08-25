@@ -1,0 +1,180 @@
+{
+  "source_id": "2014-2020-nouvelle-aquitaine",
+  "source_label": "Nouvelle-Aquitaine (hors Synergie)",
+  "periode": "2014-2020",
+  "fichier_source": "nouvelle_aquitaine_14_20.xlsx",
+  "date_source": "2026-05-31",
+  "date_generation": "2026-08-25",
+  "profil": {
+    "volumetrie": {
+      "operations": 4080,
+      "colonnes": 17
+    },
+    "completude": {
+      "numero_operation": {
+        "libelle": "Operation number",
+        "remplis": 4080,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "programme": {
+        "libelle": "Colonne à masquer lors de la diffusion",
+        "remplis": 4080,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "beneficiaire": {
+        "libelle": "Beneficiary name",
+        "remplis": 4080,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "fonds": {
+        "libelle": "Funds",
+        "remplis": 4080,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "region": {
+        "libelle": "Région",
+        "remplis": 4080,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "dimension_thematique": {
+        "libelle": "Name of category of intervention for the operation",
+        "remplis": 4053,
+        "manquants": 27,
+        "taux": 99.3
+      },
+      "montant_ue": {
+        "libelle": "Amount co-financing European Union",
+        "remplis": 4080,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "depenses": {
+        "libelle": "Total amount programmed",
+        "remplis": 4080,
+        "manquants": 0,
+        "taux": 100.0
+      }
+    },
+    "par_fonds": [
+      {
+        "fonds": "FEDER",
+        "nb": 2223,
+        "montant_ue": 842305599.8800001,
+        "part_nb": 54.5,
+        "part_montant": 83.4
+      },
+      {
+        "fonds": "FSE",
+        "nb": 1554,
+        "montant_ue": 147781964.37,
+        "part_nb": 38.1,
+        "part_montant": 14.6
+      },
+      {
+        "fonds": "IEJ",
+        "nb": 303,
+        "montant_ue": 20350427.310000002,
+        "part_nb": 7.4,
+        "part_montant": 2.0
+      }
+    ],
+    "programmes": {
+      "distincts": 3,
+      "top": [
+        {
+          "valeur": "2014FR16M0OP001",
+          "nb": 2141
+        },
+        {
+          "valeur": "2014FR16M2OP009",
+          "nb": 1244
+        },
+        {
+          "valeur": "2014FR16M2OP006",
+          "nb": 695
+        }
+      ]
+    },
+    "regions": {
+      "colonne_remplie": 4080,
+      "taux_colonne_remplie": 100.0,
+      "valeurs_distinctes": 1,
+      "top": [
+        {
+          "valeur": "Nouvelle-Aquitaine",
+          "nb": 4080
+        }
+      ],
+      "manquantes_par_fonds": []
+    },
+    "dimension_thematique": {
+      "libelle": "Name of category of intervention for the operation",
+      "taux_remplie": 99.3,
+      "distincts": 60,
+      "top": [
+        {
+          "valeur": "117 Amélioration de l'égalité d'accès à l'apprentissage tout au long de la vie pour toutes les catégories d'âges dans un cadre formel,...",
+          "nb": 936
+        },
+        {
+          "valeur": "104 Emploi indépendant, entrepreneuriat et création d'entreprises, y compris les micro, petites et moyennes entreprises innovantes",
+          "nb": 509
+        },
+        {
+          "valeur": "103 Intégration durable sur le marché du travail des jeunes, en particulier ceux qui sont sans emploi et qui ne suivent ni enseignement ni formation, en mettant notamment en oeuvre la garantie pour la jeunesse",
+          "nb": 359
+        },
+        {
+          "valeur": "085 Protection et amélioration de la biodiversité, protection de la nature et infrastructure verte",
+          "nb": 302
+        },
+        {
+          "valeur": "001 Investissement productif générique dans les petites et moyennes entreprises («PME»)",
+          "nb": 250
+        },
+        {
+          "valeur": "066 Services d'appui avancé aux PME et groupes de PME (y compris services de gestion, de commercialisation et de conception)",
+          "nb": 147
+        },
+        {
+          "valeur": "082 Services et applications TIC pour les PME (y compris le commerce électronique, le e-Business et les processus d’entreprise en réseau), les laboratoires vivants, les entrepreneurs web et les start-ups en matière de TIC",
+          "nb": 136
+        },
+        {
+          "valeur": "060 Activités de recherche et d’innovation dans les centres de recherche publics et les centres de compétence, y compris la mise en réseau",
+          "nb": 115
+        },
+        {
+          "valeur": "067 Développement commercial des PME, soutien à l’esprit d’entreprise et à l’incubation (y compris le soutien aux entreprises issues de l'essaimage)",
+          "nb": 109
+        },
+        {
+          "valeur": "014 Rénovation en vue d'accroître l'efficacité énergétique du parc de logements existant, projets de démonstration et actions de soutien",
+          "nb": 98
+        }
+      ]
+    },
+    "montants": {
+      "montant_ue_total": 1010437991.56,
+      "depenses_total": 2718924179.7,
+      "cofinancement_global": 37.2,
+      "montants_ue_negatifs": 0
+    },
+    "cle": {
+      "colonne": "Operation number",
+      "distincts": 4080,
+      "doublons": 0
+    },
+    "pays": [
+      {
+        "valeur": "France",
+        "nb": 4080
+      }
+    ]
+  }
+}
