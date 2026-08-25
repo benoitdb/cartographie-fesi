@@ -4,6 +4,15 @@ import re
 # règlement (UE) 2021/1060, art. 112) : 85% moins développée, 60% en transition, 50% plus
 # développée. Les régions ultrapériphériques (RUP, art. 349 TFUE) bénéficient du plafond le
 # plus élevé (85%) quelle que soit leur catégorie de base — voir cohesion_ue.py.
+#
+# Ces mêmes seuils numériques (85/60/50) valent aussi pour 2014-2020 (règlement (UE)
+# n° 1303/2013, art. 120) : ce n'est pas ce dictionnaire qui change d'une période à
+# l'autre, mais la région → catégorie sous-jacente (voir reference/cohesion_ue_2014_2020.py,
+# issue #79/#81) et l'existence d'un régime dérogatoire propre à REACT-EU (jusqu'à 100%,
+# règlement (UE) 2020/2221, art. 92 ter §12) qu'aucune fonction ici ne gère encore. Pas
+# câblé sur des données réelles à ce jour : #83 (sélecteur de période) n'affiche rien pour
+# 2014-2020. Ne pas appliquer ce module aux opérations REACT-EU tant que cette exception
+# n'est pas implémentée — un faux positif y est garanti (médiane à 100% par construction).
 PLAFOND_PAR_CATEGORIE = {
     "plus développée": 0.50,
     "en transition": 0.60,
