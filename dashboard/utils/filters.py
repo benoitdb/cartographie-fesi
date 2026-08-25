@@ -4,12 +4,23 @@ import streamlit as st
 FONDS_OPTIONS = ["FEDER", "FSE+", "FTJ"]
 
 
-def render_fonds_filter():
+def render_fonds_filter(options=None, key="filtre_fonds"):
     """Widget sidebar Fonds, partagé entre les pages via une key commune (state préservé
-    lors de la navigation multipage Streamlit)."""
+    lors de la navigation multipage Streamlit).
+
+    `options` : liste des fonds proposés, par défaut ceux de 2021-2027. Une autre période
+    n'a pas les mêmes fonds (six en 2014-2020, dont FSE et IEJ qui n'existent plus) — elle
+    passe les siens, tirés de ses propres agrégats plutôt que d'une liste en dur.
+
+    `key` : **doit** différer quand les options diffèrent. L'état des widgets est partagé
+    entre les pages d'une même session : avec une clé commune, la sélection « FSE+ » faite
+    sur une page 2021-2027 serait réinjectée dans un multiselect 2014-2020 qui ne propose
+    pas ce fonds, et Streamlit lèverait.
+    """
+    options = FONDS_OPTIONS if options is None else options
     with st.sidebar:
         st.header("Filtres")
-        selected = st.multiselect("Fonds", FONDS_OPTIONS, default=FONDS_OPTIONS, key="filtre_fonds")
+        selected = st.multiselect("Fonds", options, default=options, key=key)
     if not selected:
         st.warning("Sélectionnez au moins un fonds dans la barre latérale.")
         st.stop()

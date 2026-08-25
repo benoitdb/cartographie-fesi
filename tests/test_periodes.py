@@ -1,0 +1,183 @@
+"""Adaptation d'une période au dashboard (`dashboard/utils/periodes.py`, issue #83).
+
+Deux choses à protéger ici, et elles échouent toutes les deux en silence :
+
+1. **la dérive avec le pipeline** — la table d'équivalence des colonnes duplique
+   une information qui vit dans `data-pipeline/schema_source.py` (le dashboard
+   n'importe pas le pipeline). Renommer une colonne d'un seul côté produirait une
+   page vide, pas une erreur ;
+2. **le taux de cofinancement dérivé** — il n'existe pas dans le fichier
+   2014-2020 et se calcule. Un zéro à la place d'une valeur manquante se lirait
+   comme une opération financée à 0 % par l'UE, ce qui est une information, alors
+   qu'on n'en a aucune.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+RACINE = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(RACINE / "dashboard"))
+
+pytest.importorskip("streamlit", reason="dépendances du dashboard non installées")
+
+from schema_source import SCHEMAS  # noqa: E402
+
+from utils.periodes import (  # noqa: E402
+    CAPACITES,
+    COLONNES_EQUIVALENTES,
+    EXPLICATIONS_ABSENCES,
+    PERIODE_2014_2020,
+    PERIODE_2021_2027,
+    absences_expliquees,
+    capacites,
+    libelle_montant,
+    normaliser_operations,
+)
+
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "dashboard"
+
+
+def _libelles(periode):
+    return dict(SCHEMAS[periode])
+
+
+def _cles_fixture(nom):
+    """Clés réellement présentes sur une opération du fichier committé."""
+    operations = json.loads((FIXTURE / nom).read_text(encoding="utf-8"))["operations"]
+    return set(operations[0])
+
+
+def test_les_equivalences_correspondent_aux_schemas_du_pipeline():
+    """Le garde-fou contre la dérive : chaque paire de libellés déclarée ici doit
+    être celle que le pipeline lit réellement, des deux côtés."""
+    for cle, (libelle_2127, libelle_1420) in COLONNES_EQUIVALENTES.items():
+        assert _libelles(PERIODE_2021_2027)[cle] == libelle_2127
+        assert _libelles(PERIODE_2014_2020)[cle] == libelle_1420
+
+
+def test_toute_colonne_aux_libelles_divergents_est_declaree():
+    """L'oubli inverse, et le plus probable : une colonne commune aux deux
+    périodes mais nommée différemment, qu'on aurait omis de déclarer. Elle
+    resterait sous son libellé 2014-2020 et le dashboard ne la trouverait pas.
+
+    Comparé sur les **clés réelles des fixtures**, et non sur les libellés du
+    schéma : deux transcriptions peuvent différer par une apostrophe ou une
+    espace sans que les fichiers, eux, diffèrent (`build_cols` neutralise ces
+    écarts — c'est le cas de `Département de l’opération`). Un test sur les
+    libellés du schéma signalerait ces faux positifs et manquerait le vrai sujet,
+    qui est la clé que le dashboard va effectivement chercher dans le JSON."""
+    cols_2127, cols_1420 = _libelles(PERIODE_2021_2027), _libelles(PERIODE_2014_2020)
+    cles_2127, cles_1420 = _cles_fixture("data.json"), _cles_fixture("data_2014-2020.json")
+
+    divergentes = {
+        cle
+        for cle in set(cols_2127) & set(cols_1420)
+        if cols_2127[cle] in cles_2127
+        and cols_1420[cle] in cles_1420
+        and cols_2127[cle] != cols_1420[cle]
+    }
+    assert divergentes == set(COLONNES_EQUIVALENTES), (
+        f"colonnes aux libellés divergents non déclarées : {divergentes - set(COLONNES_EQUIVALENTES)}"
+    )
+
+
+def test_les_operations_2014_2020_prennent_les_libelles_canoniques():
+    op = {
+        "Montant UE programmé": 1000.0,
+        "Total des dépenses éligibles programmées": 2000.0,
+        "Libellé programme": "PO FEDER-FSE Bretagne 2014-2020",
+        "Fonds": "FEDER",
+    }
+    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
+
+    assert normalisee["Montant UE"] == 1000.0
+    assert normalisee["Total des dépenses éligibles"] == 2000.0
+    assert normalisee["Libellé Programme"] == "PO FEDER-FSE Bretagne 2014-2020"
+    assert normalisee["Fonds"] == "FEDER"
+    # Les anciens libellés ne subsistent pas à côté des nouveaux : deux colonnes
+    # portant le même montant fausseraient toute somme faite sur le DataFrame.
+    assert "Montant UE programmé" not in normalisee
+    assert "Total des dépenses éligibles programmées" not in normalisee
+
+
+def test_le_taux_de_cofinancement_est_derive_des_deux_montants():
+    op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": 1000.0}
+    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
+    assert normalisee["Taux de cofinancement"] == pytest.approx(0.85)
+
+
+@pytest.mark.parametrize(
+    "depenses",
+    [0, None, float("nan")],
+    ids=["depenses_nulles", "depenses_absentes", "depenses_nan"],
+)
+def test_le_taux_est_absent_plutot_que_nul_quand_il_est_indeterminable(depenses):
+    """None, jamais 0 : un taux de 0 % se lit comme une opération sans financement
+    UE, ce qui est un fait ; ici on n'a simplement pas de quoi le calculer."""
+    op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": depenses}
+    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
+    assert normalisee["Taux de cofinancement"] is None
+
+
+def test_le_taux_existant_de_2021_2027_n_est_pas_recalcule():
+    """En 2021-2027 le taux est une colonne de la source. Le recalculer écraserait
+    la valeur publiée par une valeur dérivée, silencieusement différente."""
+    op = {"Montant UE": 500.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.42}
+    (normalisee,) = normaliser_operations([op], PERIODE_2021_2027)
+    assert normalisee["Taux de cofinancement"] == 0.42
+
+
+@pytest.mark.parametrize(
+    ("periode", "op"),
+    [
+        (PERIODE_2014_2020, {"Montant UE programmé": 10.0, "Total des dépenses éligibles programmées": 20.0}),
+        # Le cas 2021-2027 n'est pas redondant : cette période ne renomme rien,
+        # donc elle emprunte l'autre branche de la fonction — celle qui ne
+        # recopie l'opération que pour ça. Testée sur la seule 2014-2020, la
+        # recopie pouvait disparaître sans qu'aucun test ne rougisse (constaté
+        # par mutation).
+        (PERIODE_2021_2027, {"Montant UE": 10.0, "Total des dépenses éligibles": 20.0}),
+    ],
+    ids=["2014-2020", "2021-2027"],
+)
+def test_normaliser_ne_modifie_pas_les_operations_recues(periode, op):
+    """Les opérations viennent d'un `st.cache_data` partagé entre pages : les
+    muter contaminerait le cache pour toute la session."""
+    avant = dict(op)
+    normalisees = normaliser_operations([op], periode)
+
+    assert op == avant
+    # Et la copie, elle, porte bien le taux dérivé : sans quoi le test passerait
+    # aussi sur une fonction qui ne fait plus rien.
+    assert normalisees[0]["Taux de cofinancement"] == pytest.approx(0.5)
+
+
+def test_2014_2020_n_a_aucune_des_capacites_de_2021_2027():
+    assert all(capacites(PERIODE_2021_2027).values())
+    assert not any(capacites(PERIODE_2014_2020).values())
+
+
+def test_une_periode_inconnue_leve():
+    """Plutôt qu'un dictionnaire vide, qui masquerait toute la page en silence."""
+    with pytest.raises(KeyError):
+        capacites("2028-2034")
+
+
+def test_chaque_capacite_absente_est_expliquee_a_l_utilisateur():
+    """Un bloc retiré sans explication se lit comme un oubli. Seul
+    `perimetre_complet` échappe à la règle : ce n'est pas un bloc manquant mais
+    une réserve sur les chiffres, portée par son propre avertissement."""
+    explicables = set(CAPACITES[PERIODE_2014_2020]) - {"perimetre_complet"}
+    assert set(EXPLICATIONS_ABSENCES) == explicables
+    assert len(absences_expliquees(PERIODE_2014_2020)) == len(explicables)
+    assert absences_expliquees(PERIODE_2021_2027) == []
+
+
+def test_le_libelle_du_montant_reste_celui_de_la_periode():
+    """Normaliser la colonne ne rend pas les deux notions équivalentes : en
+    2014-2020 le montant est programmé, en 2021-2027 conventionné."""
+    assert libelle_montant(PERIODE_2014_2020) == "Montant UE programmé"
+    assert libelle_montant(PERIODE_2021_2027) == "Montant UE"

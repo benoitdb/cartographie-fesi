@@ -40,6 +40,13 @@ PAGES = [
 # donc hors du test de fraîcheur ci-dessous, qui vaut pour les pages d'analyse.
 PAGES_AVEC_MILLESIME = [p for p in PAGES if p.stem != "4_Validation_source"]
 
+# Le millésime affiché **suit la période de la page** (issue #83) : l'espace
+# 2014-2020 lit son propre fichier, dont la date déclarée est celle de
+# l'extraction Synergie. Une page qui afficherait la date de l'autre période
+# serait le pire des cas — des chiffres justes sous une date fausse.
+MILLESIME_PAR_DEFAUT = "export du 16/03/2026"
+MILLESIME_ATTENDU = {"5_Période_2014-2020": "export du 30/08/2023"}
+
 
 @pytest.fixture
 def donnees_fixture(monkeypatch):
@@ -50,6 +57,7 @@ def donnees_fixture(monkeypatch):
     from utils import data_loader
 
     monkeypatch.setattr(data_loader, "DATA_PATH", FIXTURE / "data.json")
+    monkeypatch.setattr(data_loader, "DATA_2014_2020_PATH", FIXTURE / "data_2014-2020.json")
     monkeypatch.setattr(
         data_loader, "BENEFICIAIRES_FUZZY_PATH", FIXTURE / "beneficiaires_fuzzy.json"
     )
@@ -108,11 +116,11 @@ def test_la_fixture_est_auto_coherente(donnees_fixture):
     assert montant_par_fonds == pytest.approx(montant_total)
 
 
-def test_les_cinq_pages_sont_couvertes():
+def test_toutes_les_pages_sont_couvertes():
     """Garde-fou sur le garde-fou : une page ajoutée dans `pages/` sans test
     passerait autrement inaperçue, et la suite resterait verte en ne couvrant
     plus tout le dashboard."""
-    assert len(PAGES) == 5, f"pages trouvées : {[p.name for p in PAGES]}"
+    assert len(PAGES) == 6, f"pages trouvées : {[p.name for p in PAGES]}"
 
 
 @pytest.mark.parametrize("page", PAGES_AVEC_MILLESIME, ids=lambda p: p.stem)
@@ -121,7 +129,8 @@ def test_la_fraicheur_des_donnees_est_affichee(page, donnees_fixture):
     lisible sur **chaque** page, pas seulement sur celle où on a pensé à
     l'ajouter (issue #47). Ce test échoue si une page nouvelle oublie l'appel."""
     at = AppTest.from_file(str(page), default_timeout=120).run()
+    attendu = MILLESIME_ATTENDU.get(page.stem, MILLESIME_PAR_DEFAUT)
 
-    assert any("export du 16/03/2026" in c.value for c in at.sidebar.caption), (
-        f"{page.name} n'affiche pas le millésime des données"
+    assert any(attendu in c.value for c in at.sidebar.caption), (
+        f"{page.name} n'affiche pas le millésime attendu ({attendu})"
     )
