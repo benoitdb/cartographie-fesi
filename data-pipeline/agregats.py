@@ -71,7 +71,12 @@ def calculer_agregats(df, cols, partitions=None):
     df_mono_region = partitions.mono_region
     region_principale = _region_principale(df_mono_region)
     regions_mono = sorted(region_principale.dropna().unique())
-    fonds_tous = sorted(df[cols["fonds"]].unique())
+    # `.dropna()` : une opération sans fonds renseigné (constaté sur Normandie,
+    # issue #68 — ~26 dossiers 2021-2023 sans `Fond`) est comptée dans les
+    # totaux globaux mais absente de `by_fonds`, comme `regions_mono` et
+    # `objectifs_tous` ci-dessus excluent déjà une dimension manquante plutôt
+    # que d'inventer une catégorie "Non renseigné".
+    fonds_tous = sorted(df[cols["fonds"]].dropna().unique())
 
     # La dimension thématique n'existe pas dans toutes les périodes : 2021-2027 a
     # des objectifs stratégiques, 2014-2020 un « Domaine d'intervention » vide à

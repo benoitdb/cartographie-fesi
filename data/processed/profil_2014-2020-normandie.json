@@ -1,0 +1,158 @@
+{
+  "source_id": "2014-2020-normandie",
+  "source_label": "Normandie (hors Synergie)",
+  "periode": "2014-2020",
+  "fichier_source": "normandie_14_20.xlsx",
+  "date_source": "2025-08-22",
+  "date_generation": "2026-08-25",
+  "profil": {
+    "volumetrie": {
+      "operations": 1178,
+      "colonnes": 17
+    },
+    "completude": {
+      "numero_operation": {
+        "libelle": "n° Dossier",
+        "remplis": 1178,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "beneficiaire": {
+        "libelle": "Nom du bénéficiaire - Beneficiary name",
+        "remplis": 1178,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "fonds": {
+        "libelle": "Fond",
+        "remplis": 1152,
+        "manquants": 26,
+        "taux": 97.8
+      },
+      "region": {
+        "libelle": "Région",
+        "remplis": 1178,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "dimension_thematique": {
+        "libelle": "Catégorie d'intervention - Intervention field",
+        "remplis": 1178,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "montant_ue": {
+        "libelle": "Montant UE programmé",
+        "remplis": 1178,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "depenses": {
+        "libelle": "Total des dépenses éligibles - Total eligible costs",
+        "remplis": 1178,
+        "manquants": 0,
+        "taux": 100.0
+      }
+    },
+    "par_fonds": [
+      {
+        "fonds": "FEDER",
+        "nb": 1031,
+        "montant_ue": 380593315.7590467,
+        "part_nb": 87.5,
+        "part_montant": 59.1
+      },
+      {
+        "fonds": "FEDER REACT-EU",
+        "nb": 58,
+        "montant_ue": 122613794.94000001,
+        "part_nb": 4.9,
+        "part_montant": 19.0
+      },
+      {
+        "fonds": "FSE",
+        "nb": 55,
+        "montant_ue": 93481400.16299999,
+        "part_nb": 4.7,
+        "part_montant": 14.5
+      },
+      {
+        "fonds": "IEJ",
+        "nb": 8,
+        "montant_ue": 22513657.86,
+        "part_nb": 0.7,
+        "part_montant": 3.5
+      }
+    ],
+    "regions": {
+      "colonne_remplie": 1178,
+      "taux_colonne_remplie": 100.0,
+      "valeurs_distinctes": 1,
+      "top": [
+        {
+          "valeur": "Normandie",
+          "nb": 1178
+        }
+      ],
+      "manquantes_par_fonds": []
+    },
+    "dimension_thematique": {
+      "libelle": "Catégorie d'intervention - Intervention field",
+      "taux_remplie": 100.0,
+      "distincts": 38,
+      "top": [
+        {
+          "valeur": "60.0",
+          "nb": 177
+        },
+        {
+          "valeur": "58.0",
+          "nb": 136
+        },
+        {
+          "valeur": "14.0",
+          "nb": 96
+        },
+        {
+          "valeur": "62.0",
+          "nb": 96
+        },
+        {
+          "valeur": "78.0",
+          "nb": 65
+        },
+        {
+          "valeur": "64.0",
+          "nb": 64
+        },
+        {
+          "valeur": "89.0",
+          "nb": 62
+        },
+        {
+          "valeur": "65.0",
+          "nb": 49
+        },
+        {
+          "valeur": "11.0",
+          "nb": 47
+        },
+        {
+          "valeur": "85.0",
+          "nb": 42
+        }
+      ]
+    },
+    "montants": {
+      "montant_ue_total": 643776476.8420467,
+      "depenses_total": 1507480202.096,
+      "cofinancement_global": 42.7,
+      "montants_ue_negatifs": 0
+    },
+    "cle": {
+      "colonne": "n° Dossier",
+      "distincts": 1178,
+      "doublons": 0
+    }
+  }
+}

@@ -133,6 +133,92 @@ def _deriver_region_nouvelle_aquitaine(df):
     return df
 
 
+# Ni numéro CCI, ni département, ni pays dans ce fichier (issue #68) — voir
+# COLONNES_NORMANDIE_2014_2020. `depenses`/`montant_ue` sont directs, comme
+# les autres sources hors-Synergie sauf Bretagne.
+_CLES_PROFIL_NORMANDIE_2014_2020 = {
+    "numero_operation": "numero_op",
+    "beneficiaire": "nom_benef",
+    "fonds": "fonds",
+    "region": "region",
+    "montant_ue": "montant_ue",
+    "depenses": "depenses",
+    "dimension_thematique": "domaine_intervention",
+}
+
+
+def _corriger_dates_normandie(serie):
+    """Une même colonne de date mélange, à l'intérieur d'une seule feuille,
+    des `datetime` réels, des chaînes au format JJ/MM/AAAA et des numéros de
+    série Excel bruts (cellules dont le format d'affichage n'est pas une date
+    dans le classeur source, constaté sur ~130 lignes de `PO HN` et 3 de
+    `PO BN & REACT`) — un artefact de saisie/export, pas une différence entre
+    opérations. `pd.to_datetime` seul traiterait un entier comme des
+    nanosecondes depuis 1970, pas un jour depuis l'origine Excel (1899-12-30) :
+    les deux formes sont donc converties séparément puis recollées.
+
+    Quelques valeurs sont des erreurs de saisie irrécupérables (« 2701/2017 »,
+    « 31/11/2017 » — 31 novembre n'existe pas, « 01/10/219 » — année à 3
+    chiffres) : `errors="coerce"` les transforme en `NaT` plutôt que de deviner
+    une date, cohérent avec le principe du fichier Synergie (ne jamais
+    inventer pour homogénéiser). L'année à 3 chiffres ne lève pas d'erreur
+    (dateutil l'accepte telle quelle, « 219 ») : un filtre par plage plausible
+    la rattrape après coup, sans quoi l'opération se retrouverait datée de
+    l'an 219."""
+    est_numerique = pd.to_numeric(serie, errors="coerce").notna() & ~serie.apply(
+        lambda v: isinstance(v, pd.Timestamp) or hasattr(v, "year")
+    )
+    numeriques = pd.to_datetime(
+        pd.to_numeric(serie.where(est_numerique)), unit="D", origin="1899-12-30"
+    )
+    autres = pd.to_datetime(serie.where(~est_numerique), dayfirst=True, errors="coerce")
+    dates = numeriques.fillna(autres)
+    plausible = dates.dt.year.between(1990, 2030)
+    return dates.where(plausible)
+
+
+def _deriver_normandie(df):
+    """Deux corrections, en plus de la concaténation des deux feuilles faite
+    par `lire_dataframe` (voir COLONNES_NORMANDIE_2014_2020) :
+
+    - la dernière ligne de `PO BN & REACT` est une ligne de total (toutes
+      colonnes vides sauf `Montant UE programmé` = 352 302 354 €, la somme du
+      programme) : ce n'est pas une opération, elle est retirée avant toute
+      autre étape — la garder ferait remonter un `n° Dossier` et un
+      `Nom du bénéficiaire` vides jusqu'au dashboard ;
+    - `Région`, constante : le fichier ne couvre que la Normandie (source
+      régionale, pas Synergie), comme Bretagne et Nouvelle-Aquitaine ;
+    - `Libellé programme`, à partir de `Programme` (BN/HN/REACT) : posée pour
+      la même raison que chez Bretagne — `ingest.harmoniser_regions` lit
+      toujours cette clé, même quand `Région` est déjà renseignée et que sa
+      valeur ne sert donc à rien dans ce cas précis (elle ne sert de repli que
+      si `Région` est vide, jamais le cas ici). La ligne dont `Programme` porte
+      une référence de formule Excel cassée (`(=index(...)`, ligne 533 de
+      `PO HN`) retombe sur *Normandie* faute de mieux — la donnée métier de
+      cette ligne (dossier, bénéficiaire, montants) reste valide, seul
+      `Programme` est un artefact d'export.
+
+    `Fond` reste tel quel, y compris ses ~26 valeurs manquantes (dossiers 2021
+    à 2023, hors du répertoire mais présents dans ce même fichier — probable
+    reste à payer post-clôture de la programmation) : aucune règle fiable ne
+    permet de la déduire, mieux vaut une valeur manquante visible qu'une
+    valeur inventée."""
+    df = df.copy()
+    df = df[df["n° Dossier"].notna()].reset_index(drop=True)
+    df["Région"] = "Normandie"
+    libelles = {
+        "BN": "Programme opérationnel Basse-Normandie 2014-2020",
+        "HN": "Programme opérationnel Haute-Normandie 2014-2020",
+        "REACT": "Programme opérationnel Normandie REACT-EU 2014-2020",
+    }
+    df["Libellé programme"] = df["Programme"].map(libelles).fillna(
+        "Programme opérationnel Normandie 2014-2020"
+    )
+    for colonne in ("date début op. / start", "date fin d'op. / end"):
+        df[colonne] = _corriger_dates_normandie(df[colonne])
+    return df
+
+
 def _deriver_bretagne(df):
     """Trois colonnes absentes du fichier, posées ici (voir
     COLONNES_BRETAGNE_2014_2020) :
@@ -318,6 +404,33 @@ SOURCES = {
         "cles_profil": _CLES_PROFIL_BRETAGNE_2014_2020,
         "pretraitement": _deriver_bretagne,
     },
+    # Quatrième et dernière source hors-Synergie (issue #68) : liste régionale
+    # Normandie, publiée par europe-en-normandie.eu. Page bloquée au scraping
+    # automatisé (403, pare-feu Akamai, comme EUR-Lex) : fichier fourni
+    # manuellement, pas de script de récupération possible ici. Sortie
+    # séparée, comme les trois précédentes : fusionner ces sources à
+    # `data_2014-2020.json` attend un consommateur (#83).
+    "2014-2020-normandie": {
+        "label": "Normandie (hors Synergie)",
+        "periode": "2014-2020",
+        "schema": "2014-2020-normandie",
+        "motif_fichier": "normandie_14_20*.xlsx",
+        "url_source": "https://europe-en-normandie.eu/suivi-de-la-programmation",
+        "feuilles": [
+            {"nom": "PO BN & REACT"},
+            {"nom": "PO HN"},
+        ],
+        # Date de création du fichier (métadonnées du classeur XLSX) : le nom
+        # d'origine (« LISTE BENEFICIAIRES 14-20 AOUT 2025.xlsx ») ne porte
+        # qu'un mois, moins précis.
+        "date_source": "2025-08-22",
+        "fichier_sortie": "data_2014-2020_normandie.json",
+        # Chaque ligne est en Normandie par construction (voir
+        # `_deriver_normandie`) : pas de repli par programme à fournir ici.
+        "programme_to_region": {},
+        "cles_profil": _CLES_PROFIL_NORMANDIE_2014_2020,
+        "pretraitement": _deriver_normandie,
+    },
 }
 
 
@@ -393,7 +506,12 @@ def lire_dataframe(conf, chemin):
                 skiprows=conf.get("skiprows"),
                 header=conf.get("header", 0),
             )
-            partie["Fonds"] = feuille["fonds"]
+            # `fonds` facultatif : Bretagne n'a pas de colonne Fonds dans le
+            # fichier (posée ici, une valeur par feuille) ; Normandie en a une,
+            # déjà renseignée ligne à ligne dans chaque feuille — la forcer ici
+            # écraserait FEDER/FEDER REACT-EU/FSE/IEJ par une valeur unique.
+            if "fonds" in feuille:
+                partie["Fonds"] = feuille["fonds"]
             parties.append(partie)
         df = pd.concat(parties, ignore_index=True)
     else:
