@@ -119,10 +119,41 @@ COLONNES_PON_FSE_2014_2020 = [
 # au moins deux depuis l'issue #68). Le descripteur de source (`sources.py`)
 # désigne le sien via son champ `schema` (par défaut sa `periode`, quand les deux
 # coïncident).
+# Fichier Nouvelle-Aquitaine hors-Synergie (issue #68) : liste régionale publiée
+# par europe-en-nouvelle-aquitaine.eu, l'autorité de gestion n'utilisant pas
+# SynergieCDM pour l'essentiel de ses opérations (25 seulement y apparaissent,
+# à la marge — voir CLAUDE.md). Colonnes bilingues anglais/français, ce fichier
+# n'a ni numéro CCI, ni code postal, ni département, ni objectif stratégique.
+# Deux colonnes portent la même valeur (le code du programme de rattachement,
+# une des trois anciennes régions pré-2016) : `libelle_prog` et `territoire`
+# — aucune n'est une vraie « Région » au sens des autres schémas, dérivée par
+# le `pretraitement` du descripteur de source (`sources.py`) puisque le fichier
+# ne couvre que la Nouvelle-Aquitaine par construction.
+COLONNES_NOUVELLE_AQUITAINE_2014_2020 = [
+    ("libelle_prog", "Colonne à masquer lors de la diffusion"),
+    ("numero_op", "Operation number"),
+    ("nom_benef", "Beneficiary name"),
+    ("intitule_proj", "Operation name"),
+    ("resume_op", "Operation summary"),
+    ("fonds", "Funds"),
+    ("date_debut", "Operation start date"),
+    ("date_fin", "Operation end date"),
+    ("depenses", "Total amount programmed"),
+    ("montant_ue", "Amount co-financing European Union"),
+    ("taux_cofinance", "Union co-financing rate (%)"),
+    ("localisation", "Project location"),
+    ("territoire", "Project territory"),
+    ("pays", "Country"),
+    ("domaine_intervention", "Name of category of intervention for the operation"),
+    ("date_maj", "Date of last update"),
+    ("region", "Région"),  # Dérivée, voir docstring ci-dessus.
+]
+
 SCHEMAS = {
     "2021-2027": COLONNES_2021_2027,
     "2014-2020": COLONNES_2014_2020,
     "2014-2020-pon-fse": COLONNES_PON_FSE_2014_2020,
+    "2014-2020-nouvelle-aquitaine": COLONNES_NOUVELLE_AQUITAINE_2014_2020,
 }
 
 # Le fichier source mélange les deux apostrophes (U+0027 dans "Région de

@@ -75,6 +75,19 @@ _CLES_PROFIL_PON_FSE_2014_2020 = {
 }
 
 
+_CLES_PROFIL_NOUVELLE_AQUITAINE_2014_2020 = {
+    "numero_operation": "numero_op",
+    "programme": "libelle_prog",
+    "beneficiaire": "nom_benef",
+    "fonds": "fonds",
+    "region": "region",
+    "montant_ue": "montant_ue",
+    "depenses": "depenses",
+    "dimension_thematique": "domaine_intervention",
+    "pays": "pays",
+}
+
+
 def _deriver_fonds_pon_fse(df):
     """`Fonds` n'existe pas dans le fichier PON FSE : seul `Libellé_po` distingue
     le programme IEJ (753 opérations) du reste, tout FSE (les PO Guadeloupe/
@@ -86,6 +99,24 @@ def _deriver_fonds_pon_fse(df):
     df["Fonds"] = df["Libellé_po"].map(
         lambda libelle: "IEJ" if libelle == "Programme Opérationnel IEJ" else "FSE"
     )
+    return df
+
+
+def _deriver_region_nouvelle_aquitaine(df):
+    """`Région` n'existe pas dans le fichier : les trois codes distincts de
+    `Project territory` (2014FR16M0OP001/M2OP006/M2OP009) sont les anciens PO
+    Aquitaine/Limousin/Poitou-Charentes, fusionnés en Nouvelle-Aquitaine depuis
+    2016 — ce fichier ne couvre qu'eux (source régionale, pas Synergie), la
+    région est donc constante plutôt qu'à harmoniser. Colonne ajoutée en
+    dernière position, comme `_deriver_fonds_pon_fse` : l'ordre doit rester
+    synchrone avec COLONNES_NOUVELLE_AQUITAINE_2014_2020.
+
+    La ligne de traduction française des en-têtes anglais n'arrive pas
+    jusqu'ici : elle est sautée à la lecture par le `skiprows` du descripteur
+    (voir `lire_dataframe`), pas retirée après coup, pour ne pas forcer les
+    colonnes numériques/date en `object`."""
+    df = df.copy()
+    df["Région"] = "Nouvelle-Aquitaine"
     return df
 
 # Champs d'un descripteur :
@@ -175,6 +206,38 @@ SOURCES = {
         "cles_profil": _CLES_PROFIL_PON_FSE_2014_2020,
         "pretraitement": _deriver_fonds_pon_fse,
     },
+    # Deuxième source hors-Synergie (issue #68) : liste régionale Nouvelle-
+    # Aquitaine, l'autorité de gestion n'utilisant SynergieCDM que pour 25
+    # opérations à la marge (voir CLAUDE.md). Sortie séparée, comme le PON FSE :
+    # fusionner ces sources à `data_2014-2020.json` attend un consommateur
+    # (#83) qui recalculerait les agrégats sur leur union.
+    "2014-2020-nouvelle-aquitaine": {
+        "label": "Nouvelle-Aquitaine (hors Synergie)",
+        "periode": "2014-2020",
+        "schema": "2014-2020-nouvelle-aquitaine",
+        "motif_fichier": "nouvelle_aquitaine_14_20*.xlsx",
+        "url_source": (
+            "https://www.europe-en-nouvelle-aquitaine.eu/sites/default/files/"
+            "2026-06/Liste_projets_FEDER_FSE_14_20.xlsx"
+        ),
+        "feuille": "NA_1420",
+        # La ligne 1 (après l'en-tête) est la traduction française des en-têtes
+        # anglais — sautée ici, avant l'inférence de type par pandas (voir
+        # `lire_dataframe`).
+        "skiprows": [1],
+        # Valeur constante de `Date of last update` sur les 4 080 lignes du
+        # fichier (colonne technique d'export, pas une date par opération) :
+        # plus fiable que le préfixe du nom de fichier, ce fichier n'en portant
+        # pas.
+        "date_source": "2026-05-31",
+        "fichier_sortie": "data_2014-2020_nouvelle_aquitaine.json",
+        # Chaque ligne est en Nouvelle-Aquitaine par construction (voir
+        # `_deriver_region_nouvelle_aquitaine`) : pas de repli par programme à
+        # fournir ici.
+        "programme_to_region": {},
+        "cles_profil": _CLES_PROFIL_NOUVELLE_AQUITAINE_2014_2020,
+        "pretraitement": _deriver_region_nouvelle_aquitaine,
+    },
 }
 
 
@@ -225,8 +288,15 @@ def lire_dataframe(conf, chemin):
     chacun réappliquerait le pretraitement à sa façon et pourrait diverger,
     exactement le défaut que `sources.py` existe pour éviter (voir docstring de
     ce module).
+
+    `skiprows`, quand le descripteur le déclare, saute des lignes **avant** que
+    pandas n'infère le type des colonnes : les retirer après lecture (ex. via
+    `.iloc[1:]` dans un `pretraitement`) est trop tard, la ligne fautive a déjà
+    forcé les colonnes numériques/date en `object` pour toute la colonne
+    (constaté sur Nouvelle-Aquitaine, dont la ligne 1 est la traduction
+    française des en-têtes anglais — issue #68).
     """
-    df = pd.read_excel(chemin, sheet_name=conf["feuille"])
+    df = pd.read_excel(chemin, sheet_name=conf["feuille"], skiprows=conf.get("skiprows"))
     pretraitement = conf.get("pretraitement")
     return pretraitement(df) if pretraitement else df
 

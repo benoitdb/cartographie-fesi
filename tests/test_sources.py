@@ -79,6 +79,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "20270415_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx",
         "liste_operations_synergie_1420_08_2023.xlsx",
         "pon_fse_2014_2020.xls",
+        "nouvelle_aquitaine_14_20.xlsx",
     ]
     for nom in fichiers:
         (tmp_path / nom).touch()
@@ -87,6 +88,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "2021-2027-conventionnees": 2,  # deux millésimes du même fichier
         "2014-2020-synergie": 1,
         "2014-2020-pon-fse": 1,
+        "2014-2020-nouvelle-aquitaine": 1,
     }
     for source_id, conf in SOURCES.items():
         matches = sorted(p.name for p in tmp_path.glob(conf["motif_fichier"]))
@@ -164,6 +166,31 @@ def test_le_profil_2014_2020_pointe_les_bonnes_colonnes():
     assert cols["date_programmation"] == "Date de programmation"
     assert cols["dimension_thematique"] == "Domaine d’intervention"
     assert cols["programme"] == "Libellé programme"
+
+
+def test_le_profil_nouvelle_aquitaine_pointe_les_bonnes_colonnes():
+    """Fichier bilingue anglais/français : la clé sémantique `montant_ue` doit
+    suivre la colonne anglaise réelle, pas une traduction supposée."""
+    cols = cols_profil(
+        source("2014-2020-nouvelle-aquitaine"), colonnes_de("2014-2020-nouvelle-aquitaine")
+    )
+
+    assert cols["montant_ue"] == "Amount co-financing European Union"
+    assert cols["depenses"] == "Total amount programmed"
+    assert cols["region"] == "Région"
+    assert cols["fonds"] == "Funds"
+
+
+def test_nouvelle_aquitaine_deriver_region_pose_une_region_constante():
+    """Le fichier ne couvre que la Nouvelle-Aquitaine (issue #68) : la colonne
+    `Région`, absente du fichier, doit être posée à cette valeur pour toute
+    ligne — pas dérivée d'un programme qui n'existe pas dans ce schéma."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-nouvelle-aquitaine")
+    df_pretraite = SOURCES["2014-2020-nouvelle-aquitaine"]["pretraitement"](df)
+
+    assert list(df_pretraite["Région"]) == ["Nouvelle-Aquitaine"]
 
 
 def test_les_libelles_reels_sont_suivis_pas_recopies():
