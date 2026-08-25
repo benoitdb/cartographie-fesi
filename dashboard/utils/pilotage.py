@@ -45,7 +45,9 @@ def taux_consommation(engage, programme):
     return engage / programme if programme else 0
 
 
-def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ftj_article=None, assistance_technique=None, color_map=None):
+def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ftj_article=None,
+                       assistance_technique=None, color_map=None, libelle_programme="Programmé 2021-2027",
+                       reserve_methodo=None, mention_depassement=None):
     """Bloc A : montants agrégés (programmé, engagé, reste à engager) + une card par fonds
     avec sa propre barre de progression. N'affiche rien si aucune donnée programmée pour ce
     périmètre (ex. fonds sélectionnés absents du Tableau 9B).
@@ -63,6 +65,14 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
     ni comparable à un "engagé"), affiché à part pour ne pas fausser le taux de consommation
     (issues #20/#21).
 
+    libelle_programme / reserve_methodo / mention_depassement (optionnels) : les textes qui
+    dépendent de la période. Leur valeur par défaut est celle de 2021-2027, pour que les
+    trois pages de cette période appellent la fonction sans rien changer ; la page
+    2014-2020 passe les siennes (l'enveloppe n'a ni la même date, ni la même provenance,
+    ni la même raison de déborder — voir utils.periodes). Le libellé était écrit en dur
+    ici, ce qui aurait fait afficher « Programmé 2021-2027 » au-dessus de chiffres de
+    2014-2020 (issue #93).
+
     color_map (optionnel) : {valeur de df_fonds_pilotage["fonds"]: couleur}, ex. FONDS_COLORS
     ou OBJECTIF_STRATEGIQUE_COLORS (themes.py) — réutilise cette fonction pour une dimension
     autre que le Fonds (ex. pilotage par Objectif Stratégique, issue #21) avec des couleurs
@@ -76,14 +86,14 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
     col1, col2, col3 = st.columns(3)
     with col1:
         with st.container(border=True):
-            st.markdown(f"**Programmé 2021-2027 :** {montant_programme / 1e6:,.1f} M€".replace(",", " "))
+            st.markdown(f"**{libelle_programme} :** {montant_programme / 1e6:,.1f} M€".replace(",", " "))
     with col2:
         with st.container(border=True):
             st.markdown(f"**Engagé :** {montant_engage / 1e6:,.1f} M€".replace(",", " "))
     with col3:
         with st.container(border=True):
             st.markdown(f"**Reste à engager (est.) :** {reste / 1e6:,.1f} M€".replace(",", " "))
-    st.caption(RESERVE_METHODO)
+    st.caption(reserve_methodo or RESERVE_METHODO)
 
     depassement_present = False
     fonds_cols = st.columns(len(df_fonds_pilotage))
@@ -111,7 +121,7 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
                 else:
                     st.caption(" ")
     if depassement_present:
-        st.caption(FSE_DEPASSEMENT_DETAIL)
+        st.caption(mention_depassement or FSE_DEPASSEMENT_DETAIL)
     if assistance_technique:
         detail_at = ", ".join(f"{f} {v / 1e6:,.1f} M€".replace(",", " ") for f, v in assistance_technique.items())
         st.caption(

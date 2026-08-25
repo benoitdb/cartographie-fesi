@@ -24,11 +24,19 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from utils.cofinancement import (
+    filtrer_fonds_plafonnes,
+    libelle_categorie_2014_2020,
+    plafond_intervalle_2014_2020,
+)
 from utils.data_loader import (
+    load_categories_ue_2014_2020,
     load_data_2014_2020,
     load_dromcom_codes_postaux,
     load_dromcom_geojson,
     load_geojson,
+    load_programme_detail_2014_2020,
+    load_programme_totals_2014_2020,
     load_region_metadata,
 )
 from utils.departments import (
@@ -44,13 +52,27 @@ from utils.filters import compute_by_region, render_fonds_filter, summarize_ops
 from utils.millesime import render_millesime
 from utils.periodes import (
     AVERTISSEMENT_PERIMETRE,
+    MENTION_DEPASSEMENT_2014_2020,
+    MENTION_FONDS_HORS_RAPPROCHEMENT,
     MENTION_MONTANTS_PROGRAMMES,
-    MENTION_PLAFONDS_ABSENTS,
+    MENTION_PILOTAGE_MASQUE,
+    MENTION_PLAFOND_PAR_AXE,
+    MENTION_PLAFONDS_PERIODE,
+    MENTION_PROVENANCE_ENVELOPPES,
+    MENTION_REACT_EU_FONDU,
+    MENTION_REGION_MIXTE,
     PERIODE_2014_2020,
     absences_expliquees,
     capacites,
+    fusionner_enveloppes_sans_libelle,
     libelle_montant,
     normaliser_operations,
+    pilotage_disponible,
+)
+from utils.pilotage import (
+    build_ranking_programme_vs_engage,
+    build_trajectoire,
+    render_kpi_pilotage,
 )
 from utils.plot_style import (
     MAP_CONFIG,
@@ -68,6 +90,7 @@ from utils.stats import (
     build_pareto_beneficiaires,
     compute_cofinancement_table,
     compute_stats_table,
+    detect_cofinancement_superieur_plafond,
     detect_incoherent_cofinancement,
     detect_outliers,
     render_top_beneficiaires_drilldown,
@@ -111,6 +134,13 @@ filtre_actif = set(selected_fonds) != set(fonds_periode)
 
 operations = normaliser_operations(data["operations"], PERIODE_2014_2020)
 ops_fonds = [op for op in operations if op.get(FONDS) in selected_fonds]
+
+# Catégorie de cohésion de la période, et le plafond de cofinancement qui en découle.
+# `.get` sur le périmètre : « Ensemble national » et « Volet national » ne sont pas des
+# régions, donc pas de catégorie et pas de plafond — c'est le comportement voulu, un
+# plafond n'existe qu'à la maille où une catégorie existe.
+categorie_periode = load_categories_ue_2014_2020().get(perimetre)
+plafond_periode = plafond_intervalle_2014_2020(categorie_periode) if capa["plafonds_cofinancement"] else None
 
 st.title(f"FESI 2014-2020 — {perimetre}")
 st.caption(MENTION_MONTANTS_PROGRAMMES)
@@ -300,16 +330,20 @@ else:
                 st.markdown(f"**Population :** {_fmt_entier(region_meta['population'])} ({region_meta['population_year']})")
                 st.markdown(f"**Superficie :** {_fmt_entier(round(region_meta['superficie_km2']))} km²")
                 st.markdown(f"**Chef-lieu :** {region_meta['chef_lieu']}")
-            # La « catégorie de région » affichée sur la Vue Régionale 2021-2027 est
-            # délibérément absente ici : les catégories de la période 2014-2020 ne sont
-            # pas les mêmes (les dix régions « en transition » d'alors n'existent plus
-            # sous cette forme), et afficher celle de 2021-2027 sur des chiffres de
-            # 2014-2020 serait une donnée réglementaire fausse (issues #79, #81).
+            # Catégorie **de la période**, et surtout pas `region_meta["categorie_ue"]`,
+            # qui est celle de 2021-2027 : les deux découpages diffèrent, et l'un affiché
+            # à la place de l'autre serait une donnée réglementaire fausse sans rien
+            # casser à l'écran (issue #81).
+            st.markdown(f"**Catégorie UE 2014-2020 :** {libelle_categorie_2014_2020(categorie_periode)}")
             st.caption(
-                "La catégorie de région au sens de la politique de cohésion n'est pas affichée : "
-                "celle de 2021-2027 ne vaut pas pour cette période, et les catégories 2014-2020 "
-                "restent à réunir (issue #79)."
+                "Catégorie au sens de la politique de cohésion **2014-2020** (décision "
+                "d'exécution 2014/99/UE), qui détermine le plafond de cofinancement de la "
+                "période. Ce n'est pas celle de 2021-2027 : le découpage a changé, les dix "
+                "régions métropolitaines « en transition » d'alors n'existent plus sous cette "
+                "forme."
             )
+            if categorie_periode and not categorie_periode.get("categorie_ue"):
+                st.caption(MENTION_REGION_MIXTE)
 
     with apercu_col2:
         if est_metropole:
@@ -360,10 +394,12 @@ else:
 
 # ---------------------------------------------------------------- Analyses
 
-# Deux onglets, et non les trois des pages 2021-2027 : leur onglet « Pilotage »
-# compare l'engagé au programmé de l'Accord de partenariat, qui n'existe pas
-# encore pour cette période (#79). Un onglet vide vaudrait moins que pas d'onglet.
-tab_ensemble, tab_audit = st.tabs(["Vue d'ensemble", "Analyses & contrôle"])
+# Trois onglets comme les pages 2021-2027 depuis que les dotations de la période
+# sont transcrites (#93). L'onglet Pilotage existe sur tous les périmètres, mais il
+# n'affiche un taux que là où l'engagé est comparable à l'enveloppe : ailleurs il
+# porte l'explication à la place. C'est l'arbitrage inverse de #83 — un onglet
+# absent ne s'explique pas, un onglet qui dit pourquoi il est vide, si.
+tab_ensemble, tab_pilotage, tab_audit = st.tabs(["Vue d'ensemble", "Pilotage", "Analyses & contrôle"])
 
 with tab_ensemble:
     st.subheader("Répartition par fonds")
@@ -451,6 +487,86 @@ with tab_ensemble:
         "qui la situe dans une programmation — pas sa date."
     )
 
+with tab_pilotage:
+    st.subheader("Pilotage : programmé vs engagé")
+
+    if not pilotage_disponible(perimetre, est_national=perimetre in (ENSEMBLE_NATIONAL, VOLET_NATIONAL)):
+        st.info(MENTION_PILOTAGE_MASQUE)
+    else:
+        enveloppes_perimetre = load_programme_totals_2014_2020().get(perimetre, {})
+        # Une enveloppe dont aucun libellé de fonds ne porte d'opération ici rejoint son
+        # fonds d'origine : sans ça, la métropole afficherait un FEDER REACT-EU à 0 % et
+        # un FEDER gonflé de la même somme (voir la règle et ses chiffres dans periodes.py).
+        enveloppes_perimetre, fonds_fusionnes = fusionner_enveloppes_sans_libelle(
+            enveloppes_perimetre, set(df_ops[FONDS].unique())
+        )
+        # Fonds rapprochables = ceux qui ont une enveloppe **et** sont sélectionnés.
+        # Le FEAD et le FEDER-FSE n'en ont pas (voir MENTION_FONDS_HORS_RAPPROCHEMENT) :
+        # ils sortent du rapprochement des deux côtés à la fois, numérateur compris —
+        # les laisser dans l'engagé gonflerait le taux d'un montant sans dénominateur,
+        # exactement le piège que l'issue #93 devait éviter pour REACT-EU.
+        fonds_rapprochables = [f for f in sorted(enveloppes_perimetre) if f in selected_fonds]
+        engage_par_fonds = df_ops.groupby(FONDS)[MONTANT].sum().to_dict()
+
+        df_fonds_pilotage = pd.DataFrame(
+            [
+                {"fonds": f, "engage": engage_par_fonds.get(f, 0), "programme": enveloppes_perimetre[f]}
+                for f in fonds_rapprochables
+            ]
+        )
+
+        if df_fonds_pilotage.empty:
+            st.info(
+                "Aucun des fonds sélectionnés n'a d'enveloppe programmée sur ce périmètre. "
+                "Sélectionnez le FEDER, le FSE, l'IEJ ou le FEDER REACT-EU pour afficher un "
+                "taux de consommation."
+            )
+        else:
+            montant_programme = int(df_fonds_pilotage["programme"].sum())
+            montant_engage = int(df_fonds_pilotage["engage"].sum())
+            render_kpi_pilotage(
+                df_fonds_pilotage,
+                montant_programme,
+                montant_engage,
+                color_map=FONDS_COLORS,
+                libelle_programme="Programmé 2014-2020",
+                reserve_methodo=MENTION_PROVENANCE_ENVELOPPES,
+                mention_depassement=MENTION_DEPASSEMENT_2014_2020,
+            )
+            st.caption(MENTION_FONDS_HORS_RAPPROCHEMENT)
+            if fonds_fusionnes:
+                st.caption(MENTION_REACT_EU_FONDU)
+
+            part_react_eu = load_programme_detail_2014_2020()["react_eu"].get(perimetre, {})
+            part_react_eu = {f: v for f, v in part_react_eu.items() if f in fonds_rapprochables}
+            if part_react_eu:
+                detail = ", ".join(f"{f} {v / 1e6:,.1f} M€".replace(",", " ") for f, v in sorted(part_react_eu.items()))
+                st.caption(
+                    f"Dont maquettes REACT-EU incluses dans les enveloppes ci-dessus : {detail}. "
+                    "Leur provenance (évaluation ANCT, 2024) diffère de celle du reste "
+                    "(Accord de partenariat, 2019)."
+                )
+
+            traj_col, bullet_col = st.columns(2)
+            with traj_col:
+                # `Date de programmation` et non la date de début : sur cette période c'est
+                # elle qui date l'engagement, la date de référence n'étant pas la même qu'en
+                # 2021-2027 (première convention) — cf. profil de source, issue #69.
+                st.plotly_chart(
+                    build_trajectoire(
+                        df_ops[df_ops[FONDS].isin(fonds_rapprochables)],
+                        montant_programme,
+                        date_col="Date de programmation",
+                    ),
+                    use_container_width=True,
+                )
+            with bullet_col:
+                st.plotly_chart(
+                    build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
+                    use_container_width=True,
+                )
+
+
 with tab_audit:
     st.caption(
         "Dispersion des montants, concentration par bénéficiaire et cohérence des montants — "
@@ -530,8 +646,7 @@ with tab_audit:
     # Le fichier 2014-2020 ne porte pas de colonne de taux : il est dérivé du montant UE
     # et des dépenses éligibles (utils/periodes.normaliser_operations), un simple quotient
     # de deux colonnes présentes.
-    if not capa["plafonds_cofinancement"]:
-        st.caption(MENTION_PLAFONDS_ABSENTS)
+    st.caption(MENTION_PLAFONDS_PERIODE)
     cofi_fonds = compute_cofinancement_table(df_ops, FONDS).rename(
         columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
     )
@@ -546,6 +661,63 @@ with tab_audit:
             "Taux médian": taux_col_config,
         },
     )
+
+    # Le plafond n'existe qu'à la maille d'une région : les périmètres agrégés réunissent
+    # des catégories différentes, et il n'y a pas de plafond « moyen » à opposer à une
+    # opération. Plutôt qu'un tableau sans borne et sans explication, on dit à quelle
+    # maille l'information existe.
+    if plafond_periode is None:
+        st.info(
+            "**Pas de plafond opposable sur ce périmètre.** Le plafond de cofinancement "
+            "2014-2020 découle de la catégorie de la région, or ce périmètre en réunit "
+            "plusieurs (ensemble national) ou n'est rattaché à aucune (volet national : "
+            "programmes nationaux, assistance technique, programmes interrégionaux). "
+            "Sélectionner une région dans la barre latérale affiche son plafond et les "
+            "opérations qui le dépassent."
+        )
+    else:
+        plafond_min, plafond_max = plafond_periode
+        df_plafonnees, nb_hors_plafond = filtrer_fonds_plafonnes(df_ops, fonds_col=FONDS)
+
+        if plafond_min == plafond_max:
+            st.markdown(f"**Plafond applicable : {plafond_min:.0%}** — {libelle_categorie_2014_2020(categorie_periode)}.")
+        else:
+            # Fourchette, et le dépassement est compté sur la borne **haute** : sous la
+            # borne basse, une opération peut parfaitement relever de l'ancienne région
+            # à plafond élevé. Compter sur la borne basse produirait des « dépassements »
+            # dont on sait qu'ils sont peut-être réguliers — l'inverse de ce qu'on cherche.
+            st.markdown(f"**Plafond applicable : entre {plafond_min:.0%} et {plafond_max:.0%}** selon l'ancienne région.")
+            st.caption(MENTION_REGION_MIXTE)
+
+        if nb_hors_plafond:
+            st.caption(
+                f"{_fmt_entier(nb_hors_plafond)} opération(s) écartée(s) du décompte ci-dessous "
+                "(FEDER REACT-EU, IEJ, FEAD) : leur régime n'est pas celui de l'article 120. "
+                "Elles restent comptées dans le tableau des taux par fonds ci-dessus, qui est "
+                "descriptif."
+            )
+
+        depassements = detect_cofinancement_superieur_plafond(df_plafonnees, plafond_max)
+        st.caption(f"{_fmt_entier(len(depassements))} opération(s) au taux supérieur à {plafond_max:.0%}.")
+        if len(depassements):
+            st.caption(MENTION_PLAFOND_PAR_AXE)
+        if len(depassements):
+            st.dataframe(
+                style_categorical_columns(
+                    depassements[
+                        ["Intitulé du projet", BENEFICIAIRE, FONDS, "Total des dépenses éligibles", MONTANT, "Taux de cofinancement"]
+                    ].head(50),
+                    {FONDS: FONDS_COLORS},
+                ),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    **text_widths("Intitulé du projet", BENEFICIAIRE),
+                    "Total des dépenses éligibles": montant_col_config,
+                    MONTANT: montant_col_config,
+                    "Taux de cofinancement": taux_col_config,
+                },
+            )
 
     st.markdown("**Cohérence des montants**")
     st.caption(

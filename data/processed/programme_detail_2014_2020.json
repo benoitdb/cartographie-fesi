@@ -1,0 +1,87 @@
+{
+  "react_eu": {
+    "Hauts-de-France": {
+      "FEDER REACT-EU": 266814734
+    },
+    "Normandie": {
+      "FEDER REACT-EU": 115720121
+    },
+    "national": {
+      "FEDER REACT-EU": 7822019,
+      "FSE": 800060179
+    },
+    "Nouvelle-Aquitaine": {
+      "FEDER REACT-EU": 184856815,
+      "FSE": 23700000
+    },
+    "Auvergne-Rhône-Alpes": {
+      "FEDER REACT-EU": 160539061,
+      "FSE": 28439941
+    },
+    "Bourgogne-Franche-Comté": {
+      "FEDER REACT-EU": 103006592,
+      "FSE": 12480000
+    },
+    "Île-de-France": {
+      "FEDER REACT-EU": 101321953
+    },
+    "Occitanie": {
+      "FEDER REACT-EU": 198938096
+    },
+    "Bretagne": {
+      "FEDER REACT-EU": 92779237
+    },
+    "Grand Est": {
+      "FEDER REACT-EU": 173425967,
+      "FSE": 12350060
+    },
+    "Provence-Alpes-Côte d'Azur": {
+      "FEDER REACT-EU": 95044857,
+      "FSE": 40625000
+    },
+    "Pays de la Loire": {
+      "FEDER REACT-EU": 67369800,
+      "FSE": 19000000
+    },
+    "Centre-Val de Loire": {
+      "FEDER REACT-EU": 89557007
+    },
+    "La Réunion": {
+      "FEDER REACT-EU": 340948106,
+      "FSE": 148094472
+    },
+    "Mayotte": {
+      "FEDER REACT-EU": 119115539,
+      "FSE": 20000000
+    },
+    "Corse": {
+      "FEDER REACT-EU": 31996069
+    },
+    "Guadeloupe": {
+      "FEDER REACT-EU": 204401656,
+      "FSE": 40570048
+    },
+    "Guyane": {
+      "FEDER REACT-EU": 133534305,
+      "FSE": 31526760
+    },
+    "Martinique": {
+      "FEDER REACT-EU": 159103812,
+      "FSE": 38830420
+    }
+  },
+  "contrepartie_fse_iej": {
+    "Île-de-France": 3971732,
+    "national": 330614345,
+    "Grand Est": 14102321,
+    "Nouvelle-Aquitaine": 10090611,
+    "Auvergne-Rhône-Alpes": 6091510,
+    "Centre-Val de Loire": 16478209,
+    "Normandie": 12208509,
+    "Occitanie": 24349409,
+    "Hauts-de-France": 44707776,
+    "Guadeloupe": 3707654,
+    "Martinique": 3794823,
+    "Bourgogne-Franche-Comté": 3068493
+  }
+}

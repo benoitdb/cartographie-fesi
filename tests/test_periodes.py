@@ -33,8 +33,10 @@ from utils.periodes import (  # noqa: E402
     PERIODE_2021_2027,
     absences_expliquees,
     capacites,
+    fusionner_enveloppes_sans_libelle,
     libelle_montant,
     normaliser_operations,
+    pilotage_disponible,
 )
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "dashboard"
@@ -155,9 +157,26 @@ def test_normaliser_ne_modifie_pas_les_operations_recues(periode, op):
     assert normalisees[0]["Taux de cofinancement"] == pytest.approx(0.5)
 
 
-def test_2014_2020_n_a_aucune_des_capacites_de_2021_2027():
+def test_2021_2027_a_toutes_les_capacites():
     assert all(capacites(PERIODE_2021_2027).values())
-    assert not any(capacites(PERIODE_2014_2020).values())
+
+
+def test_2014_2020_n_a_de_capacite_que_celles_qui_ont_ete_livrees():
+    """Le détail compte plus que le total : une capacité passée à True sans que la
+    donnée qui la porte existe viderait un bloc au lieu de le retirer. `plafonds_cofinancement`
+    est vraie depuis #81 (catégories de la période transcrites), `montants_programmes` depuis
+    #93 (dotations de l'Accord + maquettes REACT-EU transcrites) ; `dimension_thematique`
+    reste fausse, la source ne la porte pas (#82) et aucune transcription n'y changera rien.
+
+    Attention : `montants_programmes` vraie ne veut pas dire pilotage affiché partout —
+    quatre périmètres en sont privés faute d'engagé comparable, voir
+    `test_pilotage_masque_sur_les_perimetres_hors_synergie`."""
+    assert capacites(PERIODE_2014_2020) == {
+        "dimension_thematique": False,
+        "montants_programmes": True,
+        "plafonds_cofinancement": True,
+        "perimetre_complet": False,
+    }
 
 
 def test_une_periode_inconnue_leve():
@@ -167,12 +186,22 @@ def test_une_periode_inconnue_leve():
 
 
 def test_chaque_capacite_absente_est_expliquee_a_l_utilisateur():
-    """Un bloc retiré sans explication se lit comme un oubli. Seul
-    `perimetre_complet` échappe à la règle : ce n'est pas un bloc manquant mais
-    une réserve sur les chiffres, portée par son propre avertissement."""
-    explicables = set(CAPACITES[PERIODE_2014_2020]) - {"perimetre_complet"}
-    assert set(EXPLICATIONS_ABSENCES) == explicables
-    assert len(absences_expliquees(PERIODE_2014_2020)) == len(explicables)
+    """Un bloc retiré sans explication se lit comme un oubli. Seul `perimetre_complet`
+    échappe à la règle : ce n'est pas un bloc manquant mais une réserve sur les chiffres,
+    portée par son propre avertissement.
+
+    Exprimé sur les capacités **réellement absentes** d'au moins une période, et non sur
+    l'ensemble des capacités déclarées : sans quoi livrer une capacité (ici
+    `plafonds_cofinancement`, #81) obligerait à garder son explication, qui ne peut plus
+    s'afficher et dont le texte contredit désormais l'écran."""
+    absentes = {
+        capacite
+        for capacites_periode in CAPACITES.values()
+        for capacite, presente in capacites_periode.items()
+        if not presente
+    } - {"perimetre_complet"}
+    assert set(EXPLICATIONS_ABSENCES) == absentes
+    assert len(absences_expliquees(PERIODE_2014_2020)) == len(absentes)
     assert absences_expliquees(PERIODE_2021_2027) == []
 
 
@@ -181,3 +210,51 @@ def test_le_libelle_du_montant_reste_celui_de_la_periode():
     2014-2020 le montant est programmé, en 2021-2027 conventionné."""
     assert libelle_montant(PERIODE_2014_2020) == "Montant UE programmé"
     assert libelle_montant(PERIODE_2021_2027) == "Montant UE"
+
+
+# --- Enveloppes sans libellé de fonds correspondant (issue #93) ----------------
+
+
+def test_enveloppe_react_eu_fondue_quand_aucune_operation_ne_la_porte():
+    """Cas de la métropole : l'extraction Synergie n'y étiquette pas `FEDER REACT-EU`,
+    ses opérations sont sous `FEDER`. Laisser les deux enveloppes séparées afficherait un
+    REACT-EU à 0 % et un FEDER gonflé d'autant."""
+    enveloppes, fusionnes = fusionner_enveloppes_sans_libelle(
+        {"FEDER": 100, "FEDER REACT-EU": 30, "FSE": 50}, {"FEDER", "FSE"}
+    )
+    assert enveloppes == {"FEDER": 130, "FSE": 50}
+    assert fusionnes == ["FEDER REACT-EU"]
+
+
+def test_enveloppe_react_eu_conservee_quand_des_operations_la_portent():
+    """Cas des DROM, seuls à porter le libellé : les deux enveloppes restent distinctes,
+    sinon on perdrait un taux de consommation REACT-EU pourtant mesurable."""
+    enveloppes, fusionnes = fusionner_enveloppes_sans_libelle(
+        {"FEDER": 100, "FEDER REACT-EU": 30}, {"FEDER", "FEDER REACT-EU"}
+    )
+    assert enveloppes == {"FEDER": 100, "FEDER REACT-EU": 30}
+    assert fusionnes == []
+
+
+def test_pas_de_fusion_si_le_fonds_d_accueil_n_a_pas_d_enveloppe():
+    """La maquette disparaîtrait dans un fonds sans dotation au lieu de rester visible."""
+    enveloppes, fusionnes = fusionner_enveloppes_sans_libelle({"FEDER REACT-EU": 30}, {"FSE"})
+    assert enveloppes == {"FEDER REACT-EU": 30}
+    assert fusionnes == []
+
+
+def test_fusionner_ne_modifie_pas_le_dictionnaire_recu():
+    """Les enveloppes viennent d'un `st.cache_data` partagé entre sessions : les muter
+    contaminerait les périmètres affichés ensuite (piège déjà vécu sur normaliser_operations)."""
+    source = {"FEDER": 100, "FEDER REACT-EU": 30}
+    fusionner_enveloppes_sans_libelle(source, {"FEDER"})
+    assert source == {"FEDER": 100, "FEDER REACT-EU": 30}
+
+
+def test_pilotage_masque_sur_les_quatre_perimetres_hors_synergie():
+    assert not pilotage_disponible("Bretagne")
+    assert not pilotage_disponible("Normandie")
+    assert not pilotage_disponible("Nouvelle-Aquitaine")
+    assert not pilotage_disponible("Ensemble national", est_national=True)
+    assert pilotage_disponible("Corse")
+    assert pilotage_disponible("Occitanie")

@@ -10,8 +10,11 @@ GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.ge
 GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
 REGION_METADATA_PATH = REPO_ROOT / "data" / "processed" / "region_metadata.json"
+CATEGORIES_UE_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "categories_ue_2014_2020.json"
 PROGRAMME_TOTALS_PATH = REPO_ROOT / "data" / "processed" / "programme_totals.json"
 PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.json"
+PROGRAMME_TOTALS_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "programme_totals_2014_2020.json"
+PROGRAMME_DETAIL_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "programme_detail_2014_2020.json"
 BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuzzy.json"
 DOTATIONS_OS_PATH = REPO_ROOT / "data" / "processed" / "dotations_os.json"
 INTERREG_PATH = REPO_ROOT / "data" / "processed" / "interreg.json"
@@ -73,8 +76,42 @@ def load_region_metadata():
 
 
 @st.cache_data
+def load_categories_ue_2014_2020():
+    """Catégorie de cohésion **de la période 2014-2020** par région moderne, produite par
+    `data-pipeline/categories_ue_2014_2020.py` depuis la décision 2014/99/UE (issue #81).
+
+    À ne pas confondre avec le champ `categorie_ue` de `region_metadata.json`, qui porte
+    celle de 2021-2027 : les deux découpages diffèrent, et prendre l'un pour l'autre
+    donnerait un plafond de cofinancement faux sans rien casser à l'écran."""
+    with open(CATEGORIES_UE_2014_2020_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
 def load_programme_totals():
     with open(PROGRAMME_TOTALS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_programme_totals_2014_2020():
+    """Enveloppes programmées 2014-2020, {région: {fonds: montant UE}} — pendant de
+    load_programme_totals() pour l'autre période (issue #93).
+
+    Deux différences de contenu, pas de forme : les libellés de fonds sont ceux de la
+    période (`FEDER`, `FSE`, `IEJ`, `FEDER REACT-EU`), et deux fonds engagés n'y figurent
+    volontairement pas — le FEAD et le FEDER-FSE, qui n'ont pas d'enveloppe (voir
+    data-pipeline/programme_totals_2014_2020.py). Un fonds absent n'est donc pas un trou :
+    l'écran doit le dire, pas afficher un zéro."""
+    with open(PROGRAMME_TOTALS_2014_2020_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_programme_detail_2014_2020():
+    """Ce que load_programme_totals_2014_2020() agrège et qu'on veut montrer à part :
+    {"react_eu": {région: {fonds: montant}}, "contrepartie_fse_iej": {région: montant}}."""
+    with open(PROGRAMME_DETAIL_2014_2020_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

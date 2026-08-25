@@ -1,0 +1,200 @@
+{
+  "Auvergne-Rhône-Alpes": {
+    "categorie_ue": null,
+    "composantes": [
+      [
+        "Auvergne",
+        "en transition"
+      ],
+      [
+        "Rhône-Alpes",
+        "plus développée"
+      ]
+    ]
+  },
+  "Bourgogne-Franche-Comté": {
+    "categorie_ue": null,
+    "composantes": [
+      [
+        "Bourgogne",
+        "plus développée"
+      ],
+      [
+        "Franche-Comté",
+        "en transition"
+      ]
+    ]
+  },
+  "Bretagne": {
+    "categorie_ue": "plus développée",
+    "composantes": [
+      [
+        "Bretagne",
+        "plus développée"
+      ]
+    ]
+  },
+  "Centre-Val de Loire": {
+    "categorie_ue": "plus développée",
+    "composantes": [
+      [
+        "Centre",
+        "plus développée"
+      ]
+    ]
+  },
+  "Corse": {
+    "categorie_ue": "en transition",
+    "composantes": [
+      [
+        "Corse",
+        "en transition"
+      ]
+    ]
+  },
+  "Grand Est": {
+    "categorie_ue": null,
+    "composantes": [
+      [
+        "Alsace",
+        "plus développée"
+      ],
+      [
+        "Champagne-Ardenne",
+        "plus développée"
+      ],
+      [
+        "Lorraine",
+        "en transition"
+      ]
+    ]
+  },
+  "Guadeloupe": {
+    "categorie_ue": "moins développée",
+    "composantes": [
+      [
+        "Guadeloupe",
+        "moins développée"
+      ]
+    ]
+  },
+  "Guyane": {
+    "categorie_ue": "moins développée",
+    "composantes": [
+      [
+        "Guyane",
+        "moins développée"
+      ]
+    ]
+  },
+  "Hauts-de-France": {
+    "categorie_ue": "en transition",
+    "composantes": [
+      [
+        "Nord-Pas-de-Calais",
+        "en transition"
+      ],
+      [
+        "Picardie",
+        "en transition"
+      ]
+    ]
+  },
+  "La Réunion": {
+    "categorie_ue": "moins développée",
+    "composantes": [
+      [
+        "Réunion",
+        "moins développée"
+      ]
+    ]
+  },
+  "Martinique": {
+    "categorie_ue": "moins développée",
+    "composantes": [
+      [
+        "Martinique",
+        "moins développée"
+      ]
+    ]
+  },
+  "Mayotte": {
+    "categorie_ue": "moins développée",
+    "composantes": [
+      [
+        "Mayotte",
+        "moins développée"
+      ]
+    ]
+  },
+  "Normandie": {
+    "categorie_ue": null,
+    "composantes": [
+      [
+        "Basse-Normandie",
+        "en transition"
+      ],
+      [
+        "Haute-Normandie",
+        "plus développée"
+      ]
+    ]
+  },
+  "Nouvelle-Aquitaine": {
+    "categorie_ue": null,
+    "composantes": [
+      [
+        "Aquitaine",
+        "plus développée"
+      ],
+      [
+        "Limousin",
+        "en transition"
+      ],
+      [
+        "Poitou-Charentes",
+        "en transition"
+      ]
+    ]
+  },
+  "Occitanie": {
+    "categorie_ue": null,
+    "composantes": [
+      [
+        "Languedoc-Roussillon",
+        "en transition"
+      ],
+      [
+        "Midi-Pyrénées",
+        "plus développée"
+      ]
+    ]
+  },
+  "Pays de la Loire": {
+    "categorie_ue": "plus développée",
+    "composantes": [
+      [
+        "Pays de la Loire",
+        "plus développée"
+      ]
+    ]
+  },
+  "Provence-Alpes-Côte d'Azur": {
+    "categorie_ue": "plus développée",
+    "composantes": [
+      [
+        "Provence-Alpes-Côte d'Azur",
+        "plus développée"
+      ]
+    ]
+  },
+  "Île-de-France": {
+    "categorie_ue": "plus développée",
+    "composantes": [
+      [
+        "Île-de-France",
+        "plus développée"
+      ]
+    ]
+  }
+}
