@@ -5,6 +5,7 @@ import streamlit as st
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_PATH = REPO_ROOT / "data" / "processed" / "data.json"
+DATA_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020.json"
 GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.geojson"
 GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
@@ -21,6 +22,23 @@ PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 @st.cache_data
 def load_data():
     with open(DATA_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_data_2014_2020():
+    """Jeu 2014-2020 (extraction Synergie), **fichier distinct** de `data.json`.
+
+    Un fichier par période, et un chargeur par fichier : les deux pèsent 45 et
+    42 Mo, un chargeur unique qui les lirait tous les deux mettrait ~100 Mo en
+    mémoire pour n'en afficher qu'un (arbitrage 1 de l'issue #12). Seule la page
+    qui appelle cette fonction paie le chargement, et `st.cache_data` fait qu'une
+    session ne le paie qu'une fois.
+
+    Les libellés de colonnes des opérations ne sont **pas** ceux de `data.json` :
+    passer le résultat par `utils.periodes.normaliser_operations` avant de le
+    donner au reste du dashboard (issue #83)."""
+    with open(DATA_2014_2020_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

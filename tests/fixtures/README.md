@@ -39,6 +39,7 @@ sur tout changement d'affichage.
 
 | Fichier | Origine |
 |---|---|
+| `data_2014-2020.json` | 459 opérations, même méthode d'échantillonnage appliquée au fichier Synergie 2014-2020 (issue #83) — **une fixture par période** : les deux fichiers n'ont ni les mêmes colonnes ni les mêmes fonds, et l'espace 2014-2020 ne se rendrait pas sur un échantillon de l'autre période. Champ tronqué : `Résumé de l'opération`. Pas de clé `nb_objectifs_strategiques` dans `metadata` : cette période n'a pas de dimension thématique. |
 | `data.json` | 413 opérations : 20 par région (les 3 fonds représentés) + les 13 interrégionales, trop rares pour survivre à un échantillonnage par région alors que le dashboard lit `aggregates["interregional"]` sans valeur par défaut. `aggregates` et `metadata` recalculés dessus. Le champ `Objectifs et réalisations escomptés et effectifs` est tronqué à 200 caractères : il pèse 61,5 % du fichier réel et n'est lu nulle part dans `dashboard/`. |
 | `beneficiaires_fuzzy.json` | copie intégrale (8 Ko) |
 | `transferts_solidarite.json` | copie intégrale (< 1 Ko) |

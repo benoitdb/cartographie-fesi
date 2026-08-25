@@ -12,6 +12,15 @@ Dashboard Streamlit multipage fonctionnel (Accueil + Vue Régionale + Volet
 National + Comparateur), alimenté par un pipeline Python qui transforme le
 fichier XLSX source en JSON.
 
+**La programmation 2014-2020 a son espace dédié** (`pages/5_Période_2014-2020.py`,
+issue #83) : un écran, un sélecteur de périmètre en barre latérale (ensemble
+national / volet national / une région), et non un sélecteur de période sur les
+pages 2021-2027. Il n'y a **pas** de comparaison inter-périodes à outiller — les
+logiques de programmation ont changé et REACT-EU a déformé la fin de période.
+Les libellés de colonnes sont adaptés au chargement par `utils/periodes.py` ; ce
+que la période n'a pas y est déclaré dans `CAPACITES` et retiré de l'écran, avec
+son explication.
+
 **`main` est la référence** depuis la fusion de `streamlit-dashboard`
 (PR #49, 2026-08-20) : elle porte le dashboard, ce fichier et les tests. Partir
 de `main` et travailler sur une branche dédiée (`feat/...`, `fix/...`,
@@ -58,11 +67,11 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (196 tests, ~11 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (236 tests, ~15 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
-  lisent la fixture committée dans `tests/fixtures/` (voir son README —
-  **à régénérer quand le schéma de `data.json` change**).
+  lisent les fixtures committées dans `tests/fixtures/` (**une par période** —
+  voir son README, **à régénérer quand le schéma d'un `data*.json` change**).
   Environnement de test à la racine : `requirements-dev.txt`, qui tire
   maintenant *aussi* `dashboard/requirements.txt` (streamlit est nécessaire aux
   tests de fumée).
