@@ -326,8 +326,9 @@ def test_normandie_deriver_retire_la_ligne_de_total():
 
 def test_normandie_deriver_corrige_les_dates_mixtes_et_rejette_les_incoherentes():
     """La colonne mélange, à l'intérieur d'une même feuille, des `datetime`
-    réels, des numéros de série Excel bruts et quelques erreurs de saisie
-    irrécupérables (constaté sur ~130 lignes du fichier réel) : une année à 3
+    réels et des numéros de série Excel bruts (constaté sur ~130 lignes du
+    fichier réel). Pour toute valeur non couverte par
+    `_CORRECTIONS_DATES_NORMANDIE` (voir le test suivant) : une année à 3
     chiffres (« 01/10/219 ») doit devenir `NaT`, pas l'an 219."""
     from sources import SOURCES
 
@@ -345,6 +346,36 @@ def test_normandie_deriver_corrige_les_dates_mixtes_et_rejette_les_incoherentes(
     assert df_pretraite["date début op. / start"].iloc[0] == pd.Timestamp("2015-01-01")
     assert df_pretraite["date début op. / start"].iloc[1] == pd.Timestamp("2016-01-01")
     assert pd.isna(df_pretraite["date début op. / start"].iloc[2])
+
+
+def test_normandie_corrige_les_4_dates_reperees_dossier_par_dossier():
+    """Les 4 erreurs de saisie repérées sur le fichier réel sont corrigées par
+    numéro de dossier (`_CORRECTIONS_DATES_NORMANDIE`), pas par une règle
+    générale : un même motif brut (« 01/10/219 ») sur un dossier absent de
+    cette table doit rester `NaT` (voir le test précédent), seuls ces 4
+    dossiers précis sont concernés."""
+    from sources import _CORRECTIONS_DATES_NORMANDIE, SOURCES
+
+    df = df_vide("2014-2020-normandie")
+    df = pd.concat([df] * len(_CORRECTIONS_DATES_NORMANDIE), ignore_index=True)
+    for i, dossier in enumerate(_CORRECTIONS_DATES_NORMANDIE):
+        df.loc[i, "n° Dossier"] = dossier
+        df.loc[i, "date début op. / start"] = {
+            "17E01933": "2701/2017",
+            "19E01667": "31/11/2017",
+            "19P02857": "01/10/219",
+            "19P02931": "01/10/219",
+        }[dossier]
+
+    df_pretraite = SOURCES["2014-2020-normandie"]["pretraitement"](df)
+    dates = dict(
+        zip(df_pretraite["n° Dossier"], df_pretraite["date début op. / start"], strict=True)
+    )
+
+    assert dates["17E01933"] == pd.Timestamp("2017-01-27")
+    assert dates["19E01667"] == pd.Timestamp("2017-11-30")
+    assert dates["19P02857"] == pd.Timestamp("2019-10-01")
+    assert dates["19P02931"] == pd.Timestamp("2019-10-01")
 
 
 def test_lire_dataframe_concatene_les_feuilles_sans_forcer_fonds(tmp_path):

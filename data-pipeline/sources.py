@@ -157,14 +157,17 @@ def _corriger_dates_normandie(serie):
     nanosecondes depuis 1970, pas un jour depuis l'origine Excel (1899-12-30) :
     les deux formes sont donc converties séparément puis recollées.
 
-    Quelques valeurs sont des erreurs de saisie irrécupérables (« 2701/2017 »,
-    « 31/11/2017 » — 31 novembre n'existe pas, « 01/10/219 » — année à 3
-    chiffres) : `errors="coerce"` les transforme en `NaT` plutôt que de deviner
-    une date, cohérent avec le principe du fichier Synergie (ne jamais
-    inventer pour homogénéiser). L'année à 3 chiffres ne lève pas d'erreur
-    (dateutil l'accepte telle quelle, « 219 ») : un filtre par plage plausible
-    la rattrape après coup, sans quoi l'opération se retrouverait datée de
-    l'an 219."""
+    Les 4 erreurs de saisie repérées sur ce fichier (« 2701/2017 »,
+    « 31/11/2017 » — 31 novembre n'existe pas, deux fois « 01/10/219 » — année
+    à 3 chiffres) sont corrigées en amont, dossier par dossier, par
+    `_CORRECTIONS_DATES_NORMANDIE` : une correction vérifiée manuellement contre
+    la date de fin de chaque opération, pas une règle générale. Toute *autre*
+    valeur non reconnue par cette fonction reste `errors="coerce"` → `NaT`,
+    cohérent avec le principe du fichier Synergie (ne jamais inventer pour
+    homogénéiser). L'année à 3 chiffres ne lève pas d'erreur (dateutil
+    l'accepte telle quelle, « 219 ») : un filtre par plage plausible la
+    rattrape après coup, filet de sécurité qui reste utile même une fois les 4
+    cas connus corrigés, pour tout futur millésime du fichier."""
     est_numerique = pd.to_numeric(serie, errors="coerce").notna() & ~serie.apply(
         lambda v: isinstance(v, pd.Timestamp) or hasattr(v, "year")
     )
@@ -175,6 +178,26 @@ def _corriger_dates_normandie(serie):
     dates = numeriques.fillna(autres)
     plausible = dates.dt.year.between(1990, 2030)
     return dates.where(plausible)
+
+
+# Corrections manuelles de `date début op. / start`, vérifiées dossier par
+# dossier (numéro, date de fin, préfixe du dossier) plutôt que devinées par une
+# règle générale — les 4 seules valeurs de la colonne qu'aucune coercition
+# automatique ne peut lever sans risque (voir `_corriger_dates_normandie`).
+# Toutes plausibles au regard de la date de fin de l'opération :
+#   - 17E01933 (INOLYA) : « 2701/2017 » — jour/mois inversés, fin 2018-12-31.
+#   - 19E01667 (Commune d'Alençon) : « 31/11/2017 » — 31 novembre n'existe
+#     pas, fin 2022-05-31.
+#   - 19P02857 et 19P02931 (Université de Rouen-Normandie) : « 01/10/219 » —
+#     chiffre manquant sur l'année, même faute exacte sur les deux dossiers
+#     (saisis à la suite) ; le préfixe « 19P » du numéro de dossier confirme
+#     2019 plutôt qu'une autre décennie.
+_CORRECTIONS_DATES_NORMANDIE = {
+    "17E01933": "27/01/2017",
+    "19E01667": "30/11/2017",
+    "19P02857": "01/10/2019",
+    "19P02931": "01/10/2019",
+}
 
 
 def _deriver_normandie(df):
@@ -214,6 +237,11 @@ def _deriver_normandie(df):
     df["Libellé programme"] = df["Programme"].map(libelles).fillna(
         "Programme opérationnel Normandie 2014-2020"
     )
+    # Corrections manuelles avant la coercition générale (voir
+    # _CORRECTIONS_DATES_NORMANDIE) : appliquées sur le texte brut pour
+    # traverser ensuite le même chemin de parsing que toute autre date.
+    for dossier, valeur in _CORRECTIONS_DATES_NORMANDIE.items():
+        df.loc[df["n° Dossier"] == dossier, "date début op. / start"] = valeur
     for colonne in ("date début op. / start", "date fin d'op. / end"):
         df[colonne] = _corriger_dates_normandie(df[colonne])
     return df
