@@ -1,0 +1,226 @@
+{
+  "source_id": "2014-2020-pon-fse",
+  "source_label": "Programme opérationnel national FSE (hors Synergie)",
+  "periode": "2014-2020",
+  "fichier_source": "pon_fse_2014_2020.xls",
+  "date_source": "2023-12-31",
+  "date_generation": "2026-08-25",
+  "profil": {
+    "volumetrie": {
+      "operations": 24846,
+      "colonnes": 16
+    },
+    "completude": {
+      "numero_operation": {
+        "libelle": "num_dossier",
+        "remplis": 24846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "programme": {
+        "libelle": "Libellé_po",
+        "remplis": 24846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "beneficiaire": {
+        "libelle": "Lib_org",
+        "remplis": 24846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "fonds": {
+        "libelle": "Fonds",
+        "remplis": 24846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "region": {
+        "libelle": "Region_adm",
+        "remplis": 24846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "montant_ue": {
+        "libelle": "Mont_UE",
+        "remplis": 24846,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "depenses": {
+        "libelle": "Dépenses totales",
+        "remplis": 24846,
+        "manquants": 0,
+        "taux": 100.0
+      }
+    },
+    "par_fonds": [
+      {
+        "fonds": "FSE",
+        "nb": 24093,
+        "montant_ue": 5524565043.57,
+        "part_nb": 97.0,
+        "part_montant": 88.0
+      },
+      {
+        "fonds": "IEJ",
+        "nb": 753,
+        "montant_ue": 752779344.6500001,
+        "part_nb": 3.0,
+        "part_montant": 12.0
+      }
+    ],
+    "programmes": {
+      "distincts": 7,
+      "top": [
+        {
+          "valeur": "Programme Opérationnel National FSE",
+          "nb": 22838
+        },
+        {
+          "valeur": "Programme Opérationnel IEJ",
+          "nb": 753
+        },
+        {
+          "valeur": "PO réunion",
+          "nb": 493
+        },
+        {
+          "valeur": "PO Guadeloupe",
+          "nb": 349
+        },
+        {
+          "valeur": "PO Guyane",
+          "nb": 180
+        },
+        {
+          "valeur": "PO Martinique",
+          "nb": 162
+        },
+        {
+          "valeur": "PO Mayotte",
+          "nb": 71
+        }
+      ]
+    },
+    "regions": {
+      "colonne_remplie": 24846,
+      "taux_colonne_remplie": 100.0,
+      "valeurs_distinctes": 28,
+      "top": [
+        {
+          "valeur": "Ile-de-France",
+          "nb": 2878
+        },
+        {
+          "valeur": "Nord-Pas-de-Calais",
+          "nb": 2728
+        },
+        {
+          "valeur": "Bretagne",
+          "nb": 1658
+        },
+        {
+          "valeur": "Rhône-Alpes",
+          "nb": 1518
+        },
+        {
+          "valeur": "Aquitaine",
+          "nb": 1468
+        },
+        {
+          "valeur": "Midi-Pyrénées",
+          "nb": 1346
+        },
+        {
+          "valeur": "Languedoc-Roussillon",
+          "nb": 1165
+        },
+        {
+          "valeur": "Poitou-Charentes",
+          "nb": 913
+        },
+        {
+          "valeur": "Pays de la Loire",
+          "nb": 900
+        },
+        {
+          "valeur": "Lorraine",
+          "nb": 885
+        },
+        {
+          "valeur": "Auvergne",
+          "nb": 869
+        },
+        {
+          "valeur": "Bourgogne",
+          "nb": 837
+        },
+        {
+          "valeur": "Volet national du FSE",
+          "nb": 835
+        },
+        {
+          "valeur": "Picardie",
+          "nb": 750
+        },
+        {
+          "valeur": "Basse-Normandie",
+          "nb": 710
+        },
+        {
+          "valeur": "Provence-Alpes-Côte d'Azur",
+          "nb": 702
+        },
+        {
+          "valeur": "Alsace",
+          "nb": 679
+        },
+        {
+          "valeur": "Franche-Comté",
+          "nb": 615
+        },
+        {
+          "valeur": "Centre",
+          "nb": 586
+        },
+        {
+          "valeur": "Réunion",
+          "nb": 534
+        },
+        {
+          "valeur": "Haute-Normandie",
+          "nb": 453
+        },
+        {
+          "valeur": "Champagne-Ardenne",
+          "nb": 451
+        },
+        {
+          "valeur": "Limousin",
+          "nb": 407
+        },
+        {
+          "valeur": "Guadeloupe",
+          "nb": 363
+        },
+        {
+          "valeur": "Guyane",
+          "nb": 201
+        }
+      ],
+      "manquantes_par_fonds": []
+    },
+    "montants": {
+      "montant_ue_total": 6277344388.219999,
+      "depenses_total": 10688065768.130001,
+      "cofinancement_global": 58.7,
+      "montants_ue_negatifs": 0
+    },
+    "cle": {
+      "colonne": "num_dossier",
+      "distincts": 24846,
+      "doublons": 0
+    }
+  }
+}

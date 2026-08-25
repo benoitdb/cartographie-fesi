@@ -19,6 +19,7 @@ Ajouter une source = ajouter une entrée à `SOURCES`.
 
 from pathlib import Path
 
+import pandas as pd
 from region_mapping import PROGRAMME_TO_REGION, PROGRAMME_TO_REGION_2014_2020
 from schema_source import (
     SchemaSourceError,
@@ -59,6 +60,33 @@ _CLES_PROFIL_2014_2020 = {
     "dimension_thematique": "domaine_intervention",
     "date_programmation": "date_programmation",
 }
+
+# Sous-ensemble seulement : ni codes postaux, ni département, ni pays, ni
+# dimension thématique dans ce fichier (issue #68) — `profiler_source` teste la
+# présence de chaque clé avant de l'exploiter, une clé absente ne casse rien.
+_CLES_PROFIL_PON_FSE_2014_2020 = {
+    "numero_operation": "numero_op",
+    "programme": "libelle_prog",
+    "beneficiaire": "nom_benef",
+    "fonds": "fonds",
+    "region": "region",
+    "montant_ue": "montant_ue",
+    "depenses": "depenses",
+}
+
+
+def _deriver_fonds_pon_fse(df):
+    """`Fonds` n'existe pas dans le fichier PON FSE : seul `Libellé_po` distingue
+    le programme IEJ (753 opérations) du reste, tout FSE (les PO Guadeloupe/
+    Guyane/Martinique/Mayotte/Réunion sont des volets FSE régionaux du même
+    programme national, pas un fonds différent — vérifié sur les 7 valeurs
+    distinctes de la colonne). Colonne ajoutée en dernière position : l'ordre
+    doit rester synchrone avec COLONNES_PON_FSE_2014_2020."""
+    df = df.copy()
+    df["Fonds"] = df["Libellé_po"].map(
+        lambda libelle: "IEJ" if libelle == "Programme Opérationnel IEJ" else "FSE"
+    )
+    return df
 
 # Champs d'un descripteur :
 #   label            — libellé lisible, affiché par la page « Validation de la source »
@@ -115,6 +143,38 @@ SOURCES = {
         "programme_to_region": PROGRAMME_TO_REGION,
         "cles_profil": _CLES_PROFIL_2021_2027,
     },
+    # Première source hors-Synergie (issue #68) : programme opérationnel national
+    # FSE, géré par la DGEFP, hors du périmètre SynergieCDM que couvre le fichier
+    # Synergie. Vérifié sans recouvrement avec les 4 126 opérations FSE + 1 259
+    # IEJ déjà dans data_2014-2020.json (aucun bénéficiaire commun, masses très
+    # différentes : 22 838 op./4,1 Md€ ici contre 4 126 op./1,8 Md€ côté
+    # Synergie) — le FSE de Synergie est la part déléguée aux Régions au sein des
+    # programmes FEDER-FSE combinés, celui-ci le circuit national déconcentré.
+    #
+    # Sortie dans un fichier **séparé** de `data_2014-2020.json`, pas fusionnée :
+    # fusionner supposerait recalculer les agrégats harmonisés sur l'union des
+    # deux DataFrames plutôt que sur chacun isolément, ce qu'aucun appelant ne
+    # fait aujourd'hui. Rien n'affiche encore 2014-2020 à l'écran (#83) — la
+    # fusion réelle des sources d'une période attend d'avoir un consommateur.
+    "2014-2020-pon-fse": {
+        "label": "Programme opérationnel national FSE (hors Synergie)",
+        "periode": "2014-2020",
+        "schema": "2014-2020-pon-fse",
+        "motif_fichier": "pon_fse_2014_2020*.xls",
+        "url_source": "https://www.fse.gouv.fr/les-structures-beneficiaires",
+        "feuille": 0,
+        # Millésime déclaré par le nom du fichier source ("Liste bénéficiaires PO
+        # 14-20 déc 2023") : pas de préfixe daté exploitable par
+        # `millesime_du_fichier`.
+        "date_source": "2023-12-31",
+        "fichier_sortie": "data_2014-2020_pon_fse.json",
+        # Region_adm est remplie à 100 % (vérifié sur les 24 846 lignes) : la
+        # table programme → région n'est un filet de sécurité que pour le cas
+        # (jamais rencontré ici) où la région serait absente.
+        "programme_to_region": {},
+        "cles_profil": _CLES_PROFIL_PON_FSE_2014_2020,
+        "pretraitement": _deriver_fonds_pon_fse,
+    },
 }
 
 
@@ -147,8 +207,28 @@ def trouver_fichier(conf, repertoire_raw=RAW_DIR):
 
 
 def cols_internes(conf, colonnes_source):
-    """Mapping {clé interne: libellé réel}, vérifié contre le schéma de la période."""
-    return build_cols(colonnes_source, schema=schema_de_periode(conf["periode"]))
+    """Mapping {clé interne: libellé réel}, vérifié contre le schéma de la source.
+
+    `conf["schema"]` s'il est déclaré, sinon `conf["periode"]` : la plupart des
+    sources d'une période partagent leurs colonnes, mais pas toutes (issue #68,
+    PON FSE face au fichier Synergie de la même période).
+    """
+    return build_cols(colonnes_source, schema=schema_de_periode(conf.get("schema", conf["periode"])))
+
+
+def lire_dataframe(conf, chemin):
+    """Lit le fichier XLSX/XLS d'une source et applique son `pretraitement` s'il
+    en déclare un (ex. dériver une colonne `Fonds` absente du fichier — voir
+    `_deriver_fonds_pon_fse`).
+
+    Point de lecture commun à `ingest.py` et `profil_source.py` : sans lui,
+    chacun réappliquerait le pretraitement à sa façon et pourrait diverger,
+    exactement le défaut que `sources.py` existe pour éviter (voir docstring de
+    ce module).
+    """
+    df = pd.read_excel(chemin, sheet_name=conf["feuille"])
+    pretraitement = conf.get("pretraitement")
+    return pretraitement(df) if pretraitement else df
 
 
 def cols_profil(conf, colonnes_source):

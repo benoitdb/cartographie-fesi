@@ -21,11 +21,10 @@ import sys
 from datetime import date
 from pathlib import Path
 
-import pandas as pd
 from profilage_source import profiler_source
 from region_mapping import indexer_programmes, region_du_programme
 from schema_source import SchemaSourceError
-from sources import cols_profil, millesime, source, trouver_fichier
+from sources import cols_profil, lire_dataframe, millesime, source, trouver_fichier
 
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "processed"
 
@@ -35,7 +34,7 @@ def main(source_id):
 
     chemin = trouver_fichier(conf)
     print(f"📖 Lecture : {chemin.name} (feuille « {conf['feuille']} »)")
-    df = pd.read_excel(chemin, sheet_name=conf["feuille"])
+    df = lire_dataframe(conf, chemin)
     print(f"✅ {len(df)} opérations, {df.shape[1]} colonnes")
 
     # Libellés réels tirés du contrôle de schéma, jamais recopiés : un

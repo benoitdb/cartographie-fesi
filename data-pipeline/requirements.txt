@@ -3,3 +3,7 @@ pandas>=2.0.0
 # contrainte insatisfiable qui faisait échouer toute installation depuis zéro.
 openpyxl>=3.1.0
 rapidfuzz>=3.0.0
+# Format binaire .xls (pas .xlsx) : source hors-Synergie du PON FSE 2014-2020
+# (issue #68), publiée par fse.gouv.fr dans ce format hérité. openpyxl ne le lit
+# pas.
+xlrd>=2.0.1

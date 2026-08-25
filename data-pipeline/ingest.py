@@ -30,7 +30,7 @@ from region_mapping import (
     reset_unresolved,
 )
 from schema_source import SchemaSourceError
-from sources import cols_internes, millesime, source, trouver_fichier
+from sources import cols_internes, lire_dataframe, millesime, source, trouver_fichier
 
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "processed"
 
@@ -148,7 +148,7 @@ def main(source_id=SOURCE_PAR_DEFAUT):
     # Feuille déclarée par la source : celle du fichier Synergie est la **2ᵉ**,
     # sa feuille 0 étant une notice — lire l'index 0 par défaut y produirait un
     # DataFrame de notice, sans la moindre erreur.
-    df = pd.read_excel(chemin, sheet_name=conf['feuille'])
+    df = lire_dataframe(conf, chemin)
 
     print(f"✅ Données chargées: {len(df)} opérations")
 
@@ -158,10 +158,14 @@ def main(source_id=SOURCE_PAR_DEFAUT):
     # erreur (issue #45).
     cols = cols_internes(conf, df.columns)
 
-    # Convertir les colonnes de codes postaux en string et nettoyer
+    # Convertir les colonnes de codes postaux en string et nettoyer — absentes du
+    # fichier PON FSE (issue #68), la clé n'est testée qu'une fois pour ne pas se
+    # répéter à chaque nouvelle colonne optionnelle.
     print("🔄 Normalisation des données...")
-    df[cols['cp_beneficiaire']] = df[cols['cp_beneficiaire']].astype(str).str.replace('.0', '', regex=False)
-    df[cols['cp_operation']] = df[cols['cp_operation']].astype(str).str.strip()
+    if 'cp_beneficiaire' in cols:
+        df[cols['cp_beneficiaire']] = df[cols['cp_beneficiaire']].astype(str).str.replace('.0', '', regex=False)
+    if 'cp_operation' in cols:
+        df[cols['cp_operation']] = df[cols['cp_operation']].astype(str).str.strip()
 
     # Remplacer les 'nan' string par NaN
     for col in df.columns:

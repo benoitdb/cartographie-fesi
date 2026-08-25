@@ -86,12 +86,43 @@ COLONNES_2014_2020 = [
     ("montant_ue", "Montant UE programmé"),
 ]
 
-# Indexé par période, pas par source : une période peut avoir plusieurs fichiers
-# (2014-2020 en a au moins deux) et ils partagent leur schéma. Le descripteur de
-# source (`sources.py`) désigne le sien par sa période.
+# Fichier PON FSE hors-Synergie (issue #68) : programme opérationnel national
+# FSE, publié par fse.gouv.fr, sans rapport de colonnes avec le fichier Synergie
+# de la même période — aucune colonne commune au même index. « Fonds » n'existe
+# pas dans le fichier : dérivée de `Libellé_po` par le `pretraitement` du
+# descripteur de source (`sources.py`), append en dernière colonne avant
+# validation du schéma. Plusieurs colonnes de COLONNES_2014_2020 sont absentes
+# ici (codes postaux, département, pays, numéro CCI, domaine d'intervention) :
+# le code aval doit tester la présence d'une clé, jamais la supposer — déjà vrai
+# pour objectif_strat entre 2014-2020 et 2021-2027.
+COLONNES_PON_FSE_2014_2020 = [
+    ("numero_op", "num_dossier"),
+    ("libelle_prog", "Libellé_po"),
+    ("axe", "AXE"),
+    ("ot", "OT"),
+    ("pi", "PI"),
+    ("os", "OS"),
+    ("region", "Region_adm"),
+    ("service_gestionnaire", "Service_gest"),
+    ("intitule_proj", "Lib_opé"),
+    ("nom_benef", "Lib_org"),
+    ("nb_participants", "Nombre de participants prévisionnels"),
+    ("depenses", "Dépenses totales"),
+    ("montant_ue", "Mont_UE"),
+    ("date_debut", "Date début réalisation"),
+    ("date_fin", "Date fin réalisation"),
+    ("fonds", "Fonds"),  # Dérivée, voir docstring ci-dessus.
+]
+
+# Indexé par un identifiant de schéma, pas par période au sens strict : une
+# période peut avoir plusieurs fichiers aux colonnes différentes (2014-2020 en a
+# au moins deux depuis l'issue #68). Le descripteur de source (`sources.py`)
+# désigne le sien via son champ `schema` (par défaut sa `periode`, quand les deux
+# coïncident).
 SCHEMAS = {
     "2021-2027": COLONNES_2021_2027,
     "2014-2020": COLONNES_2014_2020,
+    "2014-2020-pon-fse": COLONNES_PON_FSE_2014_2020,
 }
 
 # Le fichier source mélange les deux apostrophes (U+0027 dans "Région de
@@ -117,13 +148,15 @@ def normalise_libelle(libelle):
     return _ESPACES_RE.sub(" ", texte).strip().casefold()
 
 
-def schema_de_periode(periode):
-    """Schéma attendu d'une période, ou une erreur qui liste celles connues."""
-    if periode not in SCHEMAS:
+def schema_de_periode(cle_schema):
+    """Schéma attendu pour une clé de schéma (période, ou schéma explicite d'un
+    descripteur de source quand plusieurs fichiers d'une période ont des colonnes
+    différentes — issue #68), ou une erreur qui liste celles connues."""
+    if cle_schema not in SCHEMAS:
         raise SchemaSourceError(
-            f"Aucun schéma pour la période {periode!r}. Connues : {list(SCHEMAS)}"
+            f"Aucun schéma pour {cle_schema!r}. Connus : {list(SCHEMAS)}"
         )
-    return SCHEMAS[periode]
+    return SCHEMAS[cle_schema]
 
 
 def build_cols(colonnes_source, schema=None):
