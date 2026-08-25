@@ -32,8 +32,11 @@ CLES_PROFIL_ATTENDUES = {
 
 def colonnes_de(source_id):
     """Les libellés réels de la source, dans l'ordre du fichier : seul l'ordre
-    compte pour le mapping par index."""
-    return [libelle for _, libelle in SCHEMAS[SOURCES[source_id]["periode"]]]
+    compte pour le mapping par index. `schema` prime sur `periode` quand le
+    descripteur le déclare (issue #68 : plusieurs fichiers d'une période peuvent
+    avoir des colonnes différentes) — même repli que `sources.cols_internes`."""
+    conf = SOURCES[source_id]
+    return [libelle for _, libelle in SCHEMAS[conf.get("schema", conf["periode"])]]
 
 
 def df_vide(source_id):
@@ -75,6 +78,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx",
         "20270415_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx",
         "liste_operations_synergie_1420_08_2023.xlsx",
+        "pon_fse_2014_2020.xls",
     ]
     for nom in fichiers:
         (tmp_path / nom).touch()
@@ -82,6 +86,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
     attendus = {
         "2021-2027-conventionnees": 2,  # deux millésimes du même fichier
         "2014-2020-synergie": 1,
+        "2014-2020-pon-fse": 1,
     }
     for source_id, conf in SOURCES.items():
         matches = sorted(p.name for p in tmp_path.glob(conf["motif_fichier"]))
@@ -105,14 +110,33 @@ def test_une_source_inconnue_liste_les_sources_connues():
 # --- Mapping des colonnes --------------------------------------------------
 
 
-@pytest.mark.parametrize("source_id", list(SOURCES))
-def test_chaque_source_couvre_toutes_les_cles_du_profil(source_id):
+# Sources dont le fichier porte toutes les colonnes du profil (les deux
+# premières sources du pipeline). Les sources hors-Synergie ajoutées depuis
+# (issue #68) ont des colonnes réellement absentes — codes postaux, département,
+# pays, dimension thématique — et ne peuvent donc pas viser cet ensemble complet
+# sans mapper une clé de profil vers une colonne qui n'existe pas.
+SOURCES_A_SCHEMA_COMPLET = {"2021-2027-conventionnees", "2014-2020-synergie"}
+
+
+@pytest.mark.parametrize("source_id", sorted(SOURCES_A_SCHEMA_COMPLET))
+def test_chaque_source_a_schema_complet_couvre_toutes_les_cles_du_profil(source_id):
     """Une source ajoutée en oubliant une clé perdrait silencieusement une
     section entière du profil (`profiler_source` désactive plutôt que d'échouer,
     par conception)."""
     assert set(cols_profil(SOURCES[source_id], colonnes_de(source_id))) == (
         CLES_PROFIL_ATTENDUES
     )
+
+
+@pytest.mark.parametrize("source_id", sorted(set(SOURCES) - SOURCES_A_SCHEMA_COMPLET))
+def test_chaque_source_partielle_ne_declare_que_des_cles_de_profil_connues(source_id):
+    """Une source à schéma partiel (issue #68) peut couvrir un sous-ensemble des
+    clés de profil, mais pas en inventer une : une clé absente de
+    `CLES_PROFIL_ATTENDUES` serait un profil que `profiler_source` ne sait pas
+    afficher."""
+    cles = set(cols_profil(SOURCES[source_id], colonnes_de(source_id)))
+    assert cles <= CLES_PROFIL_ATTENDUES
+    assert cles, "une source ne devrait pas déclarer un profil vide"
 
 
 def test_le_profil_2021_2027_pointe_les_bonnes_colonnes():

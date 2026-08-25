@@ -129,9 +129,14 @@ NORMALIZE_BARE = {
     'Provence-Alpes-Cote d\'Azur': 'Provence-Alpes-Côte d\'Azur',
 }
 
-# Valeur sentinelle observée dans le champ source à la place d'un champ vide : à traiter
-# comme "pas de région" (national), pas comme un nom de région à part entière.
-VOLET_NATIONAL_LABEL = 'volet national'
+# Valeurs sentinelles observées dans le champ source à la place d'un champ vide : à
+# traiter comme "pas de région" (national), pas comme un nom de région à part entière.
+# Le fichier PON FSE (issue #68) écrit "Volet national du FSE", pas "Volet national" —
+# même sentinelle, texte différent : sans cette variante, les 835 opérations
+# concernées se seraient vues attribuer une fausse région nommée "Volet national du FSE"
+# au lieu d'être comptées nationales (constaté sur la première régénération de cette
+# source).
+VOLET_NATIONAL_LABELS = {'volet national', 'volet national du fse'}
 
 # Programmes régionaux : libellé exact → région unique
 # Vérifié exhaustif vs. les 21 programmes réellement présents
@@ -330,7 +335,7 @@ def harmonize_region(raw_region, libelle_programme, programme_index=None):
     had_volet_national = False
 
     for fragment in fragments:
-        if fragment.lower() == VOLET_NATIONAL_LABEL:
+        if fragment.lower() in VOLET_NATIONAL_LABELS:
             # Valeur sentinelle : pas une région, traité après la boucle
             had_volet_national = True
             continue
