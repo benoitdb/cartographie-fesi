@@ -90,13 +90,17 @@ CAPACITES = {
         "dimension_thematique": False,
         # L'Accord de partenariat 2014-2020 est disponible (docs/sources/), mais
         # ses dotations par programme ne sont pas encore transcrites en données
-        # comme l'est le Tableau 9B de 2021-2027 (#79).
+        # comme l'est le Tableau 9B de 2021-2027 (#93).
         "montants_programmes": False,
-        # La règle 2014-2020 est connue (1303/2013 art. 120 §3, REACT-EU à 100 %
-        # par dérogation), mais pas encore le rattachement région → catégorie de
-        # l'époque : NUTS2010 ≠ NUTS2021, et six régions modernes sur treize sont
-        # mixtes contre une seule en 2021-2027 (#81).
-        "plafonds_cofinancement": False,
+        # Règle de la période (1303/2013 art. 120 §3) et rattachement région →
+        # catégorie de l'époque (décision 2014/99, via
+        # data/processed/categories_ue_2014_2020.json) désormais tous deux
+        # disponibles — issue #81. Deux différences avec 2021-2027 restent
+        # portées à l'écran, elles ne disparaissent pas avec la capacité : six
+        # régions modernes sur treize sont mixtes (plafond affiché en fourchette,
+        # pas en moyenne pondérée faute de dotations — #93), et REACT-EU déroge
+        # aux plafonds (2020/2221 art. 92 ter §12, voir FONDS_HORS_PLAFOND).
+        "plafonds_cofinancement": True,
         # Quatre autorités de gestion hors Synergie (#68).
         "perimetre_complet": False,
     },
@@ -125,6 +129,12 @@ AVERTISSEMENT_PERIMETRE = (
 # `perimetre_complet` n'y figure pas : son absence n'est pas un bloc manquant
 # mais une réserve sur les chiffres affichés, portée en haut de page par
 # AVERTISSEMENT_PERIMETRE.
+#
+# Une capacité qu'aucune période n'a en défaut n'y figure pas non plus : son
+# explication ne pourrait plus s'afficher, et resterait à contredire l'écran au
+# premier changement de règle. C'est ce qui est arrivé à `plafonds_cofinancement`
+# quand #81 l'a livrée — son texte disait « ce qui manque est le rattachement
+# région → catégorie », devenu faux le jour où ce rattachement est arrivé.
 EXPLICATIONS_ABSENCES = {
     "dimension_thematique": (
         "**Objectifs stratégiques et spécifiques** (treemaps, répartition thématique) : la "
@@ -135,25 +145,43 @@ EXPLICATIONS_ABSENCES = {
         "**Pilotage : % consommé, reste à engager, trajectoire** : ils rapprochent l'engagé "
         "des enveloppes programmées. L'Accord de partenariat 2014-2020 est en main et sa "
         "table de dotations par programme identifiée, mais elle n'est pas encore transcrite "
-        "en données exploitables (issue #79)."
-    ),
-    "plafonds_cofinancement": (
-        "**Plafonds réglementaires de cofinancement** : la règle de la période est connue "
-        "(règlement 1303/2013, art. 120 §3 — 85 / 80 / 60 / 50 % selon la catégorie de "
-        "région, et jusqu'à 100 % pour REACT-EU par dérogation). Ce qui manque est le "
-        "rattachement de chaque région à sa catégorie **de l'époque** : les catégories "
-        "2021-2027 ne sont pas transposables, et six régions actuelles sur treize réunissent "
-        "des anciennes régions de catégories différentes (issue #81)."
+        "en données exploitables (issue #93)."
     ),
 }
 
-MENTION_PLAFONDS_ABSENTS = (
-    "Les taux ci-dessous sont **descriptifs**, sans comparaison à une borne. Les plafonds "
-    "de la période existent bien (règlement 1303/2013, art. 120 §3 : 85 / 80 / 60 / 50 % "
-    "selon la catégorie de région, et jusqu'à 100 % pour REACT-EU par dérogation du "
-    "règlement 2020/2221, art. 92 ter §12), mais ils s'appliquent à un découpage des "
-    "régions qui n'est plus celui d'aujourd'hui — les afficher demanderait de rattacher "
-    "chaque région à sa catégorie de l'époque (issue #81)."
+# Réserve permanente sur les plafonds 2014-2020, à afficher partout où ils servent de
+# référence. Ce n'est pas une capacité manquante — les plafonds sont bien appliqués depuis
+# #81 — mais deux propriétés de la période qui ne disparaîtront pas : le découpage des
+# régions n'est plus celui d'aujourd'hui, et REACT-EU a son propre régime.
+MENTION_PLAFONDS_PERIODE = (
+    "Les plafonds affichés sont ceux de la période (règlement 1303/2013, art. 120 §3 : "
+    "85 % en région moins développée, 60 % en transition, 50 % en région plus développée), "
+    "rattachés à la catégorie **de l'époque** de chaque région (décision d'exécution "
+    "2014/99/UE), et non à celle de 2021-2027 qui n'est pas transposable.\n\n"
+    "Trois fonds en sont **exclus**, chacun relevant d'un autre régime : **FEDER REACT-EU** "
+    "(jusqu'à 100 % par dérogation, règlement 2020/2221 art. 92 ter §12), **IEJ** (l'art. 120 "
+    "§3 relève lui-même le plafond des axes mettant en œuvre l'Initiative pour l'emploi des "
+    "jeunes) et **FEAD**, qui n'est pas un Fonds ESI mais un transfert hors enveloppe "
+    "structurelle (art. 94), régi par le règlement 223/2014."
+)
+
+# Pourquoi un taux au-dessus du plafond n'est pas, en soi, une irrégularité. À afficher avec
+# tout décompte de dépassements : le plafond se fixe par axe prioritaire, pas par opération,
+# et le fichier ne porte pas l'axe.
+MENTION_PLAFOND_PAR_AXE = (
+    "Un taux supérieur au plafond de la catégorie ne signale pas une irrégularité : "
+    "l'article 120 fixe le plafond **par axe prioritaire**, pas par opération, et le majore "
+    "de **dix points** quand un axe est entièrement mis en œuvre par instruments financiers "
+    "ou par développement local (§5). Le fichier ne portant pas l'axe prioritaire, l'écart "
+    "est un point à expliquer, pas un constat."
+)
+
+MENTION_REGION_MIXTE = (
+    "Cette région réunit des anciennes régions de **catégories différentes**. Les "
+    "programmes 2014-2020 étaient bâtis par ancienne région, chacun d'une seule catégorie : "
+    "le plafond dépend donc de l'ancienne région dont relève l'opération, information que le "
+    "fichier ne porte pas. D'où une **fourchette** plutôt qu'un plafond unique — une moyenne "
+    "pondérée supposerait les dotations par programme, non transcrites à ce jour (issue #93)."
 )
 
 

@@ -155,9 +155,21 @@ def test_normaliser_ne_modifie_pas_les_operations_recues(periode, op):
     assert normalisees[0]["Taux de cofinancement"] == pytest.approx(0.5)
 
 
-def test_2014_2020_n_a_aucune_des_capacites_de_2021_2027():
+def test_2021_2027_a_toutes_les_capacites():
     assert all(capacites(PERIODE_2021_2027).values())
-    assert not any(capacites(PERIODE_2014_2020).values())
+
+
+def test_2014_2020_n_a_de_capacite_que_celles_qui_ont_ete_livrees():
+    """Le détail compte plus que le total : une capacité passée à True sans que la
+    donnée qui la porte existe viderait un bloc au lieu de le retirer. `plafonds_cofinancement`
+    est vraie depuis #81 (catégories de la période transcrites) ; les deux autres attendent
+    respectivement #82 (dimension thématique absente de la source) et #93 (dotations)."""
+    assert capacites(PERIODE_2014_2020) == {
+        "dimension_thematique": False,
+        "montants_programmes": False,
+        "plafonds_cofinancement": True,
+        "perimetre_complet": False,
+    }
 
 
 def test_une_periode_inconnue_leve():
@@ -167,12 +179,22 @@ def test_une_periode_inconnue_leve():
 
 
 def test_chaque_capacite_absente_est_expliquee_a_l_utilisateur():
-    """Un bloc retiré sans explication se lit comme un oubli. Seul
-    `perimetre_complet` échappe à la règle : ce n'est pas un bloc manquant mais
-    une réserve sur les chiffres, portée par son propre avertissement."""
-    explicables = set(CAPACITES[PERIODE_2014_2020]) - {"perimetre_complet"}
-    assert set(EXPLICATIONS_ABSENCES) == explicables
-    assert len(absences_expliquees(PERIODE_2014_2020)) == len(explicables)
+    """Un bloc retiré sans explication se lit comme un oubli. Seul `perimetre_complet`
+    échappe à la règle : ce n'est pas un bloc manquant mais une réserve sur les chiffres,
+    portée par son propre avertissement.
+
+    Exprimé sur les capacités **réellement absentes** d'au moins une période, et non sur
+    l'ensemble des capacités déclarées : sans quoi livrer une capacité (ici
+    `plafonds_cofinancement`, #81) obligerait à garder son explication, qui ne peut plus
+    s'afficher et dont le texte contredit désormais l'écran."""
+    absentes = {
+        capacite
+        for capacites_periode in CAPACITES.values()
+        for capacite, presente in capacites_periode.items()
+        if not presente
+    } - {"perimetre_complet"}
+    assert set(EXPLICATIONS_ABSENCES) == absentes
+    assert len(absences_expliquees(PERIODE_2014_2020)) == len(absentes)
     assert absences_expliquees(PERIODE_2021_2027) == []
 
 

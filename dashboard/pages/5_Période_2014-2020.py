@@ -24,7 +24,13 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from utils.cofinancement import (
+    filtrer_fonds_plafonnes,
+    libelle_categorie_2014_2020,
+    plafond_intervalle_2014_2020,
+)
 from utils.data_loader import (
+    load_categories_ue_2014_2020,
     load_data_2014_2020,
     load_dromcom_codes_postaux,
     load_dromcom_geojson,
@@ -45,7 +51,9 @@ from utils.millesime import render_millesime
 from utils.periodes import (
     AVERTISSEMENT_PERIMETRE,
     MENTION_MONTANTS_PROGRAMMES,
-    MENTION_PLAFONDS_ABSENTS,
+    MENTION_PLAFOND_PAR_AXE,
+    MENTION_PLAFONDS_PERIODE,
+    MENTION_REGION_MIXTE,
     PERIODE_2014_2020,
     absences_expliquees,
     capacites,
@@ -68,6 +76,7 @@ from utils.stats import (
     build_pareto_beneficiaires,
     compute_cofinancement_table,
     compute_stats_table,
+    detect_cofinancement_superieur_plafond,
     detect_incoherent_cofinancement,
     detect_outliers,
     render_top_beneficiaires_drilldown,
@@ -111,6 +120,13 @@ filtre_actif = set(selected_fonds) != set(fonds_periode)
 
 operations = normaliser_operations(data["operations"], PERIODE_2014_2020)
 ops_fonds = [op for op in operations if op.get(FONDS) in selected_fonds]
+
+# Catégorie de cohésion de la période, et le plafond de cofinancement qui en découle.
+# `.get` sur le périmètre : « Ensemble national » et « Volet national » ne sont pas des
+# régions, donc pas de catégorie et pas de plafond — c'est le comportement voulu, un
+# plafond n'existe qu'à la maille où une catégorie existe.
+categorie_periode = load_categories_ue_2014_2020().get(perimetre)
+plafond_periode = plafond_intervalle_2014_2020(categorie_periode) if capa["plafonds_cofinancement"] else None
 
 st.title(f"FESI 2014-2020 — {perimetre}")
 st.caption(MENTION_MONTANTS_PROGRAMMES)
@@ -300,16 +316,20 @@ else:
                 st.markdown(f"**Population :** {_fmt_entier(region_meta['population'])} ({region_meta['population_year']})")
                 st.markdown(f"**Superficie :** {_fmt_entier(round(region_meta['superficie_km2']))} km²")
                 st.markdown(f"**Chef-lieu :** {region_meta['chef_lieu']}")
-            # La « catégorie de région » affichée sur la Vue Régionale 2021-2027 est
-            # délibérément absente ici : les catégories de la période 2014-2020 ne sont
-            # pas les mêmes (les dix régions « en transition » d'alors n'existent plus
-            # sous cette forme), et afficher celle de 2021-2027 sur des chiffres de
-            # 2014-2020 serait une donnée réglementaire fausse (issues #79, #81).
+            # Catégorie **de la période**, et surtout pas `region_meta["categorie_ue"]`,
+            # qui est celle de 2021-2027 : les deux découpages diffèrent, et l'un affiché
+            # à la place de l'autre serait une donnée réglementaire fausse sans rien
+            # casser à l'écran (issue #81).
+            st.markdown(f"**Catégorie UE 2014-2020 :** {libelle_categorie_2014_2020(categorie_periode)}")
             st.caption(
-                "La catégorie de région au sens de la politique de cohésion n'est pas affichée : "
-                "celle de 2021-2027 ne vaut pas pour cette période, et les catégories 2014-2020 "
-                "restent à réunir (issue #79)."
+                "Catégorie au sens de la politique de cohésion **2014-2020** (décision "
+                "d'exécution 2014/99/UE), qui détermine le plafond de cofinancement de la "
+                "période. Ce n'est pas celle de 2021-2027 : le découpage a changé, les dix "
+                "régions métropolitaines « en transition » d'alors n'existent plus sous cette "
+                "forme."
             )
+            if categorie_periode and not categorie_periode.get("categorie_ue"):
+                st.caption(MENTION_REGION_MIXTE)
 
     with apercu_col2:
         if est_metropole:
@@ -530,8 +550,7 @@ with tab_audit:
     # Le fichier 2014-2020 ne porte pas de colonne de taux : il est dérivé du montant UE
     # et des dépenses éligibles (utils/periodes.normaliser_operations), un simple quotient
     # de deux colonnes présentes.
-    if not capa["plafonds_cofinancement"]:
-        st.caption(MENTION_PLAFONDS_ABSENTS)
+    st.caption(MENTION_PLAFONDS_PERIODE)
     cofi_fonds = compute_cofinancement_table(df_ops, FONDS).rename(
         columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
     )
@@ -546,6 +565,63 @@ with tab_audit:
             "Taux médian": taux_col_config,
         },
     )
+
+    # Le plafond n'existe qu'à la maille d'une région : les périmètres agrégés réunissent
+    # des catégories différentes, et il n'y a pas de plafond « moyen » à opposer à une
+    # opération. Plutôt qu'un tableau sans borne et sans explication, on dit à quelle
+    # maille l'information existe.
+    if plafond_periode is None:
+        st.info(
+            "**Pas de plafond opposable sur ce périmètre.** Le plafond de cofinancement "
+            "2014-2020 découle de la catégorie de la région, or ce périmètre en réunit "
+            "plusieurs (ensemble national) ou n'est rattaché à aucune (volet national : "
+            "programmes nationaux, assistance technique, programmes interrégionaux). "
+            "Sélectionner une région dans la barre latérale affiche son plafond et les "
+            "opérations qui le dépassent."
+        )
+    else:
+        plafond_min, plafond_max = plafond_periode
+        df_plafonnees, nb_hors_plafond = filtrer_fonds_plafonnes(df_ops, fonds_col=FONDS)
+
+        if plafond_min == plafond_max:
+            st.markdown(f"**Plafond applicable : {plafond_min:.0%}** — {libelle_categorie_2014_2020(categorie_periode)}.")
+        else:
+            # Fourchette, et le dépassement est compté sur la borne **haute** : sous la
+            # borne basse, une opération peut parfaitement relever de l'ancienne région
+            # à plafond élevé. Compter sur la borne basse produirait des « dépassements »
+            # dont on sait qu'ils sont peut-être réguliers — l'inverse de ce qu'on cherche.
+            st.markdown(f"**Plafond applicable : entre {plafond_min:.0%} et {plafond_max:.0%}** selon l'ancienne région.")
+            st.caption(MENTION_REGION_MIXTE)
+
+        if nb_hors_plafond:
+            st.caption(
+                f"{_fmt_entier(nb_hors_plafond)} opération(s) écartée(s) du décompte ci-dessous "
+                "(FEDER REACT-EU, IEJ, FEAD) : leur régime n'est pas celui de l'article 120. "
+                "Elles restent comptées dans le tableau des taux par fonds ci-dessus, qui est "
+                "descriptif."
+            )
+
+        depassements = detect_cofinancement_superieur_plafond(df_plafonnees, plafond_max)
+        st.caption(f"{_fmt_entier(len(depassements))} opération(s) au taux supérieur à {plafond_max:.0%}.")
+        if len(depassements):
+            st.caption(MENTION_PLAFOND_PAR_AXE)
+        if len(depassements):
+            st.dataframe(
+                style_categorical_columns(
+                    depassements[
+                        ["Intitulé du projet", BENEFICIAIRE, FONDS, "Total des dépenses éligibles", MONTANT, "Taux de cofinancement"]
+                    ].head(50),
+                    {FONDS: FONDS_COLORS},
+                ),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    **text_widths("Intitulé du projet", BENEFICIAIRE),
+                    "Total des dépenses éligibles": montant_col_config,
+                    MONTANT: montant_col_config,
+                    "Taux de cofinancement": taux_col_config,
+                },
+            )
 
     st.markdown("**Cohérence des montants**")
     st.caption(

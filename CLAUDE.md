@@ -19,7 +19,10 @@ pages 2021-2027. Il n'y a **pas** de comparaison inter-périodes à outiller —
 logiques de programmation ont changé et REACT-EU a déformé la fin de période.
 Les libellés de colonnes sont adaptés au chargement par `utils/periodes.py` ; ce
 que la période n'a pas y est déclaré dans `CAPACITES` et retiré de l'écran, avec
-son explication.
+son explication. Les **plafonds de cofinancement de la période** y sont câblés
+depuis l'issue #81 (`categories_ue_2014_2020.json`, décision 2014/99) ; restent
+absents le pilotage, faute des dotations de l'Accord de partenariat 14-20
+(#93), et la dimension thématique, absente de la source (#82).
 
 **`main` est la référence** depuis la fusion de `streamlit-dashboard`
 (PR #49, 2026-08-20) : elle porte le dashboard, ce fichier et les tests. Partir
@@ -54,6 +57,7 @@ racine pour les tests (`requirements-dev.txt`).
   python dotations_os_totals.py           # Tableau 8   -> dotations_os.json
   python interreg_totals.py               # Tableau 10  -> interreg.json
   python transferts_solidarite_totals.py  # Tableau 3A/3B -> transferts_solidarite.json
+  python categories_ue_2014_2020.py       # Décision 2014/99 -> categories_ue_2014_2020.json
   ```
 - **Profil d'une source** (page « Validation de la source »), un JSON **committé**
   par fichier source, à régénérer à chaque nouveau millésime :
@@ -170,9 +174,17 @@ racine pour les tests (`requirements-dev.txt`).
     `dimension_thematique: null`. Ne jamais inventer de « Non spécifié » pour
     homogénéiser la forme entre périodes ;
   - **six fonds** — FEDER, FSE, IEJ, FEAD, FEDER REACT-EU, FEDER-FSE — et non
-    FEDER/FSE+/FTJ. REACT-EU reste un fonds distinct, avec son propre régime
-    (financement possible à 100 %), donc **les plafonds de cofinancement de
-    `utils/cofinancement.py` ne lui sont pas applicables** ;
+    FEDER/FSE+/FTJ. **Trois d'entre eux échappent aux plafonds de l'article 120**
+    (`utils/cofinancement.FONDS_HORS_PLAFOND`), chacun pour une raison écrite
+    dans un texte : REACT-EU y déroge (jusqu'à 100 %, règlement 2020/2221
+    art. 92 ter §12) ; l'IEJ voit son plafond **relevé** par l'art. 120 §3
+    lui-même ; le FEAD n'est pas un Fonds ESI mais un transfert hors enveloppe
+    structurelle (art. 94), régi par le règlement 223/2014. Les leur appliquer
+    produit un faux positif garanti — c'est ce que l'issue #81 devait éviter ;
+  - **un plafond se fixe par axe prioritaire, pas par opération**, et l'art. 120
+    §5 le majore de **dix points** quand un axe est entièrement mis en œuvre par
+    instruments financiers ou par développement local. Le fichier ne porte pas
+    l'axe : un dépassement affiché est un écart à expliquer, jamais un constat ;
   - la colonne région n'est remplie qu'à **16,4 %** : c'est le libellé du
     programme qui rattache le reste ;
   - **le périmètre Synergie est incomplet** (#68) : Bretagne (3 opérations) et

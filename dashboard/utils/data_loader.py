@@ -10,6 +10,7 @@ GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.ge
 GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
 REGION_METADATA_PATH = REPO_ROOT / "data" / "processed" / "region_metadata.json"
+CATEGORIES_UE_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "categories_ue_2014_2020.json"
 PROGRAMME_TOTALS_PATH = REPO_ROOT / "data" / "processed" / "programme_totals.json"
 PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.json"
 BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuzzy.json"
@@ -69,6 +70,18 @@ def load_dromcom_codes_postaux():
 @st.cache_data
 def load_region_metadata():
     with open(REGION_METADATA_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_categories_ue_2014_2020():
+    """Catégorie de cohésion **de la période 2014-2020** par région moderne, produite par
+    `data-pipeline/categories_ue_2014_2020.py` depuis la décision 2014/99/UE (issue #81).
+
+    À ne pas confondre avec le champ `categorie_ue` de `region_metadata.json`, qui porte
+    celle de 2021-2027 : les deux découpages diffèrent, et prendre l'un pour l'autre
+    donnerait un plafond de cofinancement faux sans rien casser à l'écran."""
+    with open(CATEGORIES_UE_2014_2020_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
