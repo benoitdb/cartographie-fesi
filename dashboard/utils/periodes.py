@@ -57,6 +57,7 @@ SOURCE_2021_2027 = "2021-2027"
 SOURCE_SYNERGIE_2014_2020 = "2014-2020"
 SOURCE_NORMANDIE_2014_2020 = "2014-2020-normandie"
 SOURCE_NOUVELLE_AQUITAINE_2014_2020 = "2014-2020-nouvelle-aquitaine"
+SOURCE_BRETAGNE_2014_2020 = "2014-2020-bretagne-officiel"
 
 # clé sémantique -> libellé **canonique** du dashboard, celui de 2021-2027 — non
 # parce qu'il serait meilleur, mais parce que c'est celui que le code existant lit
@@ -110,6 +111,24 @@ COLONNES_PAR_SOURCE = {
         "fonds": "Fond",
         "region": "Région",
     },
+    # Export officiel data.bretagne.bzh (2026-08, issue #95), qui remplace la liste
+    # europe.bzh de 2022 pour le pilotage — voir data-pipeline/sources.py pour le
+    # détail des deux fichiers. `cp_beneficiaire` est un alias de commodité : la
+    # colonne réelle (`Code Postal`) est celle de l'**opération**, pas du siège du
+    # bénéficiaire comme pour Normandie/Nouvelle-Aquitaine — probablement plus
+    # fiable pour le rattachement départemental que l'approximation utilisée
+    # ailleurs, mais ce n'est pas la même chose et `assign_departement` ne fait pas
+    # la différence entre les deux à l'écran (source affichée : « approximé »).
+    SOURCE_BRETAGNE_2014_2020: {
+        "libelle_prog": "Libellé programme",
+        "numero_op": "No Dossier",
+        "nom_benef": "Bénéficiaire",
+        "intitule_proj": "Nom de l'opération",
+        "depenses": "Cout total de l'opération",
+        "taux_cofinance": "Taux de cofinancement par l'UE",
+        "cp_beneficiaire": "Code Postal",
+        "region": "Région",
+    },
     # Fichier tout en anglais (issue #68). `libelle_prog` y est un code CCI, pas
     # un libellé — voir `appliquer_libelles_programmes` pour sa traduction, faite
     # à part de la normalisation des colonnes.
@@ -149,6 +168,12 @@ CAPACITES_SOURCE = {
     # Ni code postal ni département dans ce fichier (voir COLONNES_PAR_SOURCE) :
     # aucun rattachement possible, même approché, à un département.
     SOURCE_NOUVELLE_AQUITAINE_2014_2020: {"trajectoire": False, "departement": False},
+    # Pas de `Date de programmation` transposable ici non plus (`Date de première
+    # CRPE` daterait autre chose, même mise en garde que pour Synergie) :
+    # trajectoire non câblée. Département disponible depuis ce fichier (issue #95),
+    # à la différence du premier fichier Bretagne qui n'avait ni code postal ni
+    # numéro de dossier.
+    SOURCE_BRETAGNE_2014_2020: {"trajectoire": False, "departement": True},
 }
 
 
@@ -335,32 +360,41 @@ MENTION_DEPASSEMENT_2014_2020 = (
     "REACT-EU FEDER certifiés atteignent ou dépassent leur maquette."
 )
 
-# Le seul périmètre où le pilotage reste masqué depuis #95 : son engagé ne vient que de
-# l'extraction Synergie, qui ne le couvre pas (#68), quand son enveloppe, elle, est
-# complète. Le taux affiché serait une donnée manquante déguisée en sous-consommation.
-# Normandie et Nouvelle-Aquitaine en sont sorties : leur engagé vient désormais de leur
-# propre fichier régional, complet sur leur périmètre (voir data_loader et la page).
-#
-# « Ensemble national » et « Volet national » restent masqués pour une raison voisine mais
-# distincte, portée par le paramètre `est_national` plutôt que par cette liste : le
-# programme opérationnel national FSE pèse 4,1 Md€ d'engagements absents de Synergie, et
-# aucun fichier régional ne comble ce trou-là.
+# Bretagne en est sortie à son tour (issue #95) : depuis l'export officiel
+# data.bretagne.bzh, son engagé vient de son propre fichier régional, complet sur
+# son périmètre, comme Normandie et Nouvelle-Aquitaine avant elle (#95 pour les
+# deux, ici pour Bretagne). Ne reste masqué que ce qu'aucun fichier régional ne
+# comble : le programme opérationnel national FSE (4,1 Md€ d'engagements absents
+# de Synergie), et les deux périmètres agrégés, via `est_national` plutôt que
+# cette liste.
 #
 # Ce masquage est une mesure d'attente, pas une propriété de la période — d'où une
 # constante ici plutôt qu'une capacité dans CAPACITES : ce qui manque n'est pas la donnée
 # de référence (elle est transcrite) mais un engagé comparable. Reprise suivie en #95.
-PERIMETRES_SANS_PILOTAGE = frozenset({"Bretagne"})
+PERIMETRES_SANS_PILOTAGE = frozenset()
 
 MENTION_PILOTAGE_MASQUE = (
     "**Pas de taux de consommation sur ce périmètre.** Son enveloppe programmée est connue, "
     "mais l'engagé qu'on lui opposerait vient de l'extraction Synergie, qui ne couvre pas "
-    "toutes les autorités de gestion de la période — programme opérationnel national FSE et "
-    "Bretagne (issue #68). Leurs opérations sont publiées à part et visibles sur la page "
-    "« Validation de la source », mais ne sont pas fusionnées ici : un taux calculé sans "
-    "elles afficherait une donnée manquante comme une sous-consommation. Normandie et "
-    "Nouvelle-Aquitaine, elles, sont pilotées depuis leur propre fichier régional depuis "
-    "#95. La reprise de ce point pour Bretagne et le volet national reste suivie en "
-    "issue #95."
+    "toutes les autorités de gestion de la période — le programme opérationnel national FSE "
+    "(issue #68). Ses opérations sont publiées à part et visibles sur la page « Validation "
+    "de la source », mais ne sont pas fusionnées ici : un taux calculé sans elles afficherait "
+    "une donnée manquante comme une sous-consommation. Normandie, Nouvelle-Aquitaine et "
+    "Bretagne, elles, sont pilotées depuis leur propre fichier régional (#95). La reprise de "
+    "ce point pour le volet national reste suivie en issue #95."
+)
+
+# Bretagne FSE affiche un taux au-dessus de 100 % (111 % au 12/02/2024) qui n'est pas une
+# surconsommation : ses sept lignes sont des marchés de formation du Conseil régional
+# (« Programme Bretagne Formation », « QUALIF Emploi »…), pas des opérations unitaires, à
+# une granularité très différente du reste du fichier — constat de l'issue #95 (point 2),
+# non résolu par le changement de source (seul le millésime l'a été, cf. #95 et #93).
+MENTION_BRETAGNE_FSE_GRANULARITE = (
+    "**Le FSE breton dépasse son enveloppe (111 % au 12/02/2024)** sans que ce soit une "
+    "surconsommation : ses sept lignes sont des marchés de formation du Conseil régional "
+    "(« Programme Bretagne Formation », « QUALIF Emploi »…), pas des opérations unitaires — "
+    "une granularité de fichier très différente du reste, qui gonfle le taux affiché vers le "
+    "haut (issue #95)."
 )
 
 

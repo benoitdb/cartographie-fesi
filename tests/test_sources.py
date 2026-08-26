@@ -81,6 +81,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "pon_fse_2014_2020.xls",
         "nouvelle_aquitaine_14_20.xlsx",
         "bretagne_14_20.xlsx",
+        "bretagne_14-20_feder-fse_beneficiaires.xlsx",
         "normandie_14_20.xlsx",
     ]
     for nom in fichiers:
@@ -92,6 +93,7 @@ def test_les_motifs_des_deux_sources_ne_se_recouvrent_pas(tmp_path):
         "2014-2020-pon-fse": 1,
         "2014-2020-nouvelle-aquitaine": 1,
         "2014-2020-bretagne": 1,
+        "2014-2020-bretagne-officiel": 1,
         "2014-2020-normandie": 1,
     }
     for source_id, conf in SOURCES.items():
@@ -247,6 +249,66 @@ def test_bretagne_deriver_uniformise_la_date_de_mise_a_jour_mixte():
 
     assert pd.api.types.is_datetime64_any_dtype(df_pretraite["date de dernière mise à jour"])
     assert df_pretraite["date de dernière mise à jour"].iloc[0] == pd.Timestamp("2022-08-05")
+
+
+def test_le_profil_bretagne_officiel_pointe_les_bonnes_colonnes():
+    """Deuxième fichier Bretagne (data.bretagne.bzh, issue #95) : numéro de dossier et
+    département désormais disponibles, contrairement au premier fichier — mais toujours
+    pas de montant UE direct, seul le taux de cofinancement l'est."""
+    cols = cols_profil(source("2014-2020-bretagne-officiel"), colonnes_de("2014-2020-bretagne-officiel"))
+
+    assert cols["montant_ue"] == "Montant UE"
+    assert cols["depenses"] == "Cout total de l'opération"
+    assert cols["region"] == "Région"
+    assert cols["fonds"] == "Fonds"
+    assert cols["numero_operation"] == "No Dossier"
+    assert cols["departement"] == "Code Postal"
+
+
+def test_bretagne_officiel_deriver_filtre_la_periode_et_calcule_le_montant_ue():
+    """Le fichier mélange 2014-2020 et 2021-2027 dans une seule feuille (issue #95,
+    contrairement à tous les autres fichiers hors-Synergie) : seule la ligne 2014-2020
+    doit survivre au pretraitement, et le montant UE se calcule (coût total × taux),
+    ce fichier ne portant pas de montant UE direct."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-bretagne-officiel")
+    df = pd.concat([df, df], ignore_index=True)
+    df.loc[0, "Période"] = "2014-2020"
+    df.loc[0, "Cout total de l'opération"] = 1000.0
+    df.loc[0, "Taux de cofinancement par l'UE"] = "50,00%"
+    df.loc[0, "Fonds"] = "FEDER"
+    df.loc[1, "Période"] = "2021-2027"
+    df.loc[1, "Cout total de l'opération"] = 999.0
+    df.loc[1, "Taux de cofinancement par l'UE"] = "99,00%"
+    df.loc[1, "Fonds"] = "FSE"
+
+    df_pretraite = SOURCES["2014-2020-bretagne-officiel"]["pretraitement"](df)
+
+    assert len(df_pretraite) == 1
+    assert list(df_pretraite["Région"]) == ["Bretagne"]
+    assert df_pretraite["Montant UE"].iloc[0] == 500.0
+    assert df_pretraite["Libellé programme"].iloc[0] == (
+        "Programme opérationnel Bretagne FEDER 2014-2020"
+    )
+
+
+def test_bretagne_officiel_deriver_reparse_le_taux_pourcentage_francais():
+    """Le taux de cofinancement est un texte pourcentage à la française (« 16,67% »),
+    pas un nombre comme dans les autres fichiers hors-Synergie — la virgule décimale et
+    le signe % doivent disparaître avant tout calcul."""
+    from sources import SOURCES
+
+    df = df_vide("2014-2020-bretagne-officiel")
+    df.loc[0, "Période"] = "2014-2020"
+    df.loc[0, "Cout total de l'opération"] = 300.0
+    df.loc[0, "Taux de cofinancement par l'UE"] = "16,67%"
+    df.loc[0, "Fonds"] = "FEDER"
+
+    df_pretraite = SOURCES["2014-2020-bretagne-officiel"]["pretraitement"](df)
+
+    assert df_pretraite["Taux de cofinancement par l'UE"].iloc[0] == pytest.approx(0.1667)
+    assert df_pretraite["Montant UE"].iloc[0] == pytest.approx(300.0 * 0.1667)
 
 
 def test_lire_dataframe_concatene_les_feuilles_declarees(tmp_path):

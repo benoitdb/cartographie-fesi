@@ -28,27 +28,36 @@ période** y sont câblés depuis l'issue #81 (`categories_ue_2014_2020.json`, d
 14-20 et maquettes REACT-EU transcrites). Reste absente la dimension thématique, que
 la source ne porte pas (#82).
 
-**Normandie et Nouvelle-Aquitaine lisent leur propre fichier régional hors-Synergie**
-depuis l'issue #95, pas l'extraction Synergie qui les sous-comptait fortement
-(Normandie en était même absente — #68) : toute la page 5, pas seulement l'onglet
-Pilotage, bascule sur ce fichier pour ces deux périmètres (`utils/data_loader`,
+**Normandie, Nouvelle-Aquitaine et Bretagne lisent leur propre fichier régional
+hors-Synergie** depuis l'issue #95, pas l'extraction Synergie qui les sous-comptait
+fortement (Normandie en était même absente — #68) : toute la page 5, pas seulement
+l'onglet Pilotage, bascule sur ce fichier pour ces trois périmètres (`utils/data_loader`,
 loaders tolérants à son absence — gitignorés comme `data_2014-2020.json`, la CI
 tourne sur un clone nu). Conséquence : leur millésime affiché est le leur, pas celui
-de Synergie (22/08/2025 et 31/05/2026 contre 30/08/2023), et deux capacités leur
-manquent en propre — pas de date de programmation (trajectoire retirée, jamais
-remplacée par la date de début, qui daterait autre chose) et, pour
-Nouvelle-Aquitaine seule, ni code postal ni département (carte départementale
-retirée). Bretagne et le programme opérationnel national FSE restent hors passe :
-priorité donnée aux deux périmètres dont l'écart avec Synergie était le plus
-trompeur à l'écran (Normandie invisible du sélecteur, Nouvelle-Aquitaine visible
-mais à un montant sans rapport — 1,2 M€ affichés contre 1 010 M€ d'engagé réel).
+de Synergie (22/08/2025, 31/05/2026 et 12/02/2024 contre 30/08/2023), et des capacités
+leur manquent en propre — pas de date de programmation pour aucune des trois
+(trajectoire retirée, jamais remplacée par la date de début, qui daterait autre
+chose) et, pour Nouvelle-Aquitaine seule, ni code postal ni département (carte
+départementale retirée). Bretagne a rejoint les deux autres en dernier (2026-08) :
+son premier fichier régional (europe.bzh, 2022-06-09) n'avait ni numéro de dossier
+ni code postal exploitable, contrairement à l'export officiel data.bretagne.bzh qui
+l'a remplacé pour cet usage — resté ingéré à part et consultable sur la page
+« Validation de la source » sous son propre identifiant (`2014-2020-bretagne`), le
+temps de confirmer qu'il n'apporte plus rien. Seul le programme opérationnel national
+FSE reste hors passe : ses opérations couvrent sept programmes distincts à ventiler,
+pas un seul périmètre régional (#95, point 3).
 
-Le pilotage 14-20 n'est donc plus masqué que sur **Bretagne** et sur les périmètres
-agrégés (« Ensemble national », « Volet national ») — l'extraction Synergie ne les
-couvre pas (#68, reprise suivie en #95). Un taux calculé sur un engagé partiel
-afficherait une donnée manquante comme une sous-consommation. Normandie et
-Nouvelle-Aquitaine retombent sur ce même masquage si leur fichier régional est
-absent du poste (repli, pas un cas d'erreur).
+Le pilotage 14-20 n'est donc plus masqué que sur les périmètres agrégés (« Ensemble
+national », « Volet national ») et sur le programme opérationnel national FSE —
+l'extraction Synergie ne les couvre pas (#68, reprise suivie en #95). Un taux calculé
+sur un engagé partiel afficherait une donnée manquante comme une sous-consommation.
+Normandie, Nouvelle-Aquitaine et Bretagne retombent sur ce même masquage si leur
+fichier régional est absent du poste (repli, pas un cas d'erreur). Le FSE breton
+affiche un taux au-dessus de 100 % (111 % au 12/02/2024) qui n'est pas une
+surconsommation mais un effet de granularité — ses sept lignes sont des marchés de
+formation du Conseil régional, pas des opérations unitaires (#95, point 2, non résolu
+par le changement de source) — signalé à l'écran plutôt que masqué, comme les autres
+dépassements de la période (REACT-EU Normandie, IEJ Nouvelle-Aquitaine).
 
 **`main` est la référence** depuis la fusion de `streamlit-dashboard`
 (PR #49, 2026-08-20) : elle porte le dashboard, ce fichier et les tests. Partir

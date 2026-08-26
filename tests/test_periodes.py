@@ -34,6 +34,7 @@ from utils.periodes import (  # noqa: E402
     PERIODE_2014_2020,
     PERIODE_2021_2027,
     SOURCE_2021_2027,
+    SOURCE_BRETAGNE_2014_2020,
     SOURCE_NORMANDIE_2014_2020,
     SOURCE_NOUVELLE_AQUITAINE_2014_2020,
     SOURCE_SYNERGIE_2014_2020,
@@ -54,6 +55,7 @@ FICHIER_PAR_SOURCE = {
     SOURCE_SYNERGIE_2014_2020: "data_2014-2020.json",
     SOURCE_NORMANDIE_2014_2020: "data_2014-2020_normandie.json",
     SOURCE_NOUVELLE_AQUITAINE_2014_2020: "data_2014-2020_nouvelle_aquitaine.json",
+    SOURCE_BRETAGNE_2014_2020: "data_2014-2020_bretagne_officiel.json",
 }
 
 
@@ -284,16 +286,16 @@ def test_fusionner_ne_modifie_pas_le_dictionnaire_recu():
     assert source == {"FEDER": 100, "FEDER REACT-EU": 30}
 
 
-def test_pilotage_masque_seulement_sur_bretagne_depuis_95():
-    """Normandie et Nouvelle-Aquitaine sont sorties de la liste statique : leur pilotage ne
-    dépend plus de la période mais de la disponibilité de leur fichier régional sur le
-    poste (#95), une décision prise par la page, pas par cette fonction — voir
+def test_pilotage_masque_plus_que_sur_les_perimetres_agreges():
+    """Normandie, Nouvelle-Aquitaine et Bretagne sont sorties de la liste statique : leur
+    pilotage ne dépend plus de la période mais de la disponibilité de leur fichier régional
+    sur le poste (#95), une décision prise par la page, pas par cette fonction — voir
     `test_dashboard_pages.py` pour le comportement écran, avec et sans fichier."""
-    assert not pilotage_disponible("Bretagne")
     assert not pilotage_disponible("Ensemble national", est_national=True)
     assert not pilotage_disponible("Volet national", est_national=True)
     assert pilotage_disponible("Normandie")
     assert pilotage_disponible("Nouvelle-Aquitaine")
+    assert pilotage_disponible("Bretagne")
     assert pilotage_disponible("Corse")
     assert pilotage_disponible("Occitanie")
 
@@ -397,6 +399,14 @@ def test_capacites_source_nouvelle_aquitaine_sans_trajectoire_ni_departement():
     """Ni date de programmation, ni code postal, ni département dans ce fichier."""
     capa = capacites_source(SOURCE_NOUVELLE_AQUITAINE_2014_2020)
     assert capa == {"trajectoire": False, "departement": False}
+
+
+def test_capacites_source_bretagne_sans_trajectoire_mais_avec_departement():
+    """Ni « Date de programmation » ni équivalent transposable dans ce fichier, mais un
+    code postal d'opération qui rend le rattachement départemental possible — à la
+    différence du premier fichier Bretagne (issue #95)."""
+    capa = capacites_source(SOURCE_BRETAGNE_2014_2020)
+    assert capa == {"trajectoire": False, "departement": True}
 
 
 def test_capacites_source_par_defaut_permissive():

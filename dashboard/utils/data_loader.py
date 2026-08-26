@@ -10,6 +10,7 @@ DATA_2014_2020_NORMANDIE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-20
 DATA_2014_2020_NOUVELLE_AQUITAINE_PATH = (
     REPO_ROOT / "data" / "processed" / "data_2014-2020_nouvelle_aquitaine.json"
 )
+DATA_2014_2020_BRETAGNE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020_bretagne_officiel.json"
 GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.geojson"
 GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
@@ -82,6 +83,22 @@ def load_data_2014_2020_nouvelle_aquitaine():
     if not DATA_2014_2020_NOUVELLE_AQUITAINE_PATH.exists():
         return None
     with open(DATA_2014_2020_NOUVELLE_AQUITAINE_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_data_2014_2020_bretagne():
+    """Fichier régional Bretagne, export officiel data.bretagne.bzh (issue #95), lu
+    directement par la page 2014-2020 pour ce périmètre — Bretagne n'apparaît qu'à la
+    marge dans `aggregates.by_region` de Synergie (3 opérations, voir #68).
+
+    Mêmes garanties que `load_data_2014_2020_normandie` : gitignoré, tolérant à son
+    absence (None). Remplace le premier fichier Bretagne (2022, europe.bzh) pour cet
+    usage ; celui-ci reste ingéré à part et consultable sur la page « Validation de la
+    source » sous son propre identifiant, le temps de confirmer qu'il n'apporte plus rien."""
+    if not DATA_2014_2020_BRETAGNE_PATH.exists():
+        return None
+    with open(DATA_2014_2020_BRETAGNE_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

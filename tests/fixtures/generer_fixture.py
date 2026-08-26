@@ -29,12 +29,13 @@ fonds, et la page 2014-2020 ne se rendrait pas sur un échantillon de l'autre
 période. Le champ volumineux à tronquer et le schéma de colonnes diffèrent donc
 par période — d'où `PERIODES` plus bas plutôt qu'un chemin en dur.
 
-**Deux fixtures de plus depuis #95**, pour les fichiers régionaux hors-Synergie lus
-directement par la page 2014-2020 (Normandie, Nouvelle-Aquitaine — issue #68) :
-`data_2014-2020_normandie.json` et `data_2014-2020_nouvelle_aquitaine.json`. Un seul
-périmètre par fichier, donc pas d'échantillonnage stratifié par région comme pour
-`echantillonner` — voir `generer_hors_synergie`, qui prend des tranches ciblées pour
-couvrir chaque fonds (et, pour Normandie, les opérations à fonds vide, cf. #95).
+**Trois fixtures de plus depuis #95**, pour les fichiers régionaux hors-Synergie lus
+directement par la page 2014-2020 (Normandie, Nouvelle-Aquitaine, Bretagne — #68, #95) :
+`data_2014-2020_normandie.json`, `data_2014-2020_nouvelle_aquitaine.json` et
+`data_2014-2020_bretagne_officiel.json`. Un seul périmètre par fichier, donc pas
+d'échantillonnage stratifié par région comme pour `echantillonner` — voir
+`generer_hors_synergie`, qui prend des tranches ciblées pour couvrir chaque fonds (et,
+pour Normandie, les opérations à fonds vide, cf. #95).
 """
 
 import json
@@ -96,6 +97,13 @@ SOURCES_HORS_SYNERGIE = {
         "schema": SCHEMAS["2014-2020-nouvelle-aquitaine"],
         # FEDER (0), FSE (6), IEJ (23) : les trois tiennent dans les 40 premières lignes.
         "tranches": [(0, 40)],
+    },
+    "2014-2020-bretagne-officiel": {
+        "fichier": "data_2014-2020_bretagne_officiel.json",
+        "schema": SCHEMAS["2014-2020-bretagne-officiel"],
+        # FEDER (0) ; les 7 lignes FSE sont dispersées (342, 364, 570, 683, 684, 810,
+        # 849) : des tranches ciblées les couvrent toutes plutôt qu'un seul bloc.
+        "tranches": [(0, 10), (340, 370), (680, 690), (845, 852)],
     },
 }
 

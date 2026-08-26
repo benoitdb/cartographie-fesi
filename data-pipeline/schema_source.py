@@ -209,12 +209,65 @@ COLONNES_NORMANDIE_2014_2020 = [
     ("libelle_prog", "Libellé programme"),  # Dérivée, voir sources.py.
 ]
 
+# Deuxième fichier Bretagne (2026-08) : export officiel du portail open data
+# data.bretagne.bzh (dataset `feder-fse_beneficiaires`), qui remplace la liste
+# publiée par europe.bzh en 2022 — gardé de côté (COLONNES_BRETAGNE_2014_2020
+# ci-dessus, source "2014-2020-bretagne") plutôt que supprimé, le temps de
+# confirmer que ce nouveau fichier couvre bien tout ce que l'ancien couvrait.
+#
+# Une seule feuille à plat, les deux périodes de programmation mélangées
+# (`Période` = "2014-2020" ou "2021-2027") : le `pretraitement` filtre sur la
+# période avant toute autre étape, ici et non dans ce module qui ne décrit que
+# des colonnes. Trois différences notables avec l'ancien fichier : un numéro de
+# dossier (`No Dossier`, absent avant), un code postal et un code INSEE de
+# l'**opération** remplis à 100 % (la capacité département, hors de portée avec
+# l'ancien fichier, devient possible), et un taux de cofinancement en texte
+# pourcentage (`"16,67%"`) au lieu d'un montant UE direct — le calcul (coût
+# total × taux) reste donc à faire dans le `pretraitement`, comme pour l'ancien
+# fichier, mais le taux doit d'abord être reparsé.
+COLONNES_BRETAGNE_2014_2020_OFFICIEL = [
+    ("ordre_classement", "Ordre de classement"),
+    ("action_programme", "Action du programme"),
+    ("numero_op", "No Dossier"),
+    ("periode_fichier", "Période"),  # Filtrée par le pretraitement, voir sources.py.
+    ("fonds", "Fonds"),
+    ("objectif_specifique", "Objectif spécifique"),
+    ("nom_benef", "Bénéficiaire"),
+    ("intitule_proj", "Nom de l'opération"),
+    ("resume_op", "Objectif de l'opération et réalisations escomptées"),
+    ("date_debut", "Date de début de l'opération"),
+    ("date_fin", "Date de fin de l'opération"),
+    ("date_crpe", "Date de première CRPE"),
+    ("depenses", "Cout total de l'opération"),
+    ("taux_cofinance", "Taux de cofinancement par l'UE"),
+    ("localisation", "Localisation de l'opération"),
+    # Code postal / INSEE de l'**opération**, pas du bénéficiaire — mais la clé
+    # interne reste `cp_beneficiaire`, celle que `dashboard/utils/periodes.py`
+    # sait déjà relayer jusqu'au rattachement départemental (voir
+    # `_deriver_bretagne_officiel` et le commentaire dans periodes.py) :
+    # probablement plus précis que l'approximation via siège du bénéficiaire
+    # utilisée pour Normandie/Nouvelle-Aquitaine, mais ce n'est pas la même
+    # chose et le dashboard ne fait pas la différence à l'écran.
+    ("cp_beneficiaire", "Code Postal"),
+    ("insee_operation", "Code INSEE"),
+    ("pays", "Pays"),
+    ("latitude", "Latitude"),
+    ("longitude", "Longitude"),
+    ("domaine_intervention", "Domaine d'intervention"),
+    ("date_maj", "Date de dernière mise à jour"),
+    ("point_geo", "point_geo"),
+    ("libelle_prog", "Libellé programme"),  # Dérivée, voir sources.py.
+    ("region", "Région"),  # Constante, voir sources.py.
+    ("montant_ue", "Montant UE"),  # Calculée, voir sources.py.
+]
+
 SCHEMAS = {
     "2021-2027": COLONNES_2021_2027,
     "2014-2020": COLONNES_2014_2020,
     "2014-2020-pon-fse": COLONNES_PON_FSE_2014_2020,
     "2014-2020-nouvelle-aquitaine": COLONNES_NOUVELLE_AQUITAINE_2014_2020,
     "2014-2020-bretagne": COLONNES_BRETAGNE_2014_2020,
+    "2014-2020-bretagne-officiel": COLONNES_BRETAGNE_2014_2020_OFFICIEL,
     "2014-2020-normandie": COLONNES_NORMANDIE_2014_2020,
 }
 
