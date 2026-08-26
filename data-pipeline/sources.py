@@ -277,6 +277,56 @@ def _deriver_bretagne(df):
     )
     return df
 
+
+# Numéro de dossier, code postal et code INSEE **de l'opération**, absents du
+# premier fichier Bretagne (voir COLONNES_BRETAGNE_2014_2020_OFFICIEL) — pas de
+# département manquant ici, contrairement à Bretagne 1 et Nouvelle-Aquitaine.
+_CLES_PROFIL_BRETAGNE_2014_2020_OFFICIEL = {
+    "numero_operation": "numero_op",
+    "programme": "libelle_prog",
+    "beneficiaire": "nom_benef",
+    "fonds": "fonds",
+    "region": "region",
+    "montant_ue": "montant_ue",
+    "depenses": "depenses",
+    "dimension_thematique": "domaine_intervention",
+    "pays": "pays",
+    "departement": "cp_beneficiaire",
+}
+
+
+def _deriver_bretagne_officiel(df):
+    """Trois étapes, sur le fichier officiel data.bretagne.bzh (dataset
+    `feder-fse_beneficiaires`, voir COLONNES_BRETAGNE_2014_2020_OFFICIEL) :
+
+    - filtrer sur `Période == "2014-2020"` : le fichier mélange les deux
+      programmations dans une seule feuille, à la différence de tous les
+      autres fichiers hors-Synergie ;
+    - reparser `Taux de cofinancement par l'UE`, un texte pourcentage à la
+      française (« 16,67% ») plutôt qu'un nombre, en fraction décimale ;
+    - `Montant UE`, calculée (`Cout total de l'opération` × taux) — ce fichier
+      ne porte pas plus de montant UE direct que le précédent (issue #95).
+
+    Plus les deux dérivations déjà faites pour le premier fichier Bretagne :
+    `Libellé programme` à partir de `Fonds`, et `Région` constante."""
+    df = df.copy()
+    df = df[df["Période"] == "2014-2020"].reset_index(drop=True)
+    taux = (
+        df["Taux de cofinancement par l'UE"].str.rstrip("%").str.replace(",", ".", regex=False).astype(float)
+        / 100
+    )
+    df["Taux de cofinancement par l'UE"] = taux
+    # Ordre d'ajout aligné sur COLONNES_BRETAGNE_2014_2020_OFFICIEL (libelle_prog,
+    # region, montant_ue) : `build_cols` vérifie les colonnes par position, une
+    # colonne ajoutée dans le désordre ferait échouer la vérification de schéma.
+    df["Libellé programme"] = df["Fonds"].map(
+        lambda fonds: f"Programme opérationnel Bretagne {fonds} 2014-2020"
+    )
+    df["Région"] = "Bretagne"
+    df["Montant UE"] = df["Cout total de l'opération"] * taux
+    return df
+
+
 # Champs d'un descripteur :
 #   label            — libellé lisible, affiché par la page « Validation de la source »
 #   periode          — désigne aussi le schéma dans `schema_source.SCHEMAS`
@@ -431,6 +481,33 @@ SOURCES = {
         "programme_to_region": {},
         "cles_profil": _CLES_PROFIL_BRETAGNE_2014_2020,
         "pretraitement": _deriver_bretagne,
+    },
+    # Deuxième fichier Bretagne (2026-08) : export officiel du portail open data
+    # régional, data.bretagne.bzh (dataset `feder-fse_beneficiaires`), qui
+    # remplace la liste europe.bzh de 2022-06-09 ci-dessus — gardée telle
+    # quelle, pas supprimée, le temps de confirmer que ce nouveau fichier la
+    # couvre entièrement (page « Validation de la source » : comparer les deux
+    # profils). Millésime bien plus récent (12/02/2024 contre 09/06/2022),
+    # numéro de dossier et rattachement département désormais disponibles —
+    # voir COLONNES_BRETAGNE_2014_2020_OFFICIEL et issue #95.
+    "2014-2020-bretagne-officiel": {
+        "label": "Bretagne (hors Synergie, export officiel data.bretagne.bzh)",
+        "periode": "2014-2020",
+        "schema": "2014-2020-bretagne-officiel",
+        "motif_fichier": "bretagne_14-20_feder-fse_beneficiaires*.xlsx",
+        "url_source": "https://data.bretagne.bzh/explore/dataset/feder-fse_beneficiaires/",
+        "feuille": 0,
+        # Le fichier mélange 2014-2020 et 2021-2027 dans une seule feuille et
+        # sa colonne `Date de dernière mise à jour` est un unique 12/02/2024
+        # sur toutes les lignes 2014-2020 (vérifié) : plus fiable que le nom du
+        # fichier téléchargé, qui ne porte pas de préfixe daté.
+        "date_source": "2024-02-12",
+        "fichier_sortie": "data_2014-2020_bretagne_officiel.json",
+        # Chaque ligne 2014-2020 est en Bretagne par construction (voir
+        # `_deriver_bretagne_officiel`) : pas de repli par programme à fournir.
+        "programme_to_region": {},
+        "cles_profil": _CLES_PROFIL_BRETAGNE_2014_2020_OFFICIEL,
+        "pretraitement": _deriver_bretagne_officiel,
     },
     # Quatrième et dernière source hors-Synergie (issue #68) : liste régionale
     # Normandie, publiée par europe-en-normandie.eu. Page bloquée au scraping

@@ -32,6 +32,7 @@ from utils.cofinancement import (
 from utils.data_loader import (
     load_categories_ue_2014_2020,
     load_data_2014_2020,
+    load_data_2014_2020_bretagne,
     load_data_2014_2020_normandie,
     load_data_2014_2020_nouvelle_aquitaine,
     load_dromcom_codes_postaux,
@@ -54,6 +55,7 @@ from utils.filters import compute_by_region, render_fonds_filter, summarize_ops
 from utils.millesime import render_millesime
 from utils.periodes import (
     AVERTISSEMENT_PERIMETRE,
+    MENTION_BRETAGNE_FSE_GRANULARITE,
     MENTION_DEPASSEMENT_2014_2020,
     MENTION_FONDS_HORS_RAPPROCHEMENT,
     MENTION_MONTANTS_PROGRAMMES,
@@ -65,6 +67,7 @@ from utils.periodes import (
     MENTION_REGION_MIXTE,
     MENTION_SOURCE_REGIONALE,
     PERIODE_2014_2020,
+    SOURCE_BRETAGNE_2014_2020,
     SOURCE_NORMANDIE_2014_2020,
     SOURCE_NOUVELLE_AQUITAINE_2014_2020,
     absences_expliquees,
@@ -121,19 +124,21 @@ capa = capacites(PERIODE_2014_2020)
 libelle_montant_ue = libelle_montant(PERIODE_2014_2020)
 
 # Fichiers hors-Synergie lus directement par cette page pour leur périmètre (issue #95) :
-# Normandie n'apparaît même pas dans `aggregates.by_region` de Synergie, et Nouvelle-Aquitaine
-# n'y figure qu'à la marge (25 opérations). Bretagne et le PON FSE restent hors passe — la
-# priorité a été donnée aux deux périmètres dont l'écart avec Synergie est le plus trompeur à
-# l'écran (Normandie invisible, Nouvelle-Aquitaine visible mais à un montant sans rapport).
-# None si le fichier est absent (gitignoré, non régénérable sans le XLSX source) : la page se
-# rabat alors sur le sous-comptage Synergie plutôt que de planter.
+# Normandie n'apparaît même pas dans `aggregates.by_region` de Synergie, Nouvelle-Aquitaine
+# n'y figure qu'à la marge (25 opérations), et Bretagne (3 opérations) en est sortie à son
+# tour depuis l'export officiel data.bretagne.bzh. Seul le PON FSE reste hors passe : ses
+# opérations couvrent sept programmes distincts à ventiler, pas un seul périmètre régional
+# (#95, point 3). None si le fichier est absent (gitignoré, non régénérable sans le XLSX
+# source) : la page se rabat alors sur le sous-comptage Synergie plutôt que de planter.
 SOURCE_HORS_SYNERGIE = {
     "Normandie": SOURCE_NORMANDIE_2014_2020,
     "Nouvelle-Aquitaine": SOURCE_NOUVELLE_AQUITAINE_2014_2020,
+    "Bretagne": SOURCE_BRETAGNE_2014_2020,
 }
 data_hors_synergie = {
     "Normandie": load_data_2014_2020_normandie(),
     "Nouvelle-Aquitaine": load_data_2014_2020_nouvelle_aquitaine(),
+    "Bretagne": load_data_2014_2020_bretagne(),
 }
 
 # Fonds et régions viennent des agrégats de la période : six fonds ici (FEDER,
@@ -622,6 +627,8 @@ with tab_pilotage:
             st.caption(MENTION_FONDS_HORS_RAPPROCHEMENT)
             if fonds_fusionnes:
                 st.caption(MENTION_REACT_EU_FONDU)
+            if perimetre == "Bretagne" and "FSE" in fonds_rapprochables:
+                st.caption(MENTION_BRETAGNE_FSE_GRANULARITE)
 
             part_react_eu = load_programme_detail_2014_2020()["react_eu"].get(perimetre, {})
             part_react_eu = {f: v for f, v in part_react_eu.items() if f in fonds_rapprochables}

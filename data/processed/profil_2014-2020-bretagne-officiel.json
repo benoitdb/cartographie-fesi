@@ -1,0 +1,175 @@
+{
+  "source_id": "2014-2020-bretagne-officiel",
+  "source_label": "Bretagne (hors Synergie, export officiel data.bretagne.bzh)",
+  "periode": "2014-2020",
+  "fichier_source": "bretagne_14-20_feder-fse_beneficiaires.xlsx",
+  "date_source": "2024-02-12",
+  "date_generation": "2026-08-26",
+  "profil": {
+    "volumetrie": {
+      "operations": 1038,
+      "colonnes": 26
+    },
+    "completude": {
+      "numero_operation": {
+        "libelle": "No Dossier",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "programme": {
+        "libelle": "Libellé programme",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "beneficiaire": {
+        "libelle": "Bénéficiaire",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "fonds": {
+        "libelle": "Fonds",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "region": {
+        "libelle": "Région",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "departement": {
+        "libelle": "Code Postal",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "dimension_thematique": {
+        "libelle": "Domaine d'intervention",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "montant_ue": {
+        "libelle": "Montant UE",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      },
+      "depenses": {
+        "libelle": "Cout total de l'opération",
+        "remplis": 1038,
+        "manquants": 0,
+        "taux": 100.0
+      }
+    },
+    "par_fonds": [
+      {
+        "fonds": "FEDER",
+        "nb": 1031,
+        "montant_ue": 285254819.3792,
+        "part_nb": 99.3,
+        "part_montant": 80.5
+      },
+      {
+        "fonds": "FSE",
+        "nb": 7,
+        "montant_ue": 69174205.5,
+        "part_nb": 0.7,
+        "part_montant": 19.5
+      }
+    ],
+    "programmes": {
+      "distincts": 2,
+      "top": [
+        {
+          "valeur": "Programme opérationnel Bretagne FEDER 2014-2020",
+          "nb": 1031
+        },
+        {
+          "valeur": "Programme opérationnel Bretagne FSE 2014-2020",
+          "nb": 7
+        }
+      ]
+    },
+    "regions": {
+      "colonne_remplie": 1038,
+      "taux_colonne_remplie": 100.0,
+      "valeurs_distinctes": 1,
+      "top": [
+        {
+          "valeur": "Bretagne",
+          "nb": 1038
+        }
+      ],
+      "manquantes_par_fonds": []
+    },
+    "dimension_thematique": {
+      "libelle": "Domaine d'intervention",
+      "taux_remplie": 100.0,
+      "distincts": 39,
+      "top": [
+        {
+          "valeur": "058-Infrastructures de recherche et d'innovation (publiques)",
+          "nb": 198
+        },
+        {
+          "valeur": "062-Transfert de technologies et coopération entre universités et entreprises, principalement au profit des PME",
+          "nb": 110
+        },
+        {
+          "valeur": "054-Infrastructures de logement",
+          "nb": 97
+        },
+        {
+          "valeur": "014-Rénovation en vue d'accroître l'efficacité énergétique du parc de logements existant, projets de démonstration et actions de soutien",
+          "nb": 89
+        },
+        {
+          "valeur": "060-Activités de recherche et d'innovation dans les centres de recherche publics et les centres de compétence, y compris la mise en réseau",
+          "nb": 72
+        },
+        {
+          "valeur": "048-TIC: Autres types d'infrastructures TIC/ressources informatiques à grande échelle/ équipements (y compris les infrastructures en ligne, les centres de données et les capteurs; également lorsqu",
+          "nb": 64
+        },
+        {
+          "valeur": "001-Investissement productif générique dans les petites et moyennes entreprises («PME»)",
+          "nb": 62
+        },
+        {
+          "valeur": "036-Transports multimodaux",
+          "nb": 55
+        },
+        {
+          "valeur": "061-Activités de recherche et d'innovation dans les centres de recherche privés, y compris la mise en réseau",
+          "nb": 52
+        },
+        {
+          "valeur": "080-Services et applications en matière d'inclusion en ligne, d'accessibilité en ligne, d'apprentissage et d'éducation en ligne, culture numérique",
+          "nb": 46
+        }
+      ]
+    },
+    "montants": {
+      "montant_ue_total": 354429024.8792,
+      "depenses_total": 1244315006.0,
+      "cofinancement_global": 28.5,
+      "montants_ue_negatifs": 0
+    },
+    "cle": {
+      "colonne": "No Dossier",
+      "distincts": 1038,
+      "doublons": 0
+    },
+    "pays": [
+      {
+        "valeur": "France",
+        "nb": 1038
+      }
+    ]
+  }
+}

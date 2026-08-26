@@ -67,6 +67,9 @@ def donnees_fixture(monkeypatch):
         FIXTURE / "data_2014-2020_nouvelle_aquitaine.json",
     )
     monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_BRETAGNE_PATH", FIXTURE / "data_2014-2020_bretagne_officiel.json"
+    )
+    monkeypatch.setattr(
         data_loader, "BENEFICIAIRES_FUZZY_PATH", FIXTURE / "beneficiaires_fuzzy.json"
     )
     monkeypatch.setattr(
@@ -175,13 +178,14 @@ def test_pilotage_affiche_sur_une_region_couverte_par_synergie(donnees_fixture):
     assert "REACT-EU" in captions
 
 
-@pytest.mark.parametrize("perimetre", ["Bretagne", "Ensemble national"])
-def test_pilotage_masque_sur_les_perimetres_toujours_hors_synergie(perimetre, donnees_fixture):
+@pytest.mark.parametrize("perimetre", ["Ensemble national", "Volet national"])
+def test_pilotage_masque_sur_les_perimetres_agreges(perimetre, donnees_fixture):
     """Masqué **avec son explication**, et sans jamais afficher de taux : un 0 % ou un
     taux calculé sur un engagé partiel se lirait comme une sous-consommation alors que
-    c'est une donnée manquante (issues #68, #95). Bretagne et le volet/ensemble national
+    c'est une donnée manquante (issues #68, #95). Ensemble national et volet national
     n'ont pas de fichier régional propre à charger : leur masquage ne dépend d'aucune
-    disponibilité de fichier, contrairement à Normandie et Nouvelle-Aquitaine ci-dessous."""
+    disponibilité de fichier, contrairement à Normandie, Nouvelle-Aquitaine et Bretagne
+    ci-dessous."""
     at = _rendre_perimetre_2014_2020(perimetre)
     infos = " ".join(el.value for el in at.info)
     assert "Pas de taux de consommation sur ce périmètre" in infos
@@ -189,17 +193,27 @@ def test_pilotage_masque_sur_les_perimetres_toujours_hors_synergie(perimetre, do
     assert "Programmé 2014-2020" not in textes
 
 
-@pytest.mark.parametrize("perimetre", ["Normandie", "Nouvelle-Aquitaine"])
+@pytest.mark.parametrize("perimetre", ["Normandie", "Nouvelle-Aquitaine", "Bretagne"])
 def test_pilotage_affiche_sur_les_perimetres_avec_fichier_regional(perimetre, donnees_fixture):
-    """Depuis #95, ces deux périmètres sont pilotés depuis leur propre fichier régional
+    """Depuis #95, ces trois périmètres sont pilotés depuis leur propre fichier régional
     (fixture committée ici) plutôt que masqués : c'est le changement de comportement que
     cette issue livre. Normandie, en particulier, était même absente du sélecteur avant
-    #95 (absente de `aggregates.by_region` de Synergie)."""
+    #95 (absente de `aggregates.by_region` de Synergie) ; Bretagne l'a rejoint depuis
+    l'export officiel data.bretagne.bzh."""
     at = _rendre_perimetre_2014_2020(perimetre)
     textes = " ".join(el.value for el in at.markdown)
     assert "Programmé 2014-2020" in textes
     infos = " ".join(el.value for el in at.info)
     assert "Pas de taux de consommation sur ce périmètre" not in infos
+
+
+def test_bretagne_fse_signale_sa_granularite(donnees_fixture):
+    """Le FSE breton dépasse son enveloppe (111 %) sans être une surconsommation : sept
+    marchés de formation agrégés, pas des opérations unitaires (#95, point 2). La mention
+    doit accompagner le taux plutôt que le laisser se lire comme un vrai dépassement."""
+    at = _rendre_perimetre_2014_2020("Bretagne")
+    captions = " ".join(el.value for el in at.caption)
+    assert "Le FSE breton dépasse son enveloppe" in captions
 
 
 def test_normandie_disparait_du_selecteur_si_son_fichier_est_absent(donnees_fixture, monkeypatch):
@@ -233,6 +247,25 @@ def test_pilotage_masque_sur_nouvelle_aquitaine_si_son_fichier_est_absent(donnee
     st.cache_data.clear()
 
     at = _rendre_perimetre_2014_2020("Nouvelle-Aquitaine")
+    infos = " ".join(el.value for el in at.info)
+    assert "Pas de taux de consommation sur ce périmètre" in infos
+    textes = " ".join(el.value for el in at.markdown)
+    assert "Programmé 2014-2020" not in textes
+
+
+def test_pilotage_masque_sur_bretagne_si_son_fichier_est_absent(donnees_fixture, monkeypatch):
+    """Même repli que Nouvelle-Aquitaine : sans le fichier officiel data.bretagne.bzh,
+    Bretagne reste sélectionnable via ses 3 opérations marginales de Synergie (#68), mais
+    la page se rabat sur le masquage plutôt que d'afficher un taux sur cet engagé très
+    partiel (#95)."""
+    import streamlit as st
+
+    from utils import data_loader
+
+    monkeypatch.setattr(data_loader, "DATA_2014_2020_BRETAGNE_PATH", FIXTURE / "chemin_absent.json")
+    st.cache_data.clear()
+
+    at = _rendre_perimetre_2014_2020("Bretagne")
     infos = " ".join(el.value for el in at.info)
     assert "Pas de taux de consommation sur ce périmètre" in infos
     textes = " ".join(el.value for el in at.markdown)
