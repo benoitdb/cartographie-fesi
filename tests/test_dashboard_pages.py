@@ -59,6 +59,14 @@ def donnees_fixture(monkeypatch):
     monkeypatch.setattr(data_loader, "DATA_PATH", FIXTURE / "data.json")
     monkeypatch.setattr(data_loader, "DATA_2014_2020_PATH", FIXTURE / "data_2014-2020.json")
     monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_NORMANDIE_PATH", FIXTURE / "data_2014-2020_normandie.json"
+    )
+    monkeypatch.setattr(
+        data_loader,
+        "DATA_2014_2020_NOUVELLE_AQUITAINE_PATH",
+        FIXTURE / "data_2014-2020_nouvelle_aquitaine.json",
+    )
+    monkeypatch.setattr(
         data_loader, "BENEFICIAIRES_FUZZY_PATH", FIXTURE / "beneficiaires_fuzzy.json"
     )
     monkeypatch.setattr(
@@ -167,12 +175,64 @@ def test_pilotage_affiche_sur_une_region_couverte_par_synergie(donnees_fixture):
     assert "REACT-EU" in captions
 
 
-@pytest.mark.parametrize("perimetre", ["Bretagne", "Nouvelle-Aquitaine", "Ensemble national"])
-def test_pilotage_masque_sur_les_perimetres_hors_synergie(perimetre, donnees_fixture):
+@pytest.mark.parametrize("perimetre", ["Bretagne", "Ensemble national"])
+def test_pilotage_masque_sur_les_perimetres_toujours_hors_synergie(perimetre, donnees_fixture):
     """Masqué **avec son explication**, et sans jamais afficher de taux : un 0 % ou un
     taux calculé sur un engagé partiel se lirait comme une sous-consommation alors que
-    c'est une donnée manquante (issues #68, #95)."""
+    c'est une donnée manquante (issues #68, #95). Bretagne et le volet/ensemble national
+    n'ont pas de fichier régional propre à charger : leur masquage ne dépend d'aucune
+    disponibilité de fichier, contrairement à Normandie et Nouvelle-Aquitaine ci-dessous."""
     at = _rendre_perimetre_2014_2020(perimetre)
+    infos = " ".join(el.value for el in at.info)
+    assert "Pas de taux de consommation sur ce périmètre" in infos
+    textes = " ".join(el.value for el in at.markdown)
+    assert "Programmé 2014-2020" not in textes
+
+
+@pytest.mark.parametrize("perimetre", ["Normandie", "Nouvelle-Aquitaine"])
+def test_pilotage_affiche_sur_les_perimetres_avec_fichier_regional(perimetre, donnees_fixture):
+    """Depuis #95, ces deux périmètres sont pilotés depuis leur propre fichier régional
+    (fixture committée ici) plutôt que masqués : c'est le changement de comportement que
+    cette issue livre. Normandie, en particulier, était même absente du sélecteur avant
+    #95 (absente de `aggregates.by_region` de Synergie)."""
+    at = _rendre_perimetre_2014_2020(perimetre)
+    textes = " ".join(el.value for el in at.markdown)
+    assert "Programmé 2014-2020" in textes
+    infos = " ".join(el.value for el in at.info)
+    assert "Pas de taux de consommation sur ce périmètre" not in infos
+
+
+def test_normandie_disparait_du_selecteur_si_son_fichier_est_absent(donnees_fixture, monkeypatch):
+    """Normandie n'a **aucune** présence dans les agrégats Synergie (#68) : sans son
+    fichier régional, il n'y a rien à afficher pour elle et le sélecteur ne doit pas
+    proposer un périmètre qui produirait une page vide — comportement d'avant #95,
+    conservé comme repli plutôt que remplacé par un message d'erreur."""
+    import streamlit as st
+
+    from utils import data_loader
+
+    monkeypatch.setattr(data_loader, "DATA_2014_2020_NORMANDIE_PATH", FIXTURE / "chemin_absent.json")
+    st.cache_data.clear()
+
+    at = AppTest.from_file(str(PAGE_2014_2020), default_timeout=120).run()
+    assert "Normandie" not in at.selectbox(key="perimetre_2014_2020").options
+
+
+def test_pilotage_masque_sur_nouvelle_aquitaine_si_son_fichier_est_absent(donnees_fixture, monkeypatch):
+    """Contrairement à Normandie, Nouvelle-Aquitaine reste sélectionnable même sans son
+    fichier régional : elle figure, à la marge, dans les agrégats Synergie (#68). Sans le
+    fichier, la page doit alors se rabattre sur le masquage plutôt que d'afficher un taux
+    calculé sur cet engagé très partiel — exactement le piège que #95 corrige."""
+    import streamlit as st
+
+    from utils import data_loader
+
+    monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_NOUVELLE_AQUITAINE_PATH", FIXTURE / "chemin_absent.json"
+    )
+    st.cache_data.clear()
+
+    at = _rendre_perimetre_2014_2020("Nouvelle-Aquitaine")
     infos = " ".join(el.value for el in at.info)
     assert "Pas de taux de consommation sur ce périmètre" in infos
     textes = " ".join(el.value for el in at.markdown)

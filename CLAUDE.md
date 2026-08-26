@@ -17,19 +17,38 @@ issue #83) : un écran, un sélecteur de périmètre en barre latérale (ensembl
 national / volet national / une région), et non un sélecteur de période sur les
 pages 2021-2027. Il n'y a **pas** de comparaison inter-périodes à outiller — les
 logiques de programmation ont changé et REACT-EU a déformé la fin de période.
-Les libellés de colonnes sont adaptés au chargement par `utils/periodes.py` ; ce
-que la période n'a pas y est déclaré dans `CAPACITES` et retiré de l'écran, avec
-son explication. Les **plafonds de cofinancement de la période** y sont câblés
-depuis l'issue #81 (`categories_ue_2014_2020.json`, décision 2014/99), et le
-**pilotage** depuis l'issue #93 (dotations de l'Accord de partenariat 14-20 et
-maquettes REACT-EU transcrites). Reste absente la dimension thématique, que la
-source ne porte pas (#82).
+Les libellés de colonnes sont adaptés au chargement par `utils/periodes.py`, **par
+source et non par période** depuis l'issue #95 (`RENOMMAGES` indexé sur une clé de
+schéma — une période peut avoir plusieurs fichiers aux libellés différents, #68) ;
+ce que la période n'a pas y est déclaré dans `CAPACITES` et retiré de l'écran, avec
+son explication, et ce qu'une **source** 2014-2020 n'a pas en plus (`CAPACITES_SOURCE`
+— trajectoire, rattachement départemental). Les **plafonds de cofinancement de la
+période** y sont câblés depuis l'issue #81 (`categories_ue_2014_2020.json`, décision
+2014/99), et le **pilotage** depuis l'issue #93 (dotations de l'Accord de partenariat
+14-20 et maquettes REACT-EU transcrites). Reste absente la dimension thématique, que
+la source ne porte pas (#82).
 
-Le pilotage 14-20 n'est **pas** affiché partout : il est masqué, avec son
-explication à l'écran, sur les quatre périmètres que l'extraction Synergie ne
-couvre pas — Bretagne, Normandie, Nouvelle-Aquitaine et le volet national
-(#68, reprise suivie en #95). Un taux calculé sur un engagé partiel afficherait
-une donnée manquante comme une sous-consommation.
+**Normandie et Nouvelle-Aquitaine lisent leur propre fichier régional hors-Synergie**
+depuis l'issue #95, pas l'extraction Synergie qui les sous-comptait fortement
+(Normandie en était même absente — #68) : toute la page 5, pas seulement l'onglet
+Pilotage, bascule sur ce fichier pour ces deux périmètres (`utils/data_loader`,
+loaders tolérants à son absence — gitignorés comme `data_2014-2020.json`, la CI
+tourne sur un clone nu). Conséquence : leur millésime affiché est le leur, pas celui
+de Synergie (22/08/2025 et 31/05/2026 contre 30/08/2023), et deux capacités leur
+manquent en propre — pas de date de programmation (trajectoire retirée, jamais
+remplacée par la date de début, qui daterait autre chose) et, pour
+Nouvelle-Aquitaine seule, ni code postal ni département (carte départementale
+retirée). Bretagne et le programme opérationnel national FSE restent hors passe :
+priorité donnée aux deux périmètres dont l'écart avec Synergie était le plus
+trompeur à l'écran (Normandie invisible du sélecteur, Nouvelle-Aquitaine visible
+mais à un montant sans rapport — 1,2 M€ affichés contre 1 010 M€ d'engagé réel).
+
+Le pilotage 14-20 n'est donc plus masqué que sur **Bretagne** et sur les périmètres
+agrégés (« Ensemble national », « Volet national ») — l'extraction Synergie ne les
+couvre pas (#68, reprise suivie en #95). Un taux calculé sur un engagé partiel
+afficherait une donnée manquante comme une sous-consommation. Normandie et
+Nouvelle-Aquitaine retombent sur ce même masquage si leur fichier régional est
+absent du poste (repli, pas un cas d'erreur).
 
 **`main` est la référence** depuis la fusion de `streamlit-dashboard`
 (PR #49, 2026-08-20) : elle porte le dashboard, ce fichier et les tests. Partir

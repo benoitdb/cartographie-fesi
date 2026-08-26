@@ -7,8 +7,10 @@ données engagées — pendant de `programme_totals.py` pour la période précé
 - `data/processed/programme_totals_2014_2020.json` : {région: {fonds: montant UE}}, même
   forme que `programme_totals.json`, directement consommable par le pilotage ;
 - `data/processed/programme_detail_2014_2020.json` : ce que le premier agrège et qu'on
-  veut pouvoir montrer à part (part REACT-EU, contrepartie FSE de l'IEJ) — fichier séparé
-  pour ne rien changer à la forme du premier, même choix qu'en 2021-2027.
+  veut pouvoir montrer à part (part REACT-EU, contrepartie FSE de l'IEJ), plus la table
+  CCI → libellé de programme dont le dashboard a besoin pour nommer les programmes des
+  sources qui ne portent que leur code (issue #95) — fichier séparé pour ne rien changer
+  à la forme du premier, même choix qu'en 2021-2027.
 
 Aucun appel réseau, aucune lecture du XLSX : dérivé uniquement de `reference/`, déjà
 committé. Peut être relancé à volonté.
@@ -41,6 +43,7 @@ from reference.programmes_2014_2020 import (
     ALLOCATION_SPECIFIQUE_IEJ,
     CONTREPARTIE_FSE_IEJ,
     DOTATIONS,
+    PROGRAMMES,
     programme,
 )
 from reference.react_eu_2014_2020 import MAPPING_FONDS_DONNEES, MAQUETTES
@@ -100,6 +103,14 @@ def calculer():
         # Contrepartie FSE de l'IEJ, ajoutée à l'enveloppe IEJ et retranchée de
         # l'enveloppe FSE de la même région.
         "contrepartie_fse_iej": dict(contreparties),
+        # CCI -> libellé de programme, pour les sources qui ne nomment leurs programmes
+        # que par leur code : le fichier régional Nouvelle-Aquitaine porte
+        # `2014FR16M0OP001` là où Synergie écrit « Programme opérationnel régional... »
+        # (issue #95). Sans cette table le dashboard afficherait trois codes CCI dans
+        # sa liste de programmes, ce qui n'apprend rien à l'écran. Les libellés sont
+        # ceux de l'Accord de partenariat, seule transcription de référence ici — ils
+        # diffèrent parfois de ceux de Synergie, cf. docstring de `programmes_2014_2020`.
+        "libelles_programmes": {p.cci: p.nom for p in PROGRAMMES},
     }
     return {r: dict(v) for r, v in totaux.items()}, detail
 

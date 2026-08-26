@@ -11,6 +11,20 @@ chargement** : `normaliser_operations` renomme les colonnes équivalentes vers l
 libellé canonique du dashboard, et `CAPACITES` dit ce que la période **n'a pas**,
 pour que la page en retire les blocs correspondants au lieu de les afficher vides.
 
+Depuis l'issue #95, la normalisation se fait **par source et non par période** :
+Normandie et Nouvelle-Aquitaine sont de la période 2014-2020 mais chacune son
+propre fichier hors-Synergie, aux libellés qui n'ont rien à voir ni avec Synergie
+ni entre eux (l'un est franco-anglais bilingue, l'autre tout en anglais). Une table
+indexée par période aurait donc dû choisir entre les trois jeux de libellés pour
+une seule clé `"2014-2020"` ; `RENOMMAGES` est donc indexé par une clé de **source**
+— celle du schéma correspondant dans `data-pipeline/schema_source.SCHEMAS`, que ce
+module ne peut pas importer (voir plus bas) mais dont les tests vérifient
+l'alignement. `CAPACITES`, elle, reste indexée par **période** : ce qu'une période
+permet d'afficher (dimension thématique, plafonds…) ne dépend pas de la source
+choisie pour un périmètre donné. Ce que la source ne porte pas *en plus* de ce que
+la période ne porte pas (pas de date de programmation ni de code postal pour ces
+deux fichiers) est déclaré à part, dans `CAPACITES_SOURCE`.
+
 Deux pièges que ce module ne masque pas, et ne doit pas masquer :
 
 1. **Renommer n'est pas rendre équivalent.** En 2014-2020 le montant est celui
@@ -25,7 +39,7 @@ Deux pièges que ce module ne masque pas, et ne doit pas masquer :
    région, et toute comparaison entre régions ou entre périodes, doit porter
    `AVERTISSEMENT_PERIMETRE`.
 
-La table `COLONNES_EQUIVALENTES` duplique une information qui vit déjà dans
+La table `COLONNES_PAR_SOURCE` duplique une information qui vit déjà dans
 `data-pipeline/schema_source.py` — le dashboard n'importe pas le pipeline. C'est
 `tests/test_periodes.py` qui garde les deux alignées : un renommage de colonne
 dans le schéma sans report ici fait rougir la suite, au lieu de produire une
@@ -35,28 +49,126 @@ page vide en silence.
 PERIODE_2021_2027 = "2021-2027"
 PERIODE_2014_2020 = "2014-2020"
 
-# clé sémantique -> (libellé 2021-2027, libellé 2014-2020). Le libellé 2021-2027
-# est le libellé **canonique** du dashboard, celui vers lequel on normalise —
-# non parce qu'il serait meilleur, mais parce que c'est celui que le code
-# existant lit déjà.
-COLONNES_EQUIVALENTES = {
-    "libelle_prog": ("Libellé Programme", "Libellé programme"),
+# Clés de source, alignées sur celles de `data-pipeline/schema_source.SCHEMAS` —
+# une source peut avoir plusieurs fichiers par période (issue #68), le schéma
+# comme la normalisation des libellés se font donc à cette maille, pas à celle
+# de la période.
+SOURCE_2021_2027 = "2021-2027"
+SOURCE_SYNERGIE_2014_2020 = "2014-2020"
+SOURCE_NORMANDIE_2014_2020 = "2014-2020-normandie"
+SOURCE_NOUVELLE_AQUITAINE_2014_2020 = "2014-2020-nouvelle-aquitaine"
+
+# clé sémantique -> libellé **canonique** du dashboard, celui de 2021-2027 — non
+# parce qu'il serait meilleur, mais parce que c'est celui que le code existant lit
+# déjà. Toutes les sources s'y ramènent.
+COLONNES_CANONIQUES = {
+    "libelle_prog": "Libellé Programme",
     # Aucun code du dashboard ne lit le numéro CCI à ce jour : déclaré quand même,
     # parce qu'une divergence de casse non normalisée ne se manifeste que le jour
     # où quelqu'un l'utilise, et par une colonne vide plutôt que par une erreur.
-    "numcci": ("NUMCCI", "NumCCI"),
-    "depenses": ("Total des dépenses éligibles", "Total des dépenses éligibles programmées"),
-    "montant_ue": ("Montant UE", "Montant UE programmé"),
+    "numcci": "NUMCCI",
+    "numero_op": "Numéro Opération",
+    "depenses": "Total des dépenses éligibles",
+    "montant_ue": "Montant UE",
+    "nom_benef": "Nom du bénéficiaire",
+    "intitule_proj": "Intitulé du projet",
+    "fonds": "Fonds",
+    "taux_cofinance": "Taux de cofinancement",
+    "cp_beneficiaire": "Code postal du bénéficiaire",
+    "date_debut": "Date de début de l'opération",
+    "date_fin": "Date de fin de l'opération",
+    "region": "Région de l'opération",
+    "pays": "Pays",
+}
+
+# clé sémantique -> libellé réel de la source, pour les seules clés dont le
+# libellé **diverge** du canonique — une source qui le partage déjà n'a rien à
+# renommer (cas de Synergie sur nom_benef/intitule_proj/fonds/dates : mêmes
+# libellés qu'en 2021-2027).
+COLONNES_PAR_SOURCE = {
+    SOURCE_2021_2027: {},
+    SOURCE_SYNERGIE_2014_2020: {
+        "libelle_prog": "Libellé programme",
+        "numcci": "NumCCI",
+        "depenses": "Total des dépenses éligibles programmées",
+        "montant_ue": "Montant UE programmé",
+    },
+    # Fichier bilingue franco-anglais (issue #68) : seuls num CCI et taux de
+    # cofinancement n'ont pas d'équivalent — ce dernier existe déjà en clair,
+    # contrairement à Synergie qui ne le porte pas (voir normaliser_operations).
+    SOURCE_NORMANDIE_2014_2020: {
+        "libelle_prog": "Libellé programme",
+        "numero_op": "n° Dossier",
+        "intitule_proj": "Intitulé du projet - Operation name",
+        "nom_benef": "Nom du bénéficiaire - Beneficiary name",
+        "cp_beneficiaire": "CP / zip code",
+        "depenses": "Total des dépenses éligibles - Total eligible costs",
+        "montant_ue": "Montant UE programmé",
+        "taux_cofinance": "taux de cofinancement UE - EU co-financing rate",
+        "date_debut": "date début op. / start",
+        "date_fin": "date fin d'op. / end",
+        "fonds": "Fond",
+        "region": "Région",
+    },
+    # Fichier tout en anglais (issue #68). `libelle_prog` y est un code CCI, pas
+    # un libellé — voir `appliquer_libelles_programmes` pour sa traduction, faite
+    # à part de la normalisation des colonnes.
+    SOURCE_NOUVELLE_AQUITAINE_2014_2020: {
+        "libelle_prog": "Colonne à masquer lors de la diffusion",
+        "numero_op": "Operation number",
+        "nom_benef": "Beneficiary name",
+        "intitule_proj": "Operation name",
+        "fonds": "Funds",
+        "date_debut": "Operation start date",
+        "date_fin": "Operation end date",
+        "depenses": "Total amount programmed",
+        "montant_ue": "Amount co-financing European Union",
+        "taux_cofinance": "Union co-financing rate (%)",
+        "region": "Région",
+        "pays": "Country",
+    },
 }
 
 RENOMMAGES = {
-    PERIODE_2014_2020: {
-        libelle_1420: libelle_2127
-        for libelle_2127, libelle_1420 in COLONNES_EQUIVALENTES.values()
-        if libelle_1420 != libelle_2127
-    },
-    PERIODE_2021_2027: {},
+    source: {libelle_source: COLONNES_CANONIQUES[cle] for cle, libelle_source in cols.items()}
+    for source, cols in COLONNES_PAR_SOURCE.items()
 }
+
+# Ce qu'une **source** 2014-2020 ne porte pas, en plus de ce que la **période** ne
+# porte pas (#95). Contrairement à `CAPACITES`, ceci ne retire pas un bloc de la
+# page mais un onglet/sous-bloc précis, câblé à la main page par page — trop peu
+# de cas pour justifier le mécanisme générique d'`absences_expliquees`.
+CAPACITES_SOURCE = {
+    SOURCE_SYNERGIE_2014_2020: {"trajectoire": True, "departement": True},
+    # Pas de `Date de programmation` : `pilotage_disponible` reste vrai (l'engagé
+    # est bien comparable à l'enveloppe, cf. PERIMETRES_SANS_PILOTAGE), seule la
+    # trajectoire dans le temps disparaît. Ne surtout pas la reconstruire depuis
+    # la date de **début** de l'opération, qui date autre chose (voir la mise en
+    # garde de MENTION_DEPASSEMENT_2014_2020 et du module pilotage).
+    SOURCE_NORMANDIE_2014_2020: {"trajectoire": False, "departement": True},
+    # Ni code postal ni département dans ce fichier (voir COLONNES_PAR_SOURCE) :
+    # aucun rattachement possible, même approché, à un département.
+    SOURCE_NOUVELLE_AQUITAINE_2014_2020: {"trajectoire": False, "departement": False},
+}
+
+
+def capacites_source(source):
+    """Ce qu'une source 2014-2020 hors période permet d'afficher, ou tout permet
+    si la source n'est pas déclarée (Synergie via PERIODE_2014_2020, 2021-2027) —
+    ces sources n'ont pas de restriction propre au-delà de `CAPACITES`."""
+    return CAPACITES_SOURCE.get(source, {"trajectoire": True, "departement": True})
+
+
+def appliquer_libelles_programmes(operations, libelles_programmes):
+    """Remplace un code CCI de programme par son libellé humain (issue #95, étape 1).
+
+    Nouvelle-Aquitaine ne nomme ses programmes que par ce code — `libelles_programmes`
+    vient de `programme_detail_2014_2020.json` (clé `libelles_programmes`). Une opération
+    dont le code n'y figure pas garde son code tel quel plutôt que de disparaître."""
+    return [
+        {**op, "Libellé Programme": libelles_programmes.get(op["Libellé Programme"], op["Libellé Programme"])}
+        for op in operations
+    ]
 
 MONTANT_UE = "Montant UE"
 DEPENSES = "Total des dépenses éligibles"
@@ -121,6 +233,18 @@ AVERTISSEMENT_PERIMETRE = (
     "sont publiées à part et consultables sur la page « Validation de la source », mais "
     "ne sont pas fusionnées ici (issue #68). Les totaux par région, et toute comparaison "
     "entre régions ou entre périodes, sous-comptent donc ces quatre périmètres."
+)
+
+# À afficher **à la place** d'AVERTISSEMENT_PERIMETRE sur Normandie et Nouvelle-Aquitaine
+# (issue #95) : ces deux périmètres ne lisent plus l'extraction Synergie, qui les
+# sous-comptait fortement (Normandie en est même absente), mais leur propre fichier
+# régional hors-Synergie — complet sur leur périmètre, incomparable au reste de la page.
+MENTION_SOURCE_REGIONALE = (
+    "**Ce périmètre est lu depuis son propre fichier régional**, et non depuis l'extraction "
+    "Synergie qui le sous-comptait fortement (issue #68). Son millésime, affiché en pied de "
+    "barre latérale, est donc propre à ce fichier et distinct de celui de Synergie affiché "
+    "sur les autres périmètres de cette page. Le détail des deux sources reste consultable "
+    "sur la page « Validation de la source »."
 )
 
 # Pourquoi chaque capacité manque, à afficher à l'utilisateur. La page dérive
@@ -211,26 +335,32 @@ MENTION_DEPASSEMENT_2014_2020 = (
     "REACT-EU FEDER certifiés atteignent ou dépassent leur maquette."
 )
 
-# Les quatre périmètres où le pilotage reste masqué : leur engagé vient d'une extraction
-# Synergie qui ne les couvre pas (#68), quand leur enveloppe, elle, est complète. Le taux
-# affiché serait une donnée manquante déguisée en sous-consommation.
+# Le seul périmètre où le pilotage reste masqué depuis #95 : son engagé ne vient que de
+# l'extraction Synergie, qui ne le couvre pas (#68), quand son enveloppe, elle, est
+# complète. Le taux affiché serait une donnée manquante déguisée en sous-consommation.
+# Normandie et Nouvelle-Aquitaine en sont sorties : leur engagé vient désormais de leur
+# propre fichier régional, complet sur leur périmètre (voir data_loader et la page).
 #
-# « Ensemble national » et « Volet national » en font partie pour la même raison : le
-# programme opérationnel national FSE pèse 4,1 Md€ d'engagements absents de Synergie.
+# « Ensemble national » et « Volet national » restent masqués pour une raison voisine mais
+# distincte, portée par le paramètre `est_national` plutôt que par cette liste : le
+# programme opérationnel national FSE pèse 4,1 Md€ d'engagements absents de Synergie, et
+# aucun fichier régional ne comble ce trou-là.
 #
 # Ce masquage est une mesure d'attente, pas une propriété de la période — d'où une
 # constante ici plutôt qu'une capacité dans CAPACITES : ce qui manque n'est pas la donnée
 # de référence (elle est transcrite) mais un engagé comparable. Reprise suivie en #95.
-PERIMETRES_SANS_PILOTAGE = frozenset({"Bretagne", "Normandie", "Nouvelle-Aquitaine"})
+PERIMETRES_SANS_PILOTAGE = frozenset({"Bretagne"})
 
 MENTION_PILOTAGE_MASQUE = (
     "**Pas de taux de consommation sur ce périmètre.** Son enveloppe programmée est connue, "
     "mais l'engagé qu'on lui opposerait vient de l'extraction Synergie, qui ne couvre pas "
-    "les autorités de gestion concernées — programme opérationnel national FSE, "
-    "Nouvelle-Aquitaine, Bretagne, Normandie (issue #68). Leurs opérations sont publiées à "
-    "part et visibles sur la page « Validation de la source », mais ne sont pas fusionnées "
-    "ici : un taux calculé sans elles afficherait une donnée manquante comme une "
-    "sous-consommation. La reprise de ce point est suivie en issue #95."
+    "toutes les autorités de gestion de la période — programme opérationnel national FSE et "
+    "Bretagne (issue #68). Leurs opérations sont publiées à part et visibles sur la page "
+    "« Validation de la source », mais ne sont pas fusionnées ici : un taux calculé sans "
+    "elles afficherait une donnée manquante comme une sous-consommation. Normandie et "
+    "Nouvelle-Aquitaine, elles, sont pilotées depuis leur propre fichier régional depuis "
+    "#95. La reprise de ce point pour Bretagne et le volet national reste suivie en "
+    "issue #95."
 )
 
 
@@ -336,22 +466,28 @@ def _taux(montant_ue, depenses):
     return montant_ue / depenses
 
 
-def normaliser_operations(operations, periode):
+def normaliser_operations(operations, source):
     """Opérations aux libellés canoniques du dashboard.
+
+    `source` est une clé de `RENOMMAGES` (`SOURCE_2021_2027`, `SOURCE_SYNERGIE_2014_2020`,
+    `SOURCE_NORMANDIE_2014_2020`, `SOURCE_NOUVELLE_AQUITAINE_2014_2020`) — pas une période :
+    plusieurs fichiers d'une même période peuvent avoir des libellés différents (#68, #95).
+    `PERIODE_2014_2020` vaut la même chaîne que `SOURCE_SYNERGIE_2014_2020` : le fichier
+    Synergie reste utilisable indifféremment sous l'un ou l'autre nom.
 
     Deux transformations, et rien d'autre — aucune valeur n'est inventée :
 
     - les colonnes équivalentes sont **renommées** (`RENOMMAGES`) ;
-    - le taux de cofinancement, colonne du fichier 2021-2027 mais **absente** du
-      fichier 2014-2020, est **dérivé** des deux montants quand il manque. Il
-      s'agit d'un simple quotient de deux colonnes présentes, pas d'une donnée
-      reconstituée.
+    - le taux de cofinancement, présent dans le fichier 2021-2027 et dans les fichiers
+      Normandie/Nouvelle-Aquitaine mais **absent** du fichier Synergie, est **dérivé** des
+      deux montants quand il manque. Il s'agit d'un simple quotient de deux colonnes
+      présentes, pas d'une donnée reconstituée.
 
     Les colonnes qui n'ont pas d'équivalent (objectif stratégique, objectif
     spécifique, type d'intervention) ne sont **pas** créées : c'est `CAPACITES`
     qui dit à la page de ne pas les demander.
     """
-    renommage = RENOMMAGES.get(periode, {})
+    renommage = RENOMMAGES.get(source, {})
     normalisees = []
     for op in operations:
         if renommage:
@@ -360,5 +496,12 @@ def normaliser_operations(operations, periode):
             op = dict(op)
         if TAUX_COFINANCEMENT not in op:
             op[TAUX_COFINANCEMENT] = _taux(op.get(MONTANT_UE), op.get(DEPENSES))
+        else:
+            # Le taux de Nouvelle-Aquitaine est une formule Excel (montant / dépenses),
+            # qui porte parfois `#DIV/0` en toutes lettres pour une dépense nulle — une
+            # chaîne d'erreur de tableur, pas un taux. La laisser telle quelle ferait
+            # basculer toute la colonne en dtype `object` au premier groupby en aval, une
+            # seule ligne fautive suffit (constaté sur `compute_cofinancement_table`).
+            op[TAUX_COFINANCEMENT] = op[TAUX_COFINANCEMENT] if isinstance(op[TAUX_COFINANCEMENT], (int, float)) else None
         normalisees.append(op)
     return normalisees
