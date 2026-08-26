@@ -35,6 +35,7 @@ from utils.data_loader import (
     load_data_2014_2020_bretagne,
     load_data_2014_2020_normandie,
     load_data_2014_2020_nouvelle_aquitaine,
+    load_data_2014_2020_pon_fse,
     load_dromcom_codes_postaux,
     load_dromcom_geojson,
     load_geojson,
@@ -62,14 +63,18 @@ from utils.periodes import (
     MENTION_PILOTAGE_MASQUE,
     MENTION_PLAFOND_PAR_AXE,
     MENTION_PLAFONDS_PERIODE,
+    MENTION_PON_FSE_NATIONAL,
+    MENTION_PON_FSE_REGIONAL,
     MENTION_PROVENANCE_ENVELOPPES,
     MENTION_REACT_EU_FONDU,
     MENTION_REGION_MIXTE,
     MENTION_SOURCE_REGIONALE,
     PERIODE_2014_2020,
+    REGIONS_PON_FSE_2014_2020,
     SOURCE_BRETAGNE_2014_2020,
     SOURCE_NORMANDIE_2014_2020,
     SOURCE_NOUVELLE_AQUITAINE_2014_2020,
+    SOURCE_PON_FSE_2014_2020,
     absences_expliquees,
     appliquer_libelles_programmes,
     capacites,
@@ -141,6 +146,13 @@ data_hors_synergie = {
     "Bretagne": load_data_2014_2020_bretagne(),
 }
 
+# PON FSE (issue #95, point 3) : contrairement aux trois fichiers ci-dessus, ne se
+# substitue à aucun périmètre — il en **fusionne** deux catégories dedans, filtré par
+# programme (REGIONS_PON_FSE_2014_2020) : les cinq PO FSE État des DROM rejoignent leur
+# région, PON FSE et PO IEJ national rejoignent le Volet national. None si le fichier est
+# absent (gitignoré), comme les trois autres.
+data_pon_fse = load_data_2014_2020_pon_fse()
+
 # Fonds et régions viennent des agrégats de la période : six fonds ici (FEDER,
 # FSE, IEJ, FEAD, FEDER REACT-EU, FEDER-FSE) contre trois en 2021-2027, et des
 # listes en dur les figeraient à ceux de l'autre période. Régions : union avec les
@@ -192,6 +204,23 @@ if lit_source_regionale:
         ops_fond_vide_normandie = [op for op in operations_regionales if not op.get(FONDS)]
     ops_fonds_regionaux = [op for op in operations_regionales if op.get(FONDS) in selected_fonds]
 
+ops_pon_fse_fonds = []
+if data_pon_fse is not None:
+    operations_pon_fse = normaliser_operations(data_pon_fse["operations"], SOURCE_PON_FSE_2014_2020)
+    ops_pon_fse_fonds = [op for op in operations_pon_fse if op.get(FONDS) in selected_fonds]
+
+# Ce périmètre reçoit-il des opérations PON FSE, et lesquelles — calculé avant le grand
+# if/elif ci-dessous pour être fusionné dans chaque branche concernée (Volet national, ou
+# une des cinq régions DROM) sans dupliquer la logique de routage.
+if perimetre == VOLET_NATIONAL:
+    ops_pon_fse_perimetre = [
+        op for op in ops_pon_fse_fonds if REGIONS_PON_FSE_2014_2020.get(op.get("Libellé Programme")) is None
+    ]
+else:
+    ops_pon_fse_perimetre = [
+        op for op in ops_pon_fse_fonds if REGIONS_PON_FSE_2014_2020.get(op.get("Libellé Programme")) == perimetre
+    ]
+
 # Catégorie de cohésion de la période, et le plafond de cofinancement qui en découle.
 # `.get` sur le périmètre : « Ensemble national » et « Volet national » ne sont pas des
 # régions, donc pas de catégorie et pas de plafond — c'est le comportement voulu, un
@@ -203,29 +232,36 @@ st.title(f"FESI 2014-2020 — {perimetre}")
 st.caption(MENTION_MONTANTS_PROGRAMMES)
 if lit_source_regionale:
     st.info(MENTION_SOURCE_REGIONALE)
+elif perimetre == VOLET_NATIONAL and ops_pon_fse_perimetre:
+    st.info(MENTION_PON_FSE_NATIONAL)
+elif ops_pon_fse_perimetre:
+    st.info(MENTION_PON_FSE_REGIONAL)
 elif not capa["perimetre_complet"]:
     st.warning(AVERTISSEMENT_PERIMETRE)
 
 if perimetre == ENSEMBLE_NATIONAL:
     ops_perimetre = ops_fonds
 elif perimetre == VOLET_NATIONAL:
-    ops_perimetre = [op for op in ops_fonds if op.get("is_national")]
+    ops_perimetre = [op for op in ops_fonds if op.get("is_national")] + ops_pon_fse_perimetre
 elif lit_source_regionale:
     # Le fichier régional ne couvre que ce périmètre par construction (issue #68) : pas
     # besoin du filtre regions_modernes/is_interregional/is_national de la branche Synergie
-    # ci-dessous, il ne changerait rien ici.
+    # ci-dessous, il ne changerait rien ici. Ces trois régions n'ont pas de PO FSE État
+    # dans le fichier PON FSE (ops_pon_fse_perimetre est vide) : rien à y fusionner.
     ops_perimetre = ops_fonds_regionaux
 else:
     # Même découpage que la Vue Régionale 2021-2027 : les opérations
     # interrégionales et nationales sont exclues du total d'une région, sinon
     # elles seraient comptées dans plusieurs totaux censés s'additionner.
+    # `ops_pon_fse_perimetre` n'ajoute quelque chose que pour les cinq DROM dont le PO FSE
+    # État est routé ici (issue #95, point 3) : vide pour toute autre région.
     ops_perimetre = [
         op
         for op in ops_fonds
         if op.get("regions_modernes") == [perimetre]
         and not op.get("is_interregional")
         and not op.get("is_national")
-    ]
+    ] + ops_pon_fse_perimetre
 
 if not ops_perimetre:
     st.info("Aucune opération sur ce périmètre avec les fonds sélectionnés.")
@@ -577,14 +613,23 @@ with tab_pilotage:
     # être chargé (issue #95) : sans lui, l'engagé disponible resterait celui, très partiel,
     # de Synergie — `pilotage_disponible` seule ne le sait pas, elle ne connaît que la
     # période, pas la disponibilité d'un fichier sur ce poste.
+    #
+    # « Ensemble national » reste masqué (aucune de ses régions hors-Synergie n'y est
+    # fusionnée, seul le fait pour son propre périmètre — voir ops_perimetre plus haut) ;
+    # « Volet national » ne l'est plus depuis que PON FSE y est fusionné (issue #95, point
+    # 3) : c'était la seule pièce manquante pour lui opposer un engagé complet, comme
+    # l'annonçait déjà MENTION_PILOTAGE_MASQUE ("la reprise de ce point... suivie en #95").
     perimetre_pilotable = pilotage_disponible(
-        perimetre, est_national=perimetre in (ENSEMBLE_NATIONAL, VOLET_NATIONAL)
+        perimetre, est_national=perimetre == ENSEMBLE_NATIONAL
     ) and not (perimetre in SOURCE_HORS_SYNERGIE and not lit_source_regionale)
 
     if not perimetre_pilotable:
         st.info(MENTION_PILOTAGE_MASQUE)
     else:
-        enveloppes_perimetre = load_programme_totals_2014_2020().get(perimetre, {})
+        # Les JSON d'enveloppes indexent les CCI sans région sous la clé "national", pas le
+        # libellé de ce périmètre (même convention que Page 2, Volet National 2021-2027).
+        cle_enveloppe = "national" if perimetre == VOLET_NATIONAL else perimetre
+        enveloppes_perimetre = load_programme_totals_2014_2020().get(cle_enveloppe, {})
         # Une enveloppe dont aucun libellé de fonds ne porte d'opération ici rejoint son
         # fonds d'origine : sans ça, la métropole afficherait un FEDER REACT-EU à 0 % et
         # un FEDER gonflé de la même somme (voir la règle et ses chiffres dans periodes.py).
@@ -630,7 +675,7 @@ with tab_pilotage:
             if perimetre == "Bretagne" and "FSE" in fonds_rapprochables:
                 st.caption(MENTION_BRETAGNE_FSE_GRANULARITE)
 
-            part_react_eu = load_programme_detail_2014_2020()["react_eu"].get(perimetre, {})
+            part_react_eu = load_programme_detail_2014_2020()["react_eu"].get(cle_enveloppe, {})
             part_react_eu = {f: v for f, v in part_react_eu.items() if f in fonds_rapprochables}
             if part_react_eu:
                 detail = ", ".join(f"{f} {v / 1e6:,.1f} M€".replace(",", " ") for f, v in sorted(part_react_eu.items()))
@@ -658,6 +703,16 @@ with tab_pilotage:
                     st.plotly_chart(
                         build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
                         use_container_width=True,
+                    )
+                if ops_pon_fse_perimetre:
+                    # Voir MENTION_PON_FSE_REGIONAL/NATIONAL en haut de page : ce fichier n'a
+                    # pas de date de programmation, ses opérations disparaissent silencieusement
+                    # du groupby de build_trajectoire (NaT). Le rappeler ici, où le manque se
+                    # voit sans que le lecteur remonte au haut de page.
+                    st.caption(
+                        "La courbe de trajectoire n'inclut pas les opérations du programme "
+                        "opérationnel national FSE (pas de date de programmation) : elle sous-"
+                        "compte l'engagé réel affiché ci-dessus."
                     )
             else:
                 # Pas de `Date de programmation` dans ce fichier régional : la trajectoire
