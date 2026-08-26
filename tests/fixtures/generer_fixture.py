@@ -105,6 +105,25 @@ SOURCES_HORS_SYNERGIE = {
         # 849) : des tranches ciblées les couvrent toutes plutôt qu'un seul bloc.
         "tranches": [(0, 10), (340, 370), (680, 690), (845, 852)],
     },
+    # Un seul fichier mais sept programmes à router (issue #95, point 3) : une tranche par
+    # `Libellé_po` plutôt qu'un seul bloc, pour que chacun des cinq PO DROM et des deux
+    # programmes nationaux (PON FSE, PO IEJ) survive à l'échantillonnage. Index de première
+    # apparition de chaque programme dans le fichier réel, relevés une fois : PON FSE (0),
+    # PO IEJ (441), PO Guadeloupe (8013), PO Guyane (8376), PO Martinique (14365),
+    # PO Mayotte (14537), PO réunion (21961).
+    "2014-2020-pon-fse": {
+        "fichier": "data_2014-2020_pon_fse.json",
+        "schema": SCHEMAS["2014-2020-pon-fse"],
+        "tranches": [
+            (0, 10),
+            (441, 451),
+            (8013, 8023),
+            (8376, 8386),
+            (14365, 14375),
+            (14537, 14547),
+            (21961, 21971),
+        ],
+    },
 }
 
 

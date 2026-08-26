@@ -43,21 +43,35 @@ son premier fichier régional (europe.bzh, 2022-06-09) n'avait ni numéro de dos
 ni code postal exploitable, contrairement à l'export officiel data.bretagne.bzh qui
 l'a remplacé pour cet usage — resté ingéré à part et consultable sur la page
 « Validation de la source » sous son propre identifiant (`2014-2020-bretagne`), le
-temps de confirmer qu'il n'apporte plus rien. Seul le programme opérationnel national
-FSE reste hors passe : ses opérations couvrent sept programmes distincts à ventiler,
-pas un seul périmètre régional (#95, point 3).
+temps de confirmer qu'il n'apporte plus rien.
 
-Le pilotage 14-20 n'est donc plus masqué que sur les périmètres agrégés (« Ensemble
-national », « Volet national ») et sur le programme opérationnel national FSE —
-l'extraction Synergie ne les couvre pas (#68, reprise suivie en #95). Un taux calculé
-sur un engagé partiel afficherait une donnée manquante comme une sous-consommation.
-Normandie, Nouvelle-Aquitaine et Bretagne retombent sur ce même masquage si leur
-fichier régional est absent du poste (repli, pas un cas d'erreur). Le FSE breton
-affiche un taux au-dessus de 100 % (111 % au 12/02/2024) qui n'est pas une
-surconsommation mais un effet de granularité — ses sept lignes sont des marchés de
-formation du Conseil régional, pas des opérations unitaires (#95, point 2, non résolu
-par le changement de source) — signalé à l'écran plutôt que masqué, comme les autres
-dépassements de la période (REACT-EU Normandie, IEJ Nouvelle-Aquitaine).
+**Le fichier PON FSE (hors Synergie, #68) porte sept programmes distincts, routés
+chacun vers son périmètre depuis l'issue #95 (point 3)** — pas un seul périmètre
+régional comme les trois fichiers ci-dessus, d'où une fusion **additive** avec
+l'engagé Synergie plutôt qu'une substitution (`utils.periodes.REGIONS_PON_FSE_2014_2020`) :
+les cinq PO FSE État des DROM (Réunion, Guadeloupe, Martinique, Guyane, Mayotte)
+rejoignent l'engagé de leur région, PON FSE et PO IEJ national rejoignent le Volet
+national. Ce dernier arbitrage — les garder agrégés au national plutôt que ventilés
+par région — tient à leur dotation dans l'Accord de partenariat, une ligne
+**nationale unique**, distincte des dotations IEJ *régionales* que portent déjà les
+programmes FEDER-FSE gérés par les Conseils régionaux ; une vue par région de ces
+deux programmes (carte, engagé sans taux) reste possible mais n'est pas construite
+(issue #102). Mayotte n'a pas de PO FSE État séparé dans l'Accord (contrairement à
+Guyane/Martinique/Réunion) : son engagé PON FSE se compare à la ligne FSE de son
+programme combiné FEDER-FSE, seule dotation FSE que porte Mayotte.
+
+Le pilotage 14-20 n'est donc plus masqué que sur « Ensemble national » — l'extraction
+Synergie n'y fusionne aucune des trois régions hors-Synergie (#68). « Volet national »
+en est sorti depuis que PON FSE et IEJ national y sont fusionnés : c'était la seule
+pièce qui lui manquait. Un taux calculé sur un engagé partiel afficherait une donnée
+manquante comme une sous-consommation. Normandie, Nouvelle-Aquitaine et Bretagne
+retombent sur ce même masquage si leur fichier régional est absent du poste (repli,
+pas un cas d'erreur). Le FSE breton affiche un taux au-dessus de 100 % (111 % au
+12/02/2024) qui n'est pas une surconsommation mais un effet de granularité — ses sept
+lignes sont des marchés de formation du Conseil régional, pas des opérations
+unitaires (#95, point 2, non résolu par le changement de source) — signalé à l'écran
+plutôt que masqué, comme les autres dépassements de la période (REACT-EU Normandie,
+IEJ Nouvelle-Aquitaine).
 
 **`main` est la référence** depuis la fusion de `streamlit-dashboard`
 (PR #49, 2026-08-20) : elle porte le dashboard, ce fichier et les tests. Partir
@@ -109,7 +123,7 @@ racine pour les tests (`requirements-dev.txt`).
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
 
-- **Tests** : `venv/bin/python -m pytest -q` (333 tests, ~20 s). Ils tournent sur
+- **Tests** : `venv/bin/python -m pytest -q` (376 tests, ~40 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent les fixtures committées dans `tests/fixtures/` (**une par période** —

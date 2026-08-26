@@ -11,6 +11,7 @@ DATA_2014_2020_NOUVELLE_AQUITAINE_PATH = (
     REPO_ROOT / "data" / "processed" / "data_2014-2020_nouvelle_aquitaine.json"
 )
 DATA_2014_2020_BRETAGNE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020_bretagne_officiel.json"
+DATA_2014_2020_PON_FSE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020_pon_fse.json"
 GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.geojson"
 GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
@@ -99,6 +100,27 @@ def load_data_2014_2020_bretagne():
     if not DATA_2014_2020_BRETAGNE_PATH.exists():
         return None
     with open(DATA_2014_2020_BRETAGNE_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_data_2014_2020_pon_fse():
+    """Fichier programme opérationnel national FSE, hors extraction Synergie (issue #68).
+
+    Contrairement à Normandie/Nouvelle-Aquitaine/Bretagne, ce fichier ne couvre pas un
+    périmètre régional unique : il porte sept programmes distincts (`Libellé Programme`)
+    à ventiler — cinq PO FSE État des DROM vers leur région, PON FSE et PO IEJ national
+    agrégés au Volet national (issue #95, point 3 ; arbitrage détaillé dans
+    `utils.periodes.REGIONS_PON_FSE_2014_2020`). La page ne s'y substitue donc jamais
+    entièrement à un périmètre comme pour les trois fichiers régionaux : elle fusionne ses
+    opérations, filtrées par programme, à celles de Synergie.
+
+    Mêmes garanties que `load_data_2014_2020_normandie` : gitignoré, tolérant à son absence
+    (None). Libellés de colonnes propres à ce fichier : passer par
+    `utils.periodes.normaliser_operations(ops, periodes.SOURCE_PON_FSE_2014_2020)`."""
+    if not DATA_2014_2020_PON_FSE_PATH.exists():
+        return None
+    with open(DATA_2014_2020_PON_FSE_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

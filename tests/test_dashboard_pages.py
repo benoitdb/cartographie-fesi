@@ -70,6 +70,9 @@ def donnees_fixture(monkeypatch):
         data_loader, "DATA_2014_2020_BRETAGNE_PATH", FIXTURE / "data_2014-2020_bretagne_officiel.json"
     )
     monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_PON_FSE_PATH", FIXTURE / "data_2014-2020_pon_fse.json"
+    )
+    monkeypatch.setattr(
         data_loader, "BENEFICIAIRES_FUZZY_PATH", FIXTURE / "beneficiaires_fuzzy.json"
     )
     monkeypatch.setattr(
@@ -178,19 +181,86 @@ def test_pilotage_affiche_sur_une_region_couverte_par_synergie(donnees_fixture):
     assert "REACT-EU" in captions
 
 
-@pytest.mark.parametrize("perimetre", ["Ensemble national", "Volet national"])
-def test_pilotage_masque_sur_les_perimetres_agreges(perimetre, donnees_fixture):
+def test_pilotage_masque_sur_ensemble_national(donnees_fixture):
     """Masqué **avec son explication**, et sans jamais afficher de taux : un 0 % ou un
     taux calculé sur un engagé partiel se lirait comme une sous-consommation alors que
-    c'est une donnée manquante (issues #68, #95). Ensemble national et volet national
-    n'ont pas de fichier régional propre à charger : leur masquage ne dépend d'aucune
-    disponibilité de fichier, contrairement à Normandie, Nouvelle-Aquitaine et Bretagne
-    ci-dessous."""
-    at = _rendre_perimetre_2014_2020(perimetre)
+    c'est une donnée manquante (issues #68, #95). Contrairement à Volet national
+    ci-dessous, aucune des trois régions hors-Synergie (Normandie, Nouvelle-Aquitaine,
+    Bretagne) n'y est fusionnée : son masquage reste inconditionnel."""
+    at = _rendre_perimetre_2014_2020("Ensemble national")
     infos = " ".join(el.value for el in at.info)
     assert "Pas de taux de consommation sur ce périmètre" in infos
     textes = " ".join(el.value for el in at.markdown)
     assert "Programmé 2014-2020" not in textes
+
+
+def _programmes_affiches(at):
+    """La table « Programmes » de l'onglet Vue d'ensemble : présente sur tout périmètre,
+    à un index qui varie (Ensemble national affiche un tableau de classement des régions
+    juste avant). Sélectionnée par ses colonnes plutôt que par position."""
+    for df in at.dataframe:
+        if "Libellé Programme" in df.value.columns:
+            return set(df.value["Libellé Programme"])
+    raise AssertionError("Aucune table « Programmes » sur cette page")
+
+
+def test_pilotage_affiche_sur_volet_national_avec_pon_fse(donnees_fixture):
+    """Volet national n'est plus masqué depuis que PON FSE et PO IEJ national y sont
+    fusionnés (issue #95, point 3) : c'était la seule pièce qui manquait à un engagé
+    complet sur ce périmètre. Vérifie aussi que la clé d'enveloppe "national" (pas le
+    libellé "Volet national") est bien celle utilisée pour le rapprochement — un
+    mauvais mapping renverrait un dict vide et retomberait sur le message "aucune
+    enveloppe programmée" plutôt que sur un vrai taux."""
+    at = _rendre_perimetre_2014_2020("Volet national")
+    textes = " ".join(el.value for el in at.markdown)
+    assert "Programmé 2014-2020" in textes
+    infos = " ".join(el.value for el in at.info)
+    assert "Pas de taux de consommation sur ce périmètre" not in infos
+    assert "Aucun des fonds sélectionnés" not in infos
+    captions = " ".join(el.value for el in at.caption)
+    assert "programme opérationnel national FSE" in captions
+
+    # PON FSE est là, mais aucun des cinq PO DROM : ce sont eux qui doivent ventiler vers
+    # leur région, pas rejoindre ce périmètre agrégé (#95). Pas d'assertion sur le PO IEJ
+    # national : la fixture Synergie, stratifiée par région et non par fonds, ne contient
+    # par hasard aucune opération IEJ — son fonds n'apparaît donc pas dans le filtre Fonds
+    # de la page, et ses opérations PON FSE en sont écartées avec lui (comportement
+    # attendu du filtre, pas un défaut de routage — voir test_regions_pon_fse_route_les_
+    # sept_programmes dans test_periodes.py pour la couverture du PO IEJ national).
+    programmes = _programmes_affiches(at)
+    assert "Programme Opérationnel National FSE" in programmes
+    assert not programmes & {"PO réunion", "PO Guadeloupe", "PO Martinique", "PO Guyane", "PO Mayotte"}
+
+
+@pytest.mark.parametrize(
+    ("perimetre", "libelle_po"),
+    [
+        ("La Réunion", "PO réunion"),
+        ("Guadeloupe", "PO Guadeloupe"),
+        ("Martinique", "PO Martinique"),
+        ("Guyane", "PO Guyane"),
+        ("Mayotte", "PO Mayotte"),
+    ],
+)
+def test_pilotage_drom_fusionne_le_fse_du_pon(perimetre, libelle_po, donnees_fixture):
+    """Les cinq PO FSE État des DROM (issue #95, point 3) sont fusionnés à l'engagé
+    Synergie de leur région, pas remplacés par lui : leur FSE d'État, absent ou
+    marginal côté Synergie, doit désormais compter dans le taux affiché — et seul le
+    PO de cette région doit apparaître, jamais celui d'une autre (routage par
+    `Libellé Programme`, pas par la seule région de chaque opération)."""
+    at = _rendre_perimetre_2014_2020(perimetre)
+    textes = " ".join(el.value for el in at.markdown)
+    assert "Programmé 2014-2020" in textes
+    infos = " ".join(el.value for el in at.info)
+    assert "Pas de taux de consommation sur ce périmètre" not in infos
+    assert "second fichier" in infos
+
+    programmes = _programmes_affiches(at)
+    assert libelle_po in programmes
+    autres_po_drom = {"PO réunion", "PO Guadeloupe", "PO Martinique", "PO Guyane", "PO Mayotte"} - {libelle_po}
+    assert not programmes & autres_po_drom
+    assert "Programme Opérationnel National FSE" not in programmes
+    assert "Programme Opérationnel IEJ" not in programmes
 
 
 @pytest.mark.parametrize("perimetre", ["Normandie", "Nouvelle-Aquitaine", "Bretagne"])

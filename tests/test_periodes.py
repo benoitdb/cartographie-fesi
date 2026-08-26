@@ -37,6 +37,7 @@ from utils.periodes import (  # noqa: E402
     SOURCE_BRETAGNE_2014_2020,
     SOURCE_NORMANDIE_2014_2020,
     SOURCE_NOUVELLE_AQUITAINE_2014_2020,
+    SOURCE_PON_FSE_2014_2020,
     SOURCE_SYNERGIE_2014_2020,
     absences_expliquees,
     appliquer_libelles_programmes,
@@ -56,6 +57,7 @@ FICHIER_PAR_SOURCE = {
     SOURCE_NORMANDIE_2014_2020: "data_2014-2020_normandie.json",
     SOURCE_NOUVELLE_AQUITAINE_2014_2020: "data_2014-2020_nouvelle_aquitaine.json",
     SOURCE_BRETAGNE_2014_2020: "data_2014-2020_bretagne_officiel.json",
+    SOURCE_PON_FSE_2014_2020: "data_2014-2020_pon_fse.json",
 }
 
 
@@ -430,3 +432,62 @@ def test_capacites_source_periode_synergie_equivaut_a_sa_source():
     """`PERIODE_2014_2020` et `SOURCE_SYNERGIE_2014_2020` sont la même chaîne : la
     fonction ne doit pas les traiter différemment selon l'import utilisé pour l'appeler."""
     assert capacites_source(PERIODE_2014_2020) == capacites_source(SOURCE_SYNERGIE_2014_2020)
+
+
+# --- PON FSE : sept programmes à router, pas un périmètre régional (issue #95, point 3) --
+
+
+def test_pon_fse_prend_les_libelles_canoniques():
+    """Ni code postal ni NUMCCI dans ce fichier (voir COLONNES_PON_FSE_2014_2020) : seules
+    les clés effectivement présentes sont vérifiées ici."""
+    op = {
+        "num_dossier": "201603870",
+        "Libellé_po": "Programme Opérationnel National FSE",
+        "Region_adm": "Alsace",
+        "Lib_org": "Collectivité européenne d'Alsace",
+        "Lib_opé": "ASSISTANCE TECHNIQUE 2015-2016",
+        "Dépenses totales": 76800.03,
+        "Mont_UE": 38400.0,
+        "Date début réalisation": "2015-10-01",
+        "Date fin réalisation": "2016-12-31",
+        "Fonds": "FSE",
+    }
+    (normalisee,) = normaliser_operations([op], SOURCE_PON_FSE_2014_2020)
+
+    assert normalisee["Numéro Opération"] == "201603870"
+    assert normalisee["Libellé Programme"] == "Programme Opérationnel National FSE"
+    assert normalisee["Nom du bénéficiaire"] == "Collectivité européenne d'Alsace"
+    assert normalisee["Intitulé du projet"] == "ASSISTANCE TECHNIQUE 2015-2016"
+    assert normalisee["Total des dépenses éligibles"] == 76800.03
+    assert normalisee["Montant UE"] == 38400.0
+    assert normalisee["Fonds"] == "FSE"
+    # `Fonds` ne se renomme pas (déjà canonique, comme pour Synergie) : présent une
+    # seule fois, jamais dupliqué sous une clé source qui n'existe pas.
+    assert "Mont_UE" not in normalisee
+
+
+def test_capacites_source_pon_fse_sans_trajectoire_ni_departement():
+    """Ni code postal ni NUMCCI dans ce fichier : aucun rattachement départemental. `Date
+    début/fin réalisation` existe mais date l'exécution, pas la programmation."""
+    assert capacites_source(SOURCE_PON_FSE_2014_2020) == {"trajectoire": False, "departement": False}
+
+
+# Relevé indépendant des sept valeurs de `Libellé_po` et de leur région, depuis le
+# commentaire de l'issue #95 (point 3) et l'Accord de partenariat p.171 (Mayotte) — pas
+# depuis `REGIONS_PON_FSE_2014_2020` lui-même, qui ne pourrait pas se tromper à ses
+# propres yeux (mutation).
+REGIONS_ATTENDUES_PON_FSE = {
+    "Programme Opérationnel National FSE": None,
+    "Programme Opérationnel IEJ": None,
+    "PO réunion": "La Réunion",
+    "PO Guadeloupe": "Guadeloupe",
+    "PO Martinique": "Martinique",
+    "PO Guyane": "Guyane",
+    "PO Mayotte": "Mayotte",
+}
+
+
+def test_regions_pon_fse_route_les_sept_programmes():
+    from utils.periodes import REGIONS_PON_FSE_2014_2020
+
+    assert REGIONS_PON_FSE_2014_2020 == REGIONS_ATTENDUES_PON_FSE

@@ -58,6 +58,7 @@ SOURCE_SYNERGIE_2014_2020 = "2014-2020"
 SOURCE_NORMANDIE_2014_2020 = "2014-2020-normandie"
 SOURCE_NOUVELLE_AQUITAINE_2014_2020 = "2014-2020-nouvelle-aquitaine"
 SOURCE_BRETAGNE_2014_2020 = "2014-2020-bretagne-officiel"
+SOURCE_PON_FSE_2014_2020 = "2014-2020-pon-fse"
 
 # clé sémantique -> libellé **canonique** du dashboard, celui de 2021-2027 — non
 # parce qu'il serait meilleur, mais parce que c'est celui que le code existant lit
@@ -146,6 +147,21 @@ COLONNES_PAR_SOURCE = {
         "region": "Région",
         "pays": "Country",
     },
+    # Fichier PON FSE (issue #68) : ni code postal, ni NUMCCI, ni date de programmation —
+    # seules `Date début/fin réalisation` existent, et ne datent pas la même chose (voir
+    # CAPACITES_SOURCE). `region` porte `Region_adm`, remplie à 100 % ; le programme
+    # (`Libellé_po`) sert à router chaque opération, voir REGIONS_PON_FSE_2014_2020.
+    SOURCE_PON_FSE_2014_2020: {
+        "numero_op": "num_dossier",
+        "libelle_prog": "Libellé_po",
+        "region": "Region_adm",
+        "nom_benef": "Lib_org",
+        "intitule_proj": "Lib_opé",
+        "depenses": "Dépenses totales",
+        "montant_ue": "Mont_UE",
+        "date_debut": "Date début réalisation",
+        "date_fin": "Date fin réalisation",
+    },
 }
 
 RENOMMAGES = {
@@ -174,6 +190,10 @@ CAPACITES_SOURCE = {
     # à la différence du premier fichier Bretagne qui n'avait ni code postal ni
     # numéro de dossier.
     SOURCE_BRETAGNE_2014_2020: {"trajectoire": False, "departement": True},
+    # Ni code postal ni NUMCCI dans ce fichier : aucun rattachement départemental. `Date
+    # début/fin réalisation` existe mais date l'exécution, pas la programmation — même
+    # réserve que Synergie/Normandie, trajectoire non câblée plutôt que reconstruite dessus.
+    SOURCE_PON_FSE_2014_2020: {"trajectoire": False, "departement": False},
 }
 
 
@@ -376,12 +396,14 @@ PERIMETRES_SANS_PILOTAGE = frozenset()
 MENTION_PILOTAGE_MASQUE = (
     "**Pas de taux de consommation sur ce périmètre.** Son enveloppe programmée est connue, "
     "mais l'engagé qu'on lui opposerait vient de l'extraction Synergie, qui ne couvre pas "
-    "toutes les autorités de gestion de la période — le programme opérationnel national FSE "
-    "(issue #68). Ses opérations sont publiées à part et visibles sur la page « Validation "
-    "de la source », mais ne sont pas fusionnées ici : un taux calculé sans elles afficherait "
-    "une donnée manquante comme une sous-consommation. Normandie, Nouvelle-Aquitaine et "
-    "Bretagne, elles, sont pilotées depuis leur propre fichier régional (#95). La reprise de "
-    "ce point pour le volet national reste suivie en issue #95."
+    "toutes les autorités de gestion de la période (issue #68) : sur « Ensemble national », "
+    "trois régions (Normandie, Nouvelle-Aquitaine, Bretagne) restent sous-comptées faute "
+    "d'y fusionner leur propre fichier régional, comme le fait chacune sur son périmètre "
+    "propre — un taux calculé malgré ce manque afficherait une donnée manquante comme une "
+    "sous-consommation. Sur une de ces trois régions, ce message signale plutôt que son "
+    "fichier régional n'a pas pu être chargé sur ce poste (repli, pas une donnée absente). "
+    "Le volet national, lui, a rejoint le pilotage depuis que le programme opérationnel "
+    "national FSE et le PO IEJ national y sont fusionnés (issue #95, point 3)."
 )
 
 # Bretagne FSE affiche un taux au-dessus de 100 % (111 % au 12/02/2024) qui n'est pas une
@@ -395,6 +417,52 @@ MENTION_BRETAGNE_FSE_GRANULARITE = (
     "(« Programme Bretagne Formation », « QUALIF Emploi »…), pas des opérations unitaires — "
     "une granularité de fichier très différente du reste, qui gonfle le taux affiché vers le "
     "haut (issue #95)."
+)
+
+# Où router chaque programme du fichier PON FSE (issue #95, point 3) : région pour les cinq
+# PO FSE État des DROM, None pour PON FSE et PO IEJ national — agrégés au Volet national,
+# **pas** ventilés par région malgré une opération sur deux géo-rattachée (`Region_adm`
+# rempli à 97 % pour ces deux programmes) : leur dotation dans l'Accord de partenariat
+# (`2014FR05SFOP001`, `2014FR05M9OP001`) est une ligne **nationale unique**, distincte des
+# dotations IEJ *régionales* que portent déjà les programmes FEDER-FSE gérés par les
+# Conseils régionaux (ex. Nouvelle-Aquitaine, IEJ 10,1 M€ en propre) — deux enveloppes
+# légalement différentes, à ne pas confondre en comparant l'engagé régional de l'une à
+# l'enveloppe nationale de l'autre. Arbitrage utilisateur du 2026-08-26 (commentaire #95) :
+# la vue par région du PON/IEJ (carte, engagé sans taux) reste une évolution possible, pas
+# faite ici — la donnée est prête (`regions_modernes`), pas câblée à l'écran.
+#
+# Mayotte (`PO Mayotte`) n'a pas de PO FSE État séparé dans l'Accord (contrairement à
+# Guyane/Martinique/Réunion, chacune avec son propre `SFOP00x`) : son engagé PON FSE se
+# compare à la ligne FSE du programme combiné `2014FR16M2OP012`, seule dotation FSE que
+# porte Mayotte dans `reference/programmes_2014_2020.py` — vérifié dans l'Accord p.171
+# (table 1.6), aucune autre ligne « Mayotte Etat » n'existe.
+REGIONS_PON_FSE_2014_2020 = {
+    "Programme Opérationnel National FSE": None,
+    "Programme Opérationnel IEJ": None,
+    "PO réunion": "La Réunion",
+    "PO Guadeloupe": "Guadeloupe",
+    "PO Martinique": "Martinique",
+    "PO Guyane": "Guyane",
+    "PO Mayotte": "Mayotte",
+}
+
+MENTION_PON_FSE_REGIONAL = (
+    "**Le FSE État de ce territoire vient d'un second fichier**, le programme opérationnel "
+    "national FSE (hors Synergie, issue #68) : son PO FSE État propre à ce territoire, fusionné "
+    "aux opérations Synergie affichées ici (issue #95). Ce fichier ne porte pas de date de "
+    "programmation : ses opérations comptent dans les totaux et le taux de consommation "
+    "ci-dessous, mais **pas** dans la courbe de trajectoire, qui n'affiche donc que la part "
+    "Synergie de l'engagé."
+)
+
+MENTION_PON_FSE_NATIONAL = (
+    "**Ce périmètre inclut le programme opérationnel national FSE et le PO IEJ national** "
+    "(hors Synergie, issue #68) : leur dotation dans l'Accord de partenariat est une ligne "
+    "nationale unique, comparée ici à l'ensemble de leur engagé plutôt qu'à une part par "
+    "région — même si beaucoup de leurs opérations ont, individuellement, une région "
+    "d'exécution connue (issue #95, point 3). Ce fichier ne porte pas de date de "
+    "programmation : ses opérations comptent dans les totaux et le taux de consommation "
+    "ci-dessous, mais **pas** dans la courbe de trajectoire."
 )
 
 
@@ -448,10 +516,13 @@ def fusionner_enveloppes_sans_libelle(enveloppes, fonds_engages):
 def pilotage_disponible(perimetre, est_national=False):
     """Le pilotage a-t-il un sens sur ce périmètre ?
 
-    `est_national` couvre les deux périmètres agrégés de la page (« Ensemble national » et
-    « Volet national »), qui ne sont pas des régions et ne peuvent donc pas être reconnus
-    par leur seul nom. Séparer les deux arguments évite d'avoir à réimporter ici les
-    libellés de ces périmètres, définis par la page.
+    `est_national` couvre un périmètre agrégé de la page qui n'est pas une région et ne
+    peut donc pas être reconnu par son seul nom — jusqu'à #95 (point 3), les deux
+    périmètres agrégés (« Ensemble national » et « Volet national ») étaient dans ce cas ;
+    depuis que PON FSE (la seule pièce qui manquait au Volet national) y est fusionné, seul
+    « Ensemble national » reste concerné, faute d'y fusionner aussi les trois régions
+    hors-Synergie. Séparer les deux arguments évite d'avoir à réimporter ici le libellé de
+    ce périmètre, défini par la page.
     """
     return not est_national and perimetre not in PERIMETRES_SANS_PILOTAGE
 
