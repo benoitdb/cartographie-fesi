@@ -67,6 +67,9 @@ def donnees_fixture(monkeypatch):
         FIXTURE / "data_2014-2020_nouvelle_aquitaine.json",
     )
     monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_BRETAGNE_PATH", FIXTURE / "data_2014-2020_bretagne_officiel.json"
+    )
+    monkeypatch.setattr(
         data_loader, "BENEFICIAIRES_FUZZY_PATH", FIXTURE / "beneficiaires_fuzzy.json"
     )
     monkeypatch.setattr(
