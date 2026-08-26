@@ -32,6 +32,8 @@ from utils.cofinancement import (
 from utils.data_loader import (
     load_categories_ue_2014_2020,
     load_data_2014_2020,
+    load_data_2014_2020_normandie,
+    load_data_2014_2020_nouvelle_aquitaine,
     load_dromcom_codes_postaux,
     load_dromcom_geojson,
     load_geojson,
@@ -61,9 +63,14 @@ from utils.periodes import (
     MENTION_PROVENANCE_ENVELOPPES,
     MENTION_REACT_EU_FONDU,
     MENTION_REGION_MIXTE,
+    MENTION_SOURCE_REGIONALE,
     PERIODE_2014_2020,
+    SOURCE_NORMANDIE_2014_2020,
+    SOURCE_NOUVELLE_AQUITAINE_2014_2020,
     absences_expliquees,
+    appliquer_libelles_programmes,
     capacites,
+    capacites_source,
     fusionner_enveloppes_sans_libelle,
     libelle_montant,
     normaliser_operations,
@@ -113,11 +120,31 @@ data = load_data_2014_2020()
 capa = capacites(PERIODE_2014_2020)
 libelle_montant_ue = libelle_montant(PERIODE_2014_2020)
 
+# Fichiers hors-Synergie lus directement par cette page pour leur périmètre (issue #95) :
+# Normandie n'apparaît même pas dans `aggregates.by_region` de Synergie, et Nouvelle-Aquitaine
+# n'y figure qu'à la marge (25 opérations). Bretagne et le PON FSE restent hors passe — la
+# priorité a été donnée aux deux périmètres dont l'écart avec Synergie est le plus trompeur à
+# l'écran (Normandie invisible, Nouvelle-Aquitaine visible mais à un montant sans rapport).
+# None si le fichier est absent (gitignoré, non régénérable sans le XLSX source) : la page se
+# rabat alors sur le sous-comptage Synergie plutôt que de planter.
+SOURCE_HORS_SYNERGIE = {
+    "Normandie": SOURCE_NORMANDIE_2014_2020,
+    "Nouvelle-Aquitaine": SOURCE_NOUVELLE_AQUITAINE_2014_2020,
+}
+data_hors_synergie = {
+    "Normandie": load_data_2014_2020_normandie(),
+    "Nouvelle-Aquitaine": load_data_2014_2020_nouvelle_aquitaine(),
+}
+
 # Fonds et régions viennent des agrégats de la période : six fonds ici (FEDER,
 # FSE, IEJ, FEAD, FEDER REACT-EU, FEDER-FSE) contre trois en 2021-2027, et des
-# listes en dur les figeraient à ceux de l'autre période.
+# listes en dur les figeraient à ceux de l'autre période. Régions : union avec les
+# périmètres hors-Synergie disponibles, pour que Normandie apparaisse enfin dans le
+# sélecteur (absente de Synergie) sans dépendre du fichier XLSX pour l'ajouter.
 fonds_periode = sorted(data["aggregates"]["by_fonds"])
-regions_periode = sorted(data["aggregates"]["by_region"])
+regions_periode = sorted(
+    set(data["aggregates"]["by_region"]) | {region for region, d in data_hors_synergie.items() if d is not None}
+)
 
 with st.sidebar:
     st.header("Périmètre")
@@ -129,11 +156,36 @@ with st.sidebar:
         key="perimetre_2014_2020",
     )
 selected_fonds = render_fonds_filter(options=fonds_periode, key="filtre_fonds_2014_2020")
-render_millesime(data.get("metadata"))
+
+data_regionale = data_hors_synergie.get(perimetre)
+lit_source_regionale = data_regionale is not None
+source_regionale = SOURCE_HORS_SYNERGIE.get(perimetre) if lit_source_regionale else None
+capacite_source = capacites_source(source_regionale or PERIODE_2014_2020)
+
+# Millésime de la source réellement affichée, pas systématiquement celui de Synergie
+# (issue #95, point 1 de #95) : les trois fichiers ont chacun le leur.
+render_millesime((data_regionale if lit_source_regionale else data).get("metadata"))
 filtre_actif = set(selected_fonds) != set(fonds_periode)
 
 operations = normaliser_operations(data["operations"], PERIODE_2014_2020)
 ops_fonds = [op for op in operations if op.get(FONDS) in selected_fonds]
+
+ops_fonds_regionaux = []
+ops_fond_vide_normandie = []
+if lit_source_regionale:
+    operations_regionales = normaliser_operations(data_regionale["operations"], source_regionale)
+    if perimetre == "Nouvelle-Aquitaine":
+        # Ce fichier ne nomme ses programmes que par code CCI (issue #95, étape 1) : traduit
+        # après le renommage des colonnes (`normaliser_operations` reste une fonction pure de
+        # renommage), sur la clé canonique "Libellé Programme" qui porte alors encore le code.
+        libelles_programmes = load_programme_detail_2014_2020()["libelles_programmes"]
+        operations_regionales = appliquer_libelles_programmes(operations_regionales, libelles_programmes)
+    if perimetre == "Normandie":
+        # ~26 dossiers hors répertoire (2021-2023, probable reste à payer post-clôture —
+        # voir data-pipeline/sources.py) sans `Fond` renseigné : le filtre Fonds les écarte
+        # silencieusement quel que soit le fonds sélectionné, faute d'y figurer.
+        ops_fond_vide_normandie = [op for op in operations_regionales if not op.get(FONDS)]
+    ops_fonds_regionaux = [op for op in operations_regionales if op.get(FONDS) in selected_fonds]
 
 # Catégorie de cohésion de la période, et le plafond de cofinancement qui en découle.
 # `.get` sur le périmètre : « Ensemble national » et « Volet national » ne sont pas des
@@ -144,13 +196,20 @@ plafond_periode = plafond_intervalle_2014_2020(categorie_periode) if capa["plafo
 
 st.title(f"FESI 2014-2020 — {perimetre}")
 st.caption(MENTION_MONTANTS_PROGRAMMES)
-if not capa["perimetre_complet"]:
+if lit_source_regionale:
+    st.info(MENTION_SOURCE_REGIONALE)
+elif not capa["perimetre_complet"]:
     st.warning(AVERTISSEMENT_PERIMETRE)
 
 if perimetre == ENSEMBLE_NATIONAL:
     ops_perimetre = ops_fonds
 elif perimetre == VOLET_NATIONAL:
     ops_perimetre = [op for op in ops_fonds if op.get("is_national")]
+elif lit_source_regionale:
+    # Le fichier régional ne couvre que ce périmètre par construction (issue #68) : pas
+    # besoin du filtre regions_modernes/is_interregional/is_national de la branche Synergie
+    # ci-dessous, il ne changerait rien ici.
+    ops_perimetre = ops_fonds_regionaux
 else:
     # Même découpage que la Vue Régionale 2021-2027 : les opérations
     # interrégionales et nationales sont exclues du total d'une région, sinon
@@ -180,6 +239,16 @@ def _fmt_millions(montant):
 
 def _fmt_entier(valeur):
     return f"{valeur:,}".replace(",", " ")
+
+
+if ops_fond_vide_normandie:
+    montant_fond_vide = sum(op.get(MONTANT) or 0 for op in ops_fond_vide_normandie)
+    st.caption(
+        f"{_fmt_entier(len(ops_fond_vide_normandie))} opération(s) sans fonds renseigné "
+        f"({_fmt_millions(montant_fond_vide)}) écartée(s) par le filtre Fonds ci-contre, quel "
+        "que soit le fonds sélectionné : la colonne est vide pour ces dossiers dans le fichier "
+        "source."
+    )
 
 
 # ---------------------------------------------------------------- Aperçu du périmètre
@@ -346,12 +415,21 @@ else:
                 st.caption(MENTION_REGION_MIXTE)
 
     with apercu_col2:
-        if est_metropole:
+        if est_metropole and capacite_source["departement"]:
             df_region_dept = assign_departments_df(df_ops)
             st.plotly_chart(
                 build_department_choropleth(df_region_dept, perimetre),
                 use_container_width=True,
                 config=MAP_CONFIG,
+            )
+        elif est_metropole:
+            # Pas de code postal ni de département dans ce fichier régional (Nouvelle-
+            # Aquitaine) : aucun rattachement, même approché, n'est possible — la carte
+            # disparaît plutôt que de s'afficher entièrement « inconnu » (issue #95).
+            df_region_dept = None
+            st.info(
+                "**Pas de carte départementale sur ce périmètre.** Le fichier régional ne "
+                "porte ni code postal ni département."
             )
         else:
             df_region_dept = None
@@ -490,7 +568,15 @@ with tab_ensemble:
 with tab_pilotage:
     st.subheader("Pilotage : programmé vs engagé")
 
-    if not pilotage_disponible(perimetre, est_national=perimetre in (ENSEMBLE_NATIONAL, VOLET_NATIONAL)):
+    # Normandie et Nouvelle-Aquitaine ne sont pilotables que si leur fichier régional a pu
+    # être chargé (issue #95) : sans lui, l'engagé disponible resterait celui, très partiel,
+    # de Synergie — `pilotage_disponible` seule ne le sait pas, elle ne connaît que la
+    # période, pas la disponibilité d'un fichier sur ce poste.
+    perimetre_pilotable = pilotage_disponible(
+        perimetre, est_national=perimetre in (ENSEMBLE_NATIONAL, VOLET_NATIONAL)
+    ) and not (perimetre in SOURCE_HORS_SYNERGIE and not lit_source_regionale)
+
+    if not perimetre_pilotable:
         st.info(MENTION_PILOTAGE_MASQUE)
     else:
         enveloppes_perimetre = load_programme_totals_2014_2020().get(perimetre, {})
@@ -547,23 +633,38 @@ with tab_pilotage:
                     "(Accord de partenariat, 2019)."
                 )
 
-            traj_col, bullet_col = st.columns(2)
-            with traj_col:
-                # `Date de programmation` et non la date de début : sur cette période c'est
-                # elle qui date l'engagement, la date de référence n'étant pas la même qu'en
-                # 2021-2027 (première convention) — cf. profil de source, issue #69.
-                st.plotly_chart(
-                    build_trajectoire(
-                        df_ops[df_ops[FONDS].isin(fonds_rapprochables)],
-                        montant_programme,
-                        date_col="Date de programmation",
-                    ),
-                    use_container_width=True,
-                )
-            with bullet_col:
+            if capacite_source["trajectoire"]:
+                traj_col, bullet_col = st.columns(2)
+                with traj_col:
+                    # `Date de programmation` et non la date de début : sur cette période c'est
+                    # elle qui date l'engagement, la date de référence n'étant pas la même qu'en
+                    # 2021-2027 (première convention) — cf. profil de source, issue #69.
+                    st.plotly_chart(
+                        build_trajectoire(
+                            df_ops[df_ops[FONDS].isin(fonds_rapprochables)],
+                            montant_programme,
+                            date_col="Date de programmation",
+                        ),
+                        use_container_width=True,
+                    )
+                with bullet_col:
+                    st.plotly_chart(
+                        build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
+                        use_container_width=True,
+                    )
+            else:
+                # Pas de `Date de programmation` dans ce fichier régional : la trajectoire
+                # disparaît plutôt que d'être reconstruite depuis la date de **début**
+                # d'opération, qui ne date pas la même chose (cf. la mise en garde de la
+                # section "Répartition par fonds" plus haut) — un substitut daterait
+                # l'engagement à un autre stade sans le dire.
                 st.plotly_chart(
                     build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
                     use_container_width=True,
+                )
+                st.caption(
+                    "Pas de trajectoire dans le temps sur ce périmètre : le fichier régional "
+                    "ne porte pas de date de programmation."
                 )
 
 

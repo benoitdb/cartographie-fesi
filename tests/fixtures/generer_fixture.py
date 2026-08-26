@@ -28,6 +28,13 @@ Ce que la fixture contient, et pourquoi (voir aussi README.md à côté) :
 fonds, et la page 2014-2020 ne se rendrait pas sur un échantillon de l'autre
 période. Le champ volumineux à tronquer et le schéma de colonnes diffèrent donc
 par période — d'où `PERIODES` plus bas plutôt qu'un chemin en dur.
+
+**Deux fixtures de plus depuis #95**, pour les fichiers régionaux hors-Synergie lus
+directement par la page 2014-2020 (Normandie, Nouvelle-Aquitaine — issue #68) :
+`data_2014-2020_normandie.json` et `data_2014-2020_nouvelle_aquitaine.json`. Un seul
+périmètre par fichier, donc pas d'échantillonnage stratifié par région comme pour
+`echantillonner` — voir `generer_hors_synergie`, qui prend des tranches ciblées pour
+couvrir chaque fonds (et, pour Normandie, les opérations à fonds vide, cf. #95).
 """
 
 import json
@@ -72,6 +79,25 @@ PERIODES = {
 
 # Petits fichiers lus par le dashboard mais gitignorés : copiés intégralement.
 COPIES_INTEGRALES = ["beneficiaires_fuzzy.json", "transferts_solidarite.json"]
+
+# Fichiers régionaux hors-Synergie (#68, #95) : un seul périmètre chacun, donc pas de
+# stratification par région. `tranches` désigne des plages `[début, fin)` de l'ordre du
+# fichier source, choisies pour couvrir chaque fonds (et, pour Normandie, des dossiers à
+# fonds vide) — voir `generer_hors_synergie`.
+SOURCES_HORS_SYNERGIE = {
+    "2014-2020-normandie": {
+        "fichier": "data_2014-2020_normandie.json",
+        "schema": SCHEMAS["2014-2020-normandie"],
+        # FEDER (0), FSE (28) ; FEDER REACT-EU (499) ; IEJ (557) ; fonds vide (1152).
+        "tranches": [(0, 40), (499, 509), (557, 567), (1152, 1157)],
+    },
+    "2014-2020-nouvelle-aquitaine": {
+        "fichier": "data_2014-2020_nouvelle_aquitaine.json",
+        "schema": SCHEMAS["2014-2020-nouvelle-aquitaine"],
+        # FEDER (0), FSE (6), IEJ (23) : les trois tiennent dans les 40 premières lignes.
+        "tranches": [(0, 40)],
+    },
+}
 
 
 def region_de(op):
@@ -174,11 +200,52 @@ def generer(periode, config):
     return metadata
 
 
+def generer_hors_synergie(source, config):
+    """Écrit la fixture d'un fichier régional hors-Synergie (#68, #95), ou ne fait rien
+    s'il est absent du poste (gitignoré, non régénérable sans le fichier XLSX/XLS source
+    correspondant) — la fixture existante, si elle est déjà committée, n'est alors pas
+    écrasée par un échantillon appauvri."""
+    chemin = SOURCE / config["fichier"]
+    if not chemin.exists():
+        print(f"{source} : fichier absent ({chemin}), fixture non régénérée")
+        return
+
+    data = json.loads(chemin.read_text(encoding="utf-8"))
+    operations = data["operations"]
+
+    echantillon = []
+    vus = set()
+    for debut, fin in config["tranches"]:
+        for op in operations[debut:fin]:
+            cle = id(op)
+            if cle not in vus:
+                vus.add(cle)
+                echantillon.append(op)
+
+    agregats, metadata = recalculer(echantillon, data["metadata"], config["schema"])
+    (CIBLE / config["fichier"]).write_text(
+        json.dumps(
+            {"metadata": metadata, "operations": echantillon, "aggregates": agregats},
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        ),
+        encoding="utf-8",
+    )
+    print(
+        f"{source} : {len(echantillon)} opérations · "
+        f"{metadata['nb_regions_harmonized']} région(s) · partitions {metadata['partitions']}"
+    )
+
+
 def main():
     CIBLE.mkdir(parents=True, exist_ok=True)
 
     for periode, config in PERIODES.items():
         generer(periode, config)
+
+    for source, config in SOURCES_HORS_SYNERGIE.items():
+        generer_hors_synergie(source, config)
 
     for nom in COPIES_INTEGRALES:
         shutil.copy(SOURCE / nom, CIBLE / nom)

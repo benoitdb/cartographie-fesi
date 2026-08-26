@@ -6,6 +6,10 @@ import streamlit as st
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_PATH = REPO_ROOT / "data" / "processed" / "data.json"
 DATA_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020.json"
+DATA_2014_2020_NORMANDIE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020_normandie.json"
+DATA_2014_2020_NOUVELLE_AQUITAINE_PATH = (
+    REPO_ROOT / "data" / "processed" / "data_2014-2020_nouvelle_aquitaine.json"
+)
 GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.geojson"
 GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
@@ -42,6 +46,42 @@ def load_data_2014_2020():
     passer le résultat par `utils.periodes.normaliser_operations` avant de le
     donner au reste du dashboard (issue #83)."""
     with open(DATA_2014_2020_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_data_2014_2020_normandie():
+    """Fichier régional Normandie, hors extraction Synergie (issue #68), lu directement par
+    la page 2014-2020 pour ce périmètre plutôt que d'en rester au sous-comptage marginal de
+    Synergie (issue #95) — Normandie n'apparaît même pas dans `aggregates.by_region` de
+    `data_2014-2020.json`.
+
+    **Gitignoré comme `data_2014-2020.json`**, et tolérant à son absence contrairement à lui :
+    la CI tourne sur un clone nu qui n'a régénéré que le pipeline principal (`ingest.py`
+    sans argument). None plutôt qu'une exception, pour que la page retire simplement ce
+    périmètre du sélecteur au lieu de planter.
+
+    Libellés de colonnes propres à ce fichier (bilingue franco-anglais) : passer par
+    `utils.periodes.normaliser_operations(ops, periodes.SOURCE_NORMANDIE_2014_2020)`."""
+    if not DATA_2014_2020_NORMANDIE_PATH.exists():
+        return None
+    with open(DATA_2014_2020_NORMANDIE_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@st.cache_data
+def load_data_2014_2020_nouvelle_aquitaine():
+    """Fichier régional Nouvelle-Aquitaine, hors extraction Synergie (issue #68), lu
+    directement par la page 2014-2020 pour ce périmètre plutôt que le sous-comptage marginal
+    de Synergie (25 opérations sur ~4 000 — issue #95).
+
+    Mêmes garanties que `load_data_2014_2020_normandie` : gitignoré, tolérant à son absence
+    (None). Ses programmes ne sont nommés que par code CCI (`Colonne à masquer lors de la
+    diffusion`) — voir `utils.periodes.appliquer_libelles_programmes` et
+    `load_programme_detail_2014_2020()["libelles_programmes"]`."""
+    if not DATA_2014_2020_NOUVELLE_AQUITAINE_PATH.exists():
+        return None
+    with open(DATA_2014_2020_NOUVELLE_AQUITAINE_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
