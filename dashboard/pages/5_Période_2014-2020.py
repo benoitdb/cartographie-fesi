@@ -22,6 +22,7 @@ comme un choix documenté et non comme un oubli.
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from utils.cofinancement import (
@@ -53,7 +54,7 @@ from utils.departments import (
 )
 from utils.dromcom_localisation import build_bubbles_localisation
 from utils.filters import compute_by_region, render_fonds_filter, summarize_ops
-from utils.millesime import render_millesime
+from utils.millesime import libelle_millesime, render_millesime
 from utils.periodes import (
     AVERTISSEMENT_PERIMETRE,
     MENTION_BRETAGNE_FSE_GRANULARITE,
@@ -328,14 +329,55 @@ if perimetre == ENSEMBLE_NATIONAL:
     montants_nationaux = [v["montant_ue_total"] for region, v in by_region.items() if region in regions_metro or region in DROM_COM]
     color_range = [0, max(montants_nationaux)] if montants_nationaux else [0, 1]
 
+    # Bretagne / Normandie / Nouvelle-Aquitaine ont leur propre fichier régional complet
+    # (issue #68), mais `by_region` ci-dessus reste Synergie seule : sur cette carte
+    # nationale, elles apparaîtraient quasi vides sans ce qui suit. Affichées avec leurs
+    # vrais montants, mais dans une trace à part (voir plus bas) plutôt que fusionnées à
+    # l'échelle bleue Synergie — leurs millésimes sont trop éloignés les uns des autres
+    # (jusqu'à trois ans, #104) pour être comparables terme à terme sur une même échelle.
+    # Une région retombe sur son propre total Synergie (`by_region`, en général plus faible
+    # mais parfois non nul) plutôt que d'être montrée en gris à 0 € dans deux cas : fichier
+    # absent (gitignoré, CI sur clone nu), ou vide une fois filtré sur les fonds sélectionnés
+    # — un gris à 0 laisserait croire à une absence réelle de financement sur ce filtre, alors
+    # que Synergie peut porter une valeur non nulle pour les mêmes fonds (#68 : 3 opérations
+    # bretonnes, 25 néo-aquitaines y figurent tout de même, à la marge).
+    regions_hors_synergie = {}
+    for region, source in SOURCE_HORS_SYNERGIE.items():
+        fichier_region = data_hors_synergie.get(region)
+        if fichier_region is None:
+            continue
+        ops_region_norm = normaliser_operations(fichier_region["operations"], source)
+        ops_region_carte = [op for op in ops_region_norm if op.get(FONDS) in selected_fonds]
+        if not ops_region_carte:
+            continue
+        # Dossiers sans fonds renseigné (ex. Normandie, ~26 dossiers/24,6 M€, voir la page
+        # dédiée à cette région) : `op.get(FONDS) in selected_fonds` les écarte quel que soit
+        # le filtre — sous-total systématiquement légèrement inférieur au vrai total régional.
+        # Compté ici plutôt que sur la seule page Normandie, pour ne pas le taire sur cette
+        # vue agrégée où le montant affiché prétend justement être « le vrai montant ».
+        sans_fonds = [op for op in ops_region_norm if not op.get(FONDS)]
+        regions_hors_synergie[region] = {
+            **summarize_ops(ops_region_carte),
+            "millesime": libelle_millesime(fichier_region.get("metadata")),
+            "montant_sans_fonds": sum(op.get(MONTANT) or 0 for op in sans_fonds),
+            "count_sans_fonds": len(sans_fonds),
+        }
+
+    # Vue corrigée de `by_region`, utilisée partout où cette page affiche un total par région
+    # sur ce périmètre (carte, classement des régions plus bas) : les trois totaux Synergie
+    # sous-comptés sont remplacés par le vrai montant régional quand il est disponible pour
+    # les fonds sélectionnés, le reste (national, interrégional, autres régions) est inchangé.
+    by_region_corrige = {**by_region, **regions_hors_synergie}
+
     # Pas de `.lower()` sur le libellé : il commence par le sigle « UE », qu'une
     # mise en minuscules transformerait en « montant ue programmé ».
     st.subheader(f"Répartition géographique — {libelle_montant_ue}")
     st.caption(
         "Le rattachement à une région vient du **libellé du programme** et non de la colonne "
         "région, remplie à 16,4 % seulement dans cette source — les programmes d'avant la fusion "
-        "des régions de 2016 sont ramenés à leur région actuelle. Les régions quasi vides le sont "
-        "pour la raison indiquée plus haut : leur autorité de gestion n'était pas dans Synergie."
+        "des régions de 2016 sont ramenés à leur région actuelle. Bretagne, Normandie et "
+        "Nouvelle-Aquitaine, dont l'autorité de gestion n'était pas dans Synergie, sont affichées "
+        "en gris avec leur vrai montant plutôt que quasi vides — voir la légende sous la carte."
     )
 
     col_legend, col_metro, col_dromcom = st.columns([1, 4, 6])
@@ -355,7 +397,7 @@ if perimetre == ENSEMBLE_NATIONAL:
             [
                 {"region": region, "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
                 for region, v in by_region.items()
-                if region in regions_metro
+                if region in regions_metro and region not in regions_hors_synergie
             ]
         )
         fig_carte = px.choropleth(
@@ -372,6 +414,34 @@ if perimetre == ENSEMBLE_NATIONAL:
         fig_carte.update_traces(
             hovertemplate=f"<b>%{{location}}</b><br>{libelle_montant_ue} : %{{z:,.0f}} €<br>Nb projets : %{{customdata[0]}}<extra></extra>"
         )
+        if regions_hors_synergie:
+            montants_gris = [v["montant_ue_total"] for v in regions_hors_synergie.values()]
+            # go.Choropleth manuel plutôt que px.choropleth : une trace ajoutée par
+            # px.choropleth partagerait le coloraxis (et donc l'échelle bleue) de la trace
+            # ci-dessus — colorscale/zmin/zmax ici sont indépendants exprès, voir plus haut.
+            fig_carte.add_trace(
+                go.Choropleth(
+                    geojson=geojson,
+                    locations=list(regions_hors_synergie),
+                    featureidkey="properties.nom",
+                    z=montants_gris,
+                    zmin=0,
+                    zmax=max(montants_gris) or 1,
+                    colorscale="Greys",
+                    showscale=False,
+                    customdata=[
+                        [v["count"], f" ({v['millesime']})" if v["millesime"] else ""] for v in regions_hors_synergie.values()
+                    ],
+                    hovertemplate=(
+                        "<b>%{location}</b><br>"
+                        f"{libelle_montant_ue} : %{{z:,.0f}} €<br>"
+                        "Nb projets : %{customdata[0]}<br>"
+                        "Fichier régional propre%{customdata[1]} — hors extraction "
+                        "Synergie, non comparable directement aux autres régions"
+                        "<extra></extra>"
+                    ),
+                )
+            )
         fig_carte.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
         fig_carte.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
         st.plotly_chart(
@@ -379,6 +449,28 @@ if perimetre == ENSEMBLE_NATIONAL:
             width='stretch',
             config=MAP_CONFIG,
         )
+        if regions_hors_synergie:
+            st.caption(
+                "En gris, hors extraction Synergie (issue #68), montant de leur propre fichier "
+                "régional plutôt que le sous-comptage Synergie — mais un millésime propre à "
+                "chacune, non comparable terme à terme au bleu ci-dessus (#104) : "
+                + " · ".join(
+                    f"{region} {_fmt_millions(v['montant_ue_total'])}" + (f" ({v['millesime']})" if v["millesime"] else "")
+                    for region, v in regions_hors_synergie.items()
+                )
+                + "."
+            )
+            dossiers_sans_fonds = {region: v for region, v in regions_hors_synergie.items() if v["count_sans_fonds"]}
+            if dossiers_sans_fonds:
+                st.caption(
+                    "Dossiers sans fonds renseigné, écartés quel que soit le filtre Fonds "
+                    "ci-contre — montants ci-dessus donc très légèrement sous-estimés : "
+                    + " · ".join(
+                        f"{region} {v['count_sans_fonds']} dossier(s) ({_fmt_millions(v['montant_sans_fonds'])})"
+                        for region, v in dossiers_sans_fonds.items()
+                    )
+                    + "."
+                )
 
     with col_dromcom:
         st.markdown("**DROM-COM**")
@@ -690,11 +782,15 @@ with tab_ensemble:
 
     if perimetre == ENSEMBLE_NATIONAL:
         st.subheader("Classement des régions")
+        # by_region_corrige (calculé plus haut avec la carte) plutôt que by_region : Bretagne,
+        # Normandie et Nouvelle-Aquitaine y figurent avec leur vrai montant régional, pas le
+        # sous-comptage Synergie — sans ça ce tableau afficherait un chiffre différent de celui
+        # de la carte juste au-dessus pour ces trois mêmes régions.
         df_regions = (
             pd.DataFrame(
                 [
                     {"Région": region, libelle_montant_ue: v["montant_ue_total"], "Nb projets": v["count"]}
-                    for region, v in by_region.items()
+                    for region, v in by_region_corrige.items()
                 ]
             )
             .sort_values(libelle_montant_ue, ascending=False)
@@ -713,8 +809,10 @@ with tab_ensemble:
             },
         )
         st.caption(
-            "À lire avec l'avertissement de périmètre en haut de page : les régions dont "
-            "l'autorité de gestion n'était pas dans Synergie sont sous-comptées ici."
+            "À lire avec l'avertissement de périmètre en haut de page : Bretagne, Normandie et "
+            "Nouvelle-Aquitaine sont ici à leur vrai montant régional (comme sur la carte "
+            "ci-dessus) — les autres régions sans autorité de gestion dans Synergie restent "
+            "sous-comptées."
         )
 
     st.subheader("Programmes")
