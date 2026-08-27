@@ -116,12 +116,12 @@ with tab_pilotage:
 
         traj_col_national, bullet_col_national = st.columns(2)
         with traj_col_national:
-            st.plotly_chart(build_trajectoire(pd.DataFrame(national_ops), montant_programme_national), use_container_width=True)
+            st.plotly_chart(build_trajectoire(pd.DataFrame(national_ops), montant_programme_national), width='stretch')
         with bullet_col_national:
             if not df_fonds_pilotage_national.empty:
                 st.plotly_chart(
                     build_ranking_programme_vs_engage(df_fonds_pilotage_national, "fonds", "engage", "programme", height=400),
-                    use_container_width=True,
+                    width='stretch',
                 )
     else:
         st.info("Pas de donnée programmée (Tableau 9B) pour le Volet national avec les fonds sélectionnés.")

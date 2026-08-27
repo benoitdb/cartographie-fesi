@@ -114,7 +114,7 @@ col_legend, col_metro, col_dromcom = st.columns([1, 4, 6])
 with col_legend:
     st.plotly_chart(
         build_standalone_colorbar(color_range, "Montant UE (€)", height=480),
-        use_container_width=True,
+        width='stretch',
         config={"displayModeBar": False},
     )
 
@@ -145,7 +145,7 @@ with col_metro:
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
     fig = disable_map_interaction(style_map_background(style_hover(fig)))
 
-    st.plotly_chart(fig, use_container_width=True, config=MAP_CONFIG)
+    st.plotly_chart(fig, width='stretch', config=MAP_CONFIG)
 
 with col_dromcom:
     st.markdown("**DROM-COM**")
@@ -172,7 +172,7 @@ with col_dromcom:
                 fig_dromcom.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
                 fig_dromcom.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=135, coloraxis_showscale=False)
                 fig_dromcom = disable_map_interaction(style_map_background(style_hover(fig_dromcom)))
-                st.plotly_chart(fig_dromcom, use_container_width=True, config=MAP_CONFIG)
+                st.plotly_chart(fig_dromcom, width='stretch', config=MAP_CONFIG)
                 if values["count"]:
                     st.caption(f"{values['montant_ue_total'] / 1e6:,.1f} M€ · {values['count']} projets".replace(",", " "))
                 else:
@@ -264,23 +264,23 @@ with tab_ensemble:
     )
     fonds_col, progress_col = st.columns([3, 7])
     with fonds_col:
-        st.plotly_chart(fig_fonds, use_container_width=True)
+        st.plotly_chart(fig_fonds, width='stretch')
     with progress_col:
-        st.plotly_chart(fig_cumulative, use_container_width=True)
+        st.plotly_chart(fig_cumulative, width='stretch')
 
     # Fonds, objectifs stratégiques et spécifiques
     st.subheader("Fonds, objectifs stratégiques et spécifiques")
 
     fig_hierarchy = build_hierarchy_treemap(df_national_ops, [FONDS, LEVEL1, LEVEL2])
 
-    st.plotly_chart(fig_hierarchy, use_container_width=True)
+    st.plotly_chart(fig_hierarchy, width='stretch')
 
     st.markdown("**Structure du portefeuille par région**")
     st.caption(
         "Nombre de projets (x) vs montant UE moyen (y), taille de bulle = montant UE total : distingue "
         "les régions portées par peu de gros projets de celles portées par de nombreux petits projets."
     )
-    st.plotly_chart(build_portfolio_scatter(df_mono_region, "Région"), use_container_width=True)
+    st.plotly_chart(build_portfolio_scatter(df_mono_region, "Région"), width='stretch')
 
     # Volet national
     st.subheader("Volet national")
@@ -319,7 +319,7 @@ with tab_ensemble:
     st.dataframe(
         df_interreg[["Programme", "Type", "Code CCI"]].sort_values(["Type", "Programme"]),
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config=text_widths("Programme", "Type", "Code CCI"),
     )
 
@@ -373,7 +373,7 @@ with tab_pilotage:
         st.dataframe(
             df_transferts,
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 **text_widths("Catégorie d'origine"),
                 "Montant transféré (2022-2027)": st.column_config.NumberColumn(format="%d €"),
@@ -448,7 +448,7 @@ with tab_pilotage:
         )
         fig_par_habitant = style_hover(fig_par_habitant)
 
-        st.plotly_chart(fig_par_habitant, use_container_width=True)
+        st.plotly_chart(fig_par_habitant, width='stretch')
     else:
         st.caption(
             "Montant engagé rapporté à l'enveloppe programmée 2021-2027 (Accord de partenariat, "
@@ -470,7 +470,7 @@ with tab_pilotage:
 
         fig_consommation = build_ranking_programme_vs_engage(df_consommation, "region", "engage", "programme")
 
-        st.plotly_chart(fig_consommation, use_container_width=True)
+        st.plotly_chart(fig_consommation, width='stretch')
 
     st.caption(
         "Fonction comptable (certification) : depuis 2021-2027, cette fonction est intégrée à "
@@ -494,7 +494,7 @@ with tab_audit:
     echelle_hist = st.radio("Échelle", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_hist_national")
     st.plotly_chart(
         build_histogram(df_national_ops, log_x=echelle_hist == "Logarithmique", color_col="Fonds", color_map=FONDS_COLORS),
-        use_container_width=True,
+        width='stretch',
     )
 
     st.caption(
@@ -516,7 +516,7 @@ with tab_audit:
         st.dataframe(
             style_categorical_columns(stats_fonds, {"Fonds": FONDS_COLORS}),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 **stats_col_config,
                 "Médiane": st.column_config.ProgressColumn(format="%,d €", min_value=0, max_value=int(stats_fonds["Médiane"].max())),
@@ -524,7 +524,7 @@ with tab_audit:
         )
     with box_col_fonds:
         st.plotly_chart(
-            build_boxplot(df_national_ops, "Fonds", log_y=echelle_box == "Logarithmique"), use_container_width=True
+            build_boxplot(df_national_ops, "Fonds", log_y=echelle_box == "Logarithmique"), width='stretch'
         )
 
     st.markdown("**Distribution par objectif stratégique**")
@@ -532,7 +532,7 @@ with tab_audit:
         build_boxplot(
             df_national_ops, LEVEL1, log_y=echelle_box == "Logarithmique", color_map=OBJECTIF_STRATEGIQUE_COLORS
         ),
-        use_container_width=True,
+        width='stretch',
     )
 
     st.markdown("**Médiane, écart-type et concentration par région**")
@@ -540,11 +540,11 @@ with tab_audit:
         columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
     )
     st.dataframe(
-        stats_region, hide_index=True, use_container_width=True, column_config={**stats_col_config, **text_widths("Région")}
+        stats_region, hide_index=True, width='stretch', column_config={**stats_col_config, **text_widths("Région")}
     )
 
     st.plotly_chart(
-        build_boxplot(df_mono_region, "Région", log_y=echelle_box == "Logarithmique"), use_container_width=True
+        build_boxplot(df_mono_region, "Région", log_y=echelle_box == "Logarithmique"), width='stretch'
     )
 
     st.markdown("**Opérations à montant atypique**")
@@ -560,7 +560,7 @@ with tab_audit:
     st.dataframe(
         style_categorical_columns(outliers_table, {"Fonds": FONDS_COLORS}),
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Région de l'opération"),
             "Montant UE": st.column_config.ProgressColumn(
@@ -574,14 +574,14 @@ with tab_audit:
         "Bénéficiaires cumulant le plus de montant UE, tous projets confondus — vue d'ensemble des "
         "acteurs les plus représentés dans le portefeuille."
     )
-    st.plotly_chart(build_pareto_beneficiaires(df_national_ops), use_container_width=True)
+    st.plotly_chart(build_pareto_beneficiaires(df_national_ops), width='stretch')
     with st.expander("Courbe de Lorenz (détail statistique de la concentration)"):
         st.caption(
             "Autre lecture de la même concentration : % cumulé de bénéficiaires (du plus petit au "
             "plus gros) vs % cumulé du montant — plus la courbe s'éloigne de la diagonale "
             "(égalité parfaite), plus le montant est concentré sur peu de bénéficiaires."
         )
-        st.plotly_chart(build_lorenz_beneficiaires(df_national_ops), use_container_width=True)
+        st.plotly_chart(build_lorenz_beneficiaires(df_national_ops), width='stretch')
 
     render_top_beneficiaires_drilldown(df_national_ops, montant_col_config, key="top_beneficiaires_national")
 
@@ -601,7 +601,7 @@ with tab_audit:
         st.dataframe(
             proches.head(50),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={**text_widths("Nom du bénéficiaire", "Opérations", "Programme(s)"), "Montant UE cumulé": montant_col_config},
         )
 
@@ -615,7 +615,7 @@ with tab_audit:
         st.dataframe(
             grands_regroupements.head(50),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 **text_widths("Nom du bénéficiaire"),
                 "Montant UE cumulé": montant_col_config,
@@ -634,7 +634,7 @@ with tab_audit:
         st.dataframe(
             regroupements_inter_fonds,
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={**text_widths("Nom du bénéficiaire", "Programme(s)", "Opérations"), "Montant UE cumulé": montant_col_config},
         )
     else:
@@ -653,7 +653,7 @@ with tab_audit:
         st.dataframe(
             multi_region_table,
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 **text_widths("Nom du bénéficiaire", "Régions"),
                 "Montant UE cumulé": st.column_config.ProgressColumn(
@@ -677,7 +677,7 @@ with tab_audit:
     st.dataframe(
         style_categorical_columns(cofinancement_fonds, {"Fonds": FONDS_COLORS}),
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Taux moyen": st.column_config.ProgressColumn(
                 format="percent", min_value=0, max_value=max(1.0, cofinancement_fonds["Taux moyen"].max())
@@ -713,7 +713,7 @@ with tab_audit:
         .reset_index()
     )
     if len(df_categorie):
-        st.plotly_chart(build_cofinancement_categorie_chart(df_categorie), use_container_width=True)
+        st.plotly_chart(build_cofinancement_categorie_chart(df_categorie), width='stretch')
     else:
         st.caption("Aucune catégorie de région identifiable sur le périmètre actuel.")
 
@@ -736,7 +736,7 @@ with tab_audit:
     st.dataframe(
         style_categorical_columns(cofinancement_outliers_table, {"Fonds": FONDS_COLORS}),
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Région de l'opération"),
             "Taux de cofinancement": taux_col_config,
@@ -765,7 +765,7 @@ with tab_audit:
         st.dataframe(
             style_categorical_columns(incoherentes_table, {"Fonds": FONDS_COLORS}),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 **text_widths("Intitulé du projet", "Nom du bénéficiaire"),
                 "Total des dépenses éligibles": montant_col_config,

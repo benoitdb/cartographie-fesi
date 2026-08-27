@@ -453,7 +453,7 @@ def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="N
     st.dataframe(
         top,
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={**text_widths(group_col), "Montant UE cumulé": montant_col_config},
     )
 
@@ -475,7 +475,7 @@ def render_top_beneficiaires_drilldown(df, montant_col_config, key, group_col="N
     st.dataframe(
         detail,
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             **text_widths("Numéro Opération", "Intitulé du projet", "Libellé Programme", "Région de l'opération"),
             amount_col: montant_col_config,

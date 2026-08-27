@@ -108,7 +108,7 @@ def render_kpi_pilotage(df_fonds_pilotage, montant_programme, montant_engage, ft
                 )
                 st.plotly_chart(
                     build_fonds_mini_bar(row.engage, row.programme, color=(color_map or {}).get(row.fonds)),
-                    use_container_width=True,
+                    width='stretch',
                     config={"displayModeBar": False},
                 )
                 st.caption(f"⚠️ {taux_fonds:.0%} — dépassement" if depassement else f"{taux_fonds:.0%} consommé")

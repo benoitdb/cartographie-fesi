@@ -344,7 +344,7 @@ if perimetre == ENSEMBLE_NATIONAL:
             # « Montant UE (€) » et non le libellé long de la période : la colonne de
             # légende est étroite, un titre plus long y est tronqué (« Montant UE pr »).
             build_standalone_colorbar(color_range, "Montant UE (€)", height=480),
-            use_container_width=True,
+            width='stretch',
             config={"displayModeBar": False},
         )
 
@@ -375,7 +375,7 @@ if perimetre == ENSEMBLE_NATIONAL:
         fig_carte.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
         st.plotly_chart(
             disable_map_interaction(style_map_background(style_hover(fig_carte))),
-            use_container_width=True,
+            width='stretch',
             config=MAP_CONFIG,
         )
 
@@ -405,7 +405,7 @@ if perimetre == ENSEMBLE_NATIONAL:
                 fig_dromcom.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=135, coloraxis_showscale=False)
                 st.plotly_chart(
                     disable_map_interaction(style_map_background(style_hover(fig_dromcom))),
-                    use_container_width=True,
+                    width='stretch',
                     config=MAP_CONFIG,
                 )
                 if valeurs["count"]:
@@ -460,7 +460,7 @@ else:
             df_region_dept = assign_departments_df(df_ops)
             st.plotly_chart(
                 build_department_choropleth(df_region_dept, perimetre),
-                use_container_width=True,
+                width='stretch',
                 config=MAP_CONFIG,
             )
         elif est_metropole:
@@ -479,7 +479,7 @@ else:
             if len(bulles):
                 st.plotly_chart(
                     build_dromcom_projects_map(perimetre, dromcom_geojson, bulles),
-                    use_container_width=True,
+                    width='stretch',
                     config=MAP_CONFIG,
                 )
                 st.caption(
@@ -491,7 +491,7 @@ else:
             else:
                 st.plotly_chart(
                     build_dromcom_outline(perimetre, dromcom_geojson),
-                    use_container_width=True,
+                    width='stretch',
                     config=MAP_CONFIG,
                 )
                 st.caption("Aucune opération localisable par code postal sur ce périmètre.")
@@ -542,9 +542,9 @@ with tab_ensemble:
         # donc pas de segment « reste à engager » ni de repère horizontal (#79).
         fig_fonds = build_fonds_barchart(df_fonds, FONDS_COLORS)
         fig_fonds.update_layout(height=400)
-        st.plotly_chart(fig_fonds, use_container_width=True)
+        st.plotly_chart(fig_fonds, width='stretch')
     with col_courbe:
-        st.plotly_chart(build_cumulative_curve(df_ops, color_map=FONDS_COLORS), use_container_width=True)
+        st.plotly_chart(build_cumulative_curve(df_ops, color_map=FONDS_COLORS), width='stretch')
         st.caption(
             "Montant UE programmé cumulé dans le temps, d'après la date de début de "
             "l'opération. Les programmations s'étalent jusqu'en 2023 : conventionnements "
@@ -566,7 +566,7 @@ with tab_ensemble:
         )
         st.dataframe(
             df_regions,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             column_config={
                 libelle_montant_ue: st.column_config.ProgressColumn(
@@ -590,7 +590,7 @@ with tab_ensemble:
     )
     st.dataframe(
         df_programmes,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             **text_widths("Libellé Programme"),
@@ -697,12 +697,12 @@ with tab_pilotage:
                             montant_programme,
                             date_col="Date de programmation",
                         ),
-                        use_container_width=True,
+                        width='stretch',
                     )
                 with bullet_col:
                     st.plotly_chart(
                         build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
-                        use_container_width=True,
+                        width='stretch',
                     )
                 if ops_pon_fse_perimetre:
                     # Voir MENTION_PON_FSE_REGIONAL/NATIONAL en haut de page : ce fichier n'a
@@ -722,7 +722,7 @@ with tab_pilotage:
                 # l'engagement à un autre stade sans le dire.
                 st.plotly_chart(
                     build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
-                    use_container_width=True,
+                    width='stretch',
                 )
                 st.caption(
                     "Pas de trajectoire dans le temps sur ce périmètre : le fichier régional "
@@ -741,7 +741,7 @@ with tab_audit:
     stats_fonds = compute_stats_table(df_ops, FONDS)
     st.dataframe(
         style_categorical_columns(stats_fonds, {FONDS: FONDS_COLORS}),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             "Médiane": montant_col_config,
@@ -763,12 +763,12 @@ with tab_audit:
         st.markdown("**Distribution des montants**")
         st.plotly_chart(
             build_histogram(df_ops, log_x=True, color_col=FONDS, color_map=FONDS_COLORS),
-            use_container_width=True,
+            width='stretch',
         )
         st.caption("Échelle logarithmique : les montants s'étalent sur plusieurs ordres de grandeur.")
     with col_box:
         st.markdown("**Dispersion par fonds**")
-        st.plotly_chart(build_boxplot(df_ops, FONDS, log_y=True, color_map=FONDS_COLORS), use_container_width=True)
+        st.plotly_chart(build_boxplot(df_ops, FONDS, log_y=True, color_map=FONDS_COLORS), width='stretch')
 
     st.subheader("Valeurs atypiques")
     # group_col=FONDS : des bornes IQR communes à six fonds d'ordres de grandeur très
@@ -784,7 +784,7 @@ with tab_audit:
     )
     st.dataframe(
         style_categorical_columns(table_atypiques, {FONDS: FONDS_COLORS}),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             **text_widths("Intitulé du projet", BENEFICIAIRE),
@@ -801,9 +801,9 @@ with tab_audit:
 
     col_pareto, col_lorenz = st.columns(2)
     with col_pareto:
-        st.plotly_chart(build_pareto_beneficiaires(df_ops), use_container_width=True)
+        st.plotly_chart(build_pareto_beneficiaires(df_ops), width='stretch')
     with col_lorenz:
-        st.plotly_chart(build_lorenz_beneficiaires(df_ops), use_container_width=True)
+        st.plotly_chart(build_lorenz_beneficiaires(df_ops), width='stretch')
 
     st.subheader("Taux de cofinancement UE")
     # Le fichier 2014-2020 ne porte pas de colonne de taux : il est dérivé du montant UE
@@ -815,7 +815,7 @@ with tab_audit:
     )
     st.dataframe(
         style_categorical_columns(cofi_fonds, {FONDS: FONDS_COLORS}),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             "Taux moyen": st.column_config.ProgressColumn(
@@ -872,7 +872,7 @@ with tab_audit:
                     ].head(50),
                     {FONDS: FONDS_COLORS},
                 ),
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
                 column_config={
                     **text_widths("Intitulé du projet", BENEFICIAIRE),
@@ -897,7 +897,7 @@ with tab_audit:
                 ],
                 {FONDS: FONDS_COLORS},
             ),
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             column_config={
                 **text_widths("Intitulé du projet", BENEFICIAIRE),

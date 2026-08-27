@@ -63,7 +63,7 @@ def render_region_column(region, region_ops, by_region, region_metadata, program
     fig_fonds.update_layout(height=200, showlegend=False, margin=dict(l=0, r=0, t=10, b=0))
     fig_fonds.for_each_trace(lambda t: t.update(hovertemplate=f"<b>{t.name}</b><br>Montant UE : %{{x:,.0f}} €<extra></extra>"))
     fig_fonds = style_hover(fig_fonds)
-    st.plotly_chart(fig_fonds, use_container_width=True)
+    st.plotly_chart(fig_fonds, width='stretch')
 
     # Taux de consommation — version condensée de render_kpi_pilotage (utils/pilotage.py) :
     # une seule barre de progression globale plutôt qu'une card par fonds, pour ne pas

@@ -68,7 +68,7 @@ def render_liste_complete_projets(df_region_ops, region):
     st.dataframe(
         style_categorical_columns(df_projets, {FONDS: FONDS_COLORS, "Objectif stratégique": OBJECTIF_STRATEGIQUE_COLORS}),
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Objectif stratégique"),
             "Montant UE": st.column_config.ProgressColumn(
@@ -147,10 +147,10 @@ with apercu_col1:
         st.caption(caption_categorie)
 with apercu_col2:
     if est_metropole:
-        st.plotly_chart(build_department_choropleth(df_region_dept, region), use_container_width=True, config=MAP_CONFIG)
+        st.plotly_chart(build_department_choropleth(df_region_dept, region), width='stretch', config=MAP_CONFIG)
     elif total_localisation:
         st.plotly_chart(
-            build_dromcom_projects_map(region, load_dromcom_geojson(), bubbles_df), use_container_width=True, config=MAP_CONFIG
+            build_dromcom_projects_map(region, load_dromcom_geojson(), bubbles_df), width='stretch', config=MAP_CONFIG
         )
         st.caption(
             f"{couverture_localisation['opération'] / total_localisation:.0%} localisées via le code "
@@ -164,7 +164,7 @@ with apercu_col2:
         )
     else:
         st.plotly_chart(
-            build_dromcom_outline(region, load_dromcom_geojson()), use_container_width=True, config=MAP_CONFIG
+            build_dromcom_outline(region, load_dromcom_geojson()), width='stretch', config=MAP_CONFIG
         )
         st.info("Aucune opération localisable pour cette région avec les fonds sélectionnés.")
 
@@ -285,20 +285,20 @@ with tab_ensemble:
         with col_legend_dept:
             st.plotly_chart(
                 build_standalone_colorbar(color_range_dept, "Montant UE (€)", height=420),
-                use_container_width=True,
+                width='stretch',
                 config={"displayModeBar": False},
             )
         with col_map_dept:
             st.plotly_chart(
                 build_department_choropleth(df_region_dept, region, show_colorbar=False),
-                use_container_width=True,
+                width='stretch',
                 config=MAP_CONFIG,
             )
         with col_table_dept:
             st.dataframe(
                 dept_table,
                 hide_index=True,
-                use_container_width=True,
+                width='stretch',
                 column_config={
                     **text_widths("Département"),
                     "Montant UE total": st.column_config.ProgressColumn(
@@ -335,7 +335,7 @@ with tab_ensemble:
         st.dataframe(
             style_categorical_columns(df_hors_region_table, {FONDS: FONDS_COLORS}),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Département", "Région du département", "Rattachement"),
                 "Montant UE": st.column_config.ProgressColumn(
@@ -377,7 +377,7 @@ with tab_ensemble:
         st.dataframe(
             style_categorical_columns(df_interregionaux_table, {FONDS: FONDS_COLORS}),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Autres régions"),
                 "Montant UE": st.column_config.ProgressColumn(
@@ -439,7 +439,7 @@ with tab_pilotage:
                     st.dataframe(
                         pd.DataFrame(rup_rows),
                         hide_index=True,
-                        use_container_width=True,
+                        width='stretch',
                         column_config={
                             col: st.column_config.NumberColumn(format="%,d €")
                             for col in ("Dotation catégorie de base", "Allocation RUP additionnelle", "Total programmé")
@@ -450,12 +450,12 @@ with tab_pilotage:
 
         traj_col, bullet_col = st.columns(2)
         with traj_col:
-            st.plotly_chart(build_trajectoire(pd.DataFrame(region_ops), montant_programme_region), use_container_width=True)
+            st.plotly_chart(build_trajectoire(pd.DataFrame(region_ops), montant_programme_region), width='stretch')
         with bullet_col:
             if not df_fonds_pilotage.empty:
                 st.plotly_chart(
                     build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
-                    use_container_width=True,
+                    width='stretch',
                 )
     else:
         st.info("Pas de donnée programmée (Tableau 9B) pour cette région avec les fonds sélectionnés.")
