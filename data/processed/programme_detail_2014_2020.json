@@ -84,6 +84,77 @@
     "Martinique": 3794823,
     "Bourgogne-Franche-Comté": 3068493
   },
+  "react_eu_justifie": {
+    "Hauts-de-France": {
+      "FEDER REACT-EU": 281502602
+    },
+    "Normandie": {
+      "FEDER REACT-EU": 133078139
+    },
+    "national": {
+      "FEDER REACT-EU": 8995322,
+      "FSE": 894847747
+    },
+    "Nouvelle-Aquitaine": {
+      "FEDER REACT-EU": 192966603,
+      "FSE": 14194763
+    },
+    "Auvergne-Rhône-Alpes": {
+      "FEDER REACT-EU": 184147420,
+      "FSE": 24944948
+    },
+    "Bourgogne-Franche-Comté": {
+      "FEDER REACT-EU": 110812211,
+      "FSE": 12621839
+    },
+    "Île-de-France": {
+      "FEDER REACT-EU": 114924356
+    },
+    "Occitanie": {
+      "FEDER REACT-EU": 208212565
+    },
+    "Bretagne": {
+      "FEDER REACT-EU": 101127972
+    },
+    "Grand Est": {
+      "FEDER REACT-EU": 183909853,
+      "FSE": 14202569
+    },
+    "Provence-Alpes-Côte d'Azur": {
+      "FEDER REACT-EU": 100517723,
+      "FSE": 29216166
+    },
+    "Pays de la Loire": {
+      "FEDER REACT-EU": 68763091,
+      "FSE": 19000000
+    },
+    "Centre-Val de Loire": {
+      "FEDER REACT-EU": 89563819
+    },
+    "La Réunion": {
+      "FEDER REACT-EU": 251236518,
+      "FSE": 130489351
+    },
+    "Mayotte": {
+      "FEDER REACT-EU": 80384080,
+      "FSE": 12828614
+    },
+    "Corse": {
+      "FEDER REACT-EU": 17100558
+    },
+    "Guadeloupe": {
+      "FEDER REACT-EU": 84719949,
+      "FSE": 0
+    },
+    "Guyane": {
+      "FEDER REACT-EU": 45283708,
+      "FSE": 30901308
+    },
+    "Martinique": {
+      "FEDER REACT-EU": 31544730,
+      "FSE": 18964883
+    }
+  },
   "libelles_programmes": {
     "2014FR05M0OP001": "PO FEDER-FSE Ile-de-France et Bassin de Seine",
     "2014FR05M2OP001": "PO FEDER-FSE Guadeloupe et st Martin Etat",

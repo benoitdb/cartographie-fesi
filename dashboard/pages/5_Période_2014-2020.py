@@ -67,6 +67,7 @@ from utils.periodes import (
     MENTION_PON_FSE_REGIONAL,
     MENTION_PROVENANCE_ENVELOPPES,
     MENTION_REACT_EU_FONDU,
+    MENTION_REACT_EU_TAUX_REFERENCE,
     MENTION_REGION_MIXTE,
     MENTION_SOURCE_REGIONALE,
     PERIODE_2014_2020,
@@ -675,8 +676,9 @@ with tab_pilotage:
             if perimetre == "Bretagne" and "FSE" in fonds_rapprochables:
                 st.caption(MENTION_BRETAGNE_FSE_GRANULARITE)
 
-            part_react_eu = load_programme_detail_2014_2020()["react_eu"].get(cle_enveloppe, {})
-            part_react_eu = {f: v for f, v in part_react_eu.items() if f in fonds_rapprochables}
+            detail_react_eu = load_programme_detail_2014_2020()
+            part_react_eu_brut = detail_react_eu["react_eu"].get(cle_enveloppe, {})
+            part_react_eu = {f: v for f, v in part_react_eu_brut.items() if f in fonds_rapprochables}
             if part_react_eu:
                 detail = ", ".join(f"{f} {v / 1e6:,.1f} M€".replace(",", " ") for f, v in sorted(part_react_eu.items()))
                 st.caption(
@@ -684,6 +686,20 @@ with tab_pilotage:
                     "Leur provenance (évaluation ANCT, 2024) diffère de celle du reste "
                     "(Accord de partenariat, 2019)."
                 )
+
+            # Taux indépendant des opérations Synergie (issue #96), gardé sur le choix
+            # explicite de fonds (`selected_fonds`) et non sur `fonds_rapprochables` : c'est
+            # justement pour le FEDER REACT-EU fondu en métropole (MENTION_REACT_EU_FONDU,
+            # absent de `part_react_eu` ci-dessus) que cette référence a le plus de valeur.
+            part_react_eu_justifie = detail_react_eu["react_eu_justifie"].get(cle_enveloppe, {})
+            taux_reference = {
+                f: part_react_eu_justifie[f] / part_react_eu_brut[f]
+                for f in part_react_eu_brut
+                if f in part_react_eu_justifie and f in selected_fonds
+            }
+            if taux_reference:
+                detail_taux = ", ".join(f"{f} {t:.0%}" for f, t in sorted(taux_reference.items()))
+                st.caption(MENTION_REACT_EU_TAUX_REFERENCE.format(detail=detail_taux))
 
             if capacite_source["trajectoire"]:
                 traj_col, bullet_col = st.columns(2)
