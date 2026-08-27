@@ -456,25 +456,22 @@ else:
             if categorie_periode and not categorie_periode.get("categorie_ue"):
                 st.caption(MENTION_REGION_MIXTE)
 
+    afficher_detail_dept = False
     with apercu_col2:
         if est_metropole and capacite_source["departement"]:
-            df_region_dept = assign_departments_df(df_ops)
-            st.plotly_chart(
-                build_department_choropleth(df_region_dept, perimetre),
-                width='stretch',
-                config=MAP_CONFIG,
-            )
+            # La carte et son détail (légende, tableau) ont besoin de toute la largeur de
+            # la page — voir la section « Détail par département » plus bas, même principe
+            # que la page 1 (`1_Vue_Régionale.py`).
+            afficher_detail_dept = True
         elif est_metropole:
             # Pas de code postal ni de département dans ce fichier régional (Nouvelle-
             # Aquitaine) : aucun rattachement, même approché, n'est possible — la carte
             # disparaît plutôt que de s'afficher entièrement « inconnu » (issue #95).
-            df_region_dept = None
             st.info(
                 "**Pas de carte départementale sur ce périmètre.** Le fichier régional ne "
                 "porte ni code postal ni département."
             )
         else:
-            df_region_dept = None
             bulles, couverture = build_bubbles_localisation(ops_perimetre, perimetre, load_dromcom_codes_postaux())
             dromcom_geojson = load_dromcom_geojson()
             if len(bulles):
@@ -497,20 +494,109 @@ else:
                 )
                 st.caption("Aucune opération localisable par code postal sur ce périmètre.")
 
-    if est_metropole and df_region_dept is not None:
-        st.markdown("**Rattachement à un département**")
+    if afficher_detail_dept:
+        st.subheader("Détail par département")
+
+        df_region_dept = assign_departments_df(df_ops)
         # department_coverage_summary renvoie des **parts**, pas des effectifs. Le
         # seuil à 0,5 % évite d'afficher « inconnu : 0 % », qui occupe une place
         # pour ne rien dire.
         couverture_dept = department_coverage_summary(df_region_dept)
+        depts_perimetre = {code for code, r in DEPT_TO_REGION.items() if r == perimetre}
+        hors_perimetre = df_region_dept["dept"].notna() & ~df_region_dept["dept"].isin(depts_perimetre)
+        part_hors_perimetre = hors_perimetre.sum() / len(df_region_dept) if len(df_region_dept) else 0
         st.caption(
             "Origine du rattachement : "
             + " · ".join(f"{source} : {part:.0%}" for source, part in couverture_dept.items() if part >= 0.005)
             + ". La colonne « Département de l'opération » est peu renseignée sur cette "
             "période : l'essentiel du rattachement est **approché** depuis le code postal du "
             "bénéficiaire, puis depuis son nom — le siège du bénéficiaire, donc, et pas "
-            "nécessairement le lieu du projet."
+            "nécessairement le lieu du projet. "
+            + (
+                f"{part_hors_perimetre:.0%} des opérations pointent vers un département situé "
+                f"hors de {perimetre} (ligne « Hors périmètre » ci-dessous) — le rattachement "
+                "régional reste fiable, seul le département est en cause."
+                if hors_perimetre.any()
+                else ""
+            )
         )
+
+        non_reparti = df_region_dept[df_region_dept["dept"].isna()]
+        non_reparti_montant = non_reparti[MONTANT].sum()
+        non_reparti_count = len(non_reparti)
+
+        df_dept_connu = df_region_dept[df_region_dept["dept"].notna() & df_region_dept["dept"].isin(depts_perimetre)]
+        dept_table = (
+            df_dept_connu.groupby("dept")
+            .agg(montant_ue_total=(MONTANT, "sum"), count=(MONTANT, "count"))
+            .reset_index()
+            .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
+            .sort_values("Montant UE total", ascending=False)
+        )
+        # Échelle calée sur les seuls départements du périmètre (avant l'ajout des lignes
+        # "Non réparti"/"Hors périmètre" ci-dessous, qui ne correspondent à aucun département
+        # sur la carte) — même échelle que la carte donc.
+        color_range_dept = [0, dept_table["Montant UE total"].max()] if len(dept_table) else [0, 1]
+        # Les deux lignes suivantes complètent le tableau à 100 % du périmètre : sans elles,
+        # les opérations sans département connu ou rattachées à un département d'une autre
+        # région disparaîtraient silencieusement du total affiché (issue #100).
+        if non_reparti_count:
+            dept_table = pd.concat(
+                [
+                    dept_table,
+                    pd.DataFrame(
+                        [{"Département": "Non réparti (région entière)", "Montant UE total": non_reparti_montant, "Nb projets": non_reparti_count}]
+                    ),
+                ],
+                ignore_index=True,
+            )
+        if hors_perimetre.any():
+            df_hors_perimetre = df_region_dept[hors_perimetre]
+            dept_table = pd.concat(
+                [
+                    dept_table,
+                    pd.DataFrame(
+                        [
+                            {
+                                "Département": "Hors périmètre (autre région)",
+                                "Montant UE total": df_hors_perimetre[MONTANT].sum(),
+                                "Nb projets": len(df_hors_perimetre),
+                            }
+                        ]
+                    ),
+                ],
+                ignore_index=True,
+            )
+
+        # Légende + carte + tableau côte à côte, comme sur la page 1 (`1_Vue_Régionale.py`) :
+        # la carte désactive son colorbar intégré au profit d'une légende commune.
+        col_legend_dept, col_map_dept, col_table_dept = st.columns([1, 4, 5])
+        with col_legend_dept:
+            st.plotly_chart(
+                build_standalone_colorbar(color_range_dept, "Montant UE (€)", height=420),
+                width='stretch',
+                config={"displayModeBar": False},
+            )
+        with col_map_dept:
+            st.plotly_chart(
+                build_department_choropleth(df_region_dept, perimetre, show_colorbar=False),
+                width='stretch',
+                config=MAP_CONFIG,
+            )
+        with col_table_dept:
+            st.dataframe(
+                dept_table,
+                hide_index=True,
+                width='stretch',
+                column_config={
+                    **text_widths("Département"),
+                    "Montant UE total": st.column_config.ProgressColumn(
+                        format="%,d €",
+                        min_value=0,
+                        max_value=int(dept_table["Montant UE total"].max()) if len(dept_table) else 1,
+                    ),
+                },
+            )
 
 # ---------------------------------------------------------------- Analyses
 
@@ -519,6 +605,39 @@ else:
 # n'affiche un taux que là où l'engagé est comparable à l'enveloppe : ailleurs il
 # porte l'explication à la place. C'est l'arbitrage inverse de #83 — un onglet
 # absent ne s'explique pas, un onglet qui dit pourquoi il est vide, si.
+
+# Calculé avant les onglets : la Vue d'ensemble (segment « Reste à engager », repère
+# programmé de la courbe cumulée) et le Pilotage s'appuient tous les deux sur la même
+# enveloppe programmée de la période.
+#
+# Normandie et Nouvelle-Aquitaine ne sont pilotables que si leur fichier régional a pu
+# être chargé (issue #95) : sans lui, l'engagé disponible resterait celui, très partiel,
+# de Synergie — `pilotage_disponible` seule ne le sait pas, elle ne connaît que la
+# période, pas la disponibilité d'un fichier sur ce poste.
+#
+# « Ensemble national » reste masqué (aucune de ses régions hors-Synergie n'y est
+# fusionnée, seul le fait pour son propre périmètre — voir ops_perimetre plus haut) ;
+# « Volet national » ne l'est plus depuis que PON FSE y est fusionné (issue #95, point
+# 3) : c'était la seule pièce manquante pour lui opposer un engagé complet, comme
+# l'annonçait déjà MENTION_PILOTAGE_MASQUE ("la reprise de ce point... suivie en #95").
+perimetre_pilotable = pilotage_disponible(
+    perimetre, est_national=perimetre == ENSEMBLE_NATIONAL
+) and not (perimetre in SOURCE_HORS_SYNERGIE and not lit_source_regionale)
+
+enveloppes_perimetre = {}
+fonds_fusionnes = set()
+if perimetre_pilotable:
+    # Les JSON d'enveloppes indexent les CCI sans région sous la clé "national", pas le
+    # libellé de ce périmètre (même convention que Page 2, Volet National 2021-2027).
+    cle_enveloppe = "national" if perimetre == VOLET_NATIONAL else perimetre
+    enveloppes_perimetre = load_programme_totals_2014_2020().get(cle_enveloppe, {})
+    # Une enveloppe dont aucun libellé de fonds ne porte d'opération ici rejoint son
+    # fonds d'origine : sans ça, la métropole afficherait un FEDER REACT-EU à 0 % et
+    # un FEDER gonflé de la même somme (voir la règle et ses chiffres dans periodes.py).
+    enveloppes_perimetre, fonds_fusionnes = fusionner_enveloppes_sans_libelle(
+        enveloppes_perimetre, set(df_ops[FONDS].unique())
+    )
+
 tab_ensemble, tab_pilotage, tab_audit = st.tabs(["Vue d'ensemble", "Pilotage", "Analyses & contrôle"])
 
 with tab_ensemble:
@@ -539,18 +658,34 @@ with tab_ensemble:
 
     col_barres, col_courbe = st.columns([1, 3])
     with col_barres:
-        # Aucun `totaux_programme` : pas d'enveloppe programmée connue pour la période,
-        # donc pas de segment « reste à engager » ni de repère horizontal (#79).
-        fig_fonds = build_fonds_barchart(df_fonds, FONDS_COLORS)
+        # totaux_programme=None (fonds sans enveloppe fiable, ou pilotage masqué sur ce
+        # périmètre — #95) : pas de segment « reste à engager » ni de repère programmé,
+        # même repli que `build_fonds_barchart` sans donnée. Depuis #93, l'enveloppe existe
+        # dès que `perimetre_pilotable`, calculée une fois pour la Vue d'ensemble et le
+        # Pilotage juste avant les onglets.
+        fig_fonds = build_fonds_barchart(
+            df_fonds, FONDS_COLORS, totaux_programme=enveloppes_perimetre if perimetre_pilotable else None
+        )
         fig_fonds.update_layout(height=400)
         st.plotly_chart(fig_fonds, width='stretch')
     with col_courbe:
-        st.plotly_chart(build_cumulative_curve(df_ops, color_map=FONDS_COLORS), width='stretch')
+        mode_courbe = st.radio("Courbe cumulée", ["Montant", "%"], horizontal=True, key="mode_courbe_2014_2020")
+        mode_courbe_val = "pourcentage" if mode_courbe == "%" else "montant"
+        st.plotly_chart(
+            build_cumulative_curve(
+                df_ops,
+                color_map=FONDS_COLORS,
+                totaux_ref=enveloppes_perimetre if perimetre_pilotable else None,
+                mode=mode_courbe_val,
+            ),
+            width='stretch',
+        )
         st.caption(
             "Montant UE programmé cumulé dans le temps, d'après la date de début de "
             "l'opération. Les programmations s'étalent jusqu'en 2023 : conventionnements "
             "tardifs et mobilisation de REACT-EU en fin de période. **La période d'une "
-            "opération se lit à son fonds et à son programme, jamais à sa date.**"
+            "opération se lit à son fonds et à son programme, jamais à sa date.** En mode "
+            "%, seuls les fonds avec une enveloppe programmée connue sont affichés."
         )
 
     if perimetre == ENSEMBLE_NATIONAL:
@@ -610,33 +745,14 @@ with tab_ensemble:
 with tab_pilotage:
     st.subheader("Pilotage : programmé vs engagé")
 
-    # Normandie et Nouvelle-Aquitaine ne sont pilotables que si leur fichier régional a pu
-    # être chargé (issue #95) : sans lui, l'engagé disponible resterait celui, très partiel,
-    # de Synergie — `pilotage_disponible` seule ne le sait pas, elle ne connaît que la
-    # période, pas la disponibilité d'un fichier sur ce poste.
-    #
-    # « Ensemble national » reste masqué (aucune de ses régions hors-Synergie n'y est
-    # fusionnée, seul le fait pour son propre périmètre — voir ops_perimetre plus haut) ;
-    # « Volet national » ne l'est plus depuis que PON FSE y est fusionné (issue #95, point
-    # 3) : c'était la seule pièce manquante pour lui opposer un engagé complet, comme
-    # l'annonçait déjà MENTION_PILOTAGE_MASQUE ("la reprise de ce point... suivie en #95").
-    perimetre_pilotable = pilotage_disponible(
-        perimetre, est_national=perimetre == ENSEMBLE_NATIONAL
-    ) and not (perimetre in SOURCE_HORS_SYNERGIE and not lit_source_regionale)
-
+    # perimetre_pilotable calculé une fois, juste avant les onglets (voir le commentaire
+    # à cet endroit pour le détail des cas masqués — #95).
     if not perimetre_pilotable:
         st.info(MENTION_PILOTAGE_MASQUE)
     else:
-        # Les JSON d'enveloppes indexent les CCI sans région sous la clé "national", pas le
-        # libellé de ce périmètre (même convention que Page 2, Volet National 2021-2027).
-        cle_enveloppe = "national" if perimetre == VOLET_NATIONAL else perimetre
-        enveloppes_perimetre = load_programme_totals_2014_2020().get(cle_enveloppe, {})
-        # Une enveloppe dont aucun libellé de fonds ne porte d'opération ici rejoint son
-        # fonds d'origine : sans ça, la métropole afficherait un FEDER REACT-EU à 0 % et
-        # un FEDER gonflé de la même somme (voir la règle et ses chiffres dans periodes.py).
-        enveloppes_perimetre, fonds_fusionnes = fusionner_enveloppes_sans_libelle(
-            enveloppes_perimetre, set(df_ops[FONDS].unique())
-        )
+        # enveloppes_perimetre, cle_enveloppe et fonds_fusionnes sont calculés une fois,
+        # juste avant les onglets (partagés avec la Vue d'ensemble).
+        #
         # Fonds rapprochables = ceux qui ont une enveloppe **et** sont sélectionnés.
         # Le FEAD et le FEDER-FSE n'en ont pas (voir MENTION_FONDS_HORS_RAPPROCHEMENT) :
         # ils sortent du rapprochement des deux côtés à la fois, numérateur compris —

@@ -465,6 +465,22 @@ def test_en_mode_pourcentage_une_categorie_sans_enveloppe_est_exclue():
     assert [trace.name for trace in fig.data] == ["FEDER"]
 
 
+def test_le_mode_pourcentage_retombe_sur_les_montants_si_aucune_categorie_presente_n_a_d_enveloppe():
+    """totaux_ref non vide mais qui ne couvre aucun fonds présent (ex. sélection limitée à
+    FEAD ou FEDER-FSE en 2014-2020, deux fonds sans enveloppe programmée, #100) : sans repli,
+    le filtre `isin(totaux_ref)` laisse un DataFrame vide et le repère annuel qui suit
+    (range sur un min/max NaN) lève un TypeError plutôt que d'afficher la courbe en montant."""
+    df = pd.DataFrame(
+        {
+            "Date de début de l'opération": ["2022-01-01", "2022-03-01"],
+            "Montant UE": [200.0, 300.0],
+            "Fonds": ["FTJ", "FTJ"],
+        }
+    )
+    fig = build_cumulative_curve(df, totaux_ref={"FEDER": 1000.0}, mode="pourcentage")
+    assert list(fig.data[0].y) == [200.0, 500.0]
+
+
 def test_le_mode_pourcentage_retombe_sur_les_montants_sans_enveloppe_connue():
     df = pd.DataFrame(
         {
