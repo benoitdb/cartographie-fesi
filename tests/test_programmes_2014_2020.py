@@ -108,6 +108,17 @@ MAQUETTES_ATTENDUES = {
     ("2014FR16M0OP009", "FSE"): 9_000_000,
 }
 
+# Montants relevés sur la colonne "Montant justifié après le dernier appel de fonds au
+# 24 septembre 2024" des mêmes tableaux — arrondis à l'euro comme dans le module (#96).
+MONTANTS_JUSTIFIES_ATTENDUES = {
+    ("2014FR16M0OP008", "FEDER"): 102_275_167,  # 115 % de la maquette
+    ("2014FR16RFOP007", "FEDER"): 251_236_518,  # 73,7 %
+    ("2014FR16M0OP011", "FEDER"): 31_544_730,  # 19,8 %, le plus bas du volet FEDER
+    ("2014FR05SFOP001", "FSE"): 894_847_747,  # 111,85 %
+    ("2014FR05M2OP001", "FSE"): 0,  # aucune dépense certifiée à cette date
+    ("2014FR16M0OP009", "FSE"): 0,  # idem, second des deux programmes à 0 %
+}
+
 
 # --- Transcription ----------------------------------------------------------------
 
@@ -143,6 +154,14 @@ def test_maquette_react_eu_conforme_au_releve(cle, montant):
     lignes = [m for m in MAQUETTES if m.cci == cci and m.fonds == fonds]
     assert len(lignes) == 1
     assert lignes[0].montant_ue == montant
+
+
+@pytest.mark.parametrize("cle,montant", sorted(MONTANTS_JUSTIFIES_ATTENDUES.items()))
+def test_montant_justifie_conforme_au_releve(cle, montant):
+    cci, fonds = cle
+    lignes = [m for m in MAQUETTES if m.cci == cci and m.fonds == fonds]
+    assert len(lignes) == 1
+    assert lignes[0].montant_justifie == montant
 
 
 def test_aucun_programme_de_developpement_rural_dans_les_dotations():
@@ -220,6 +239,15 @@ def test_react_eu_feder_reste_un_fonds_distinct():
     assert totaux["Bretagne"]["FEDER"] == 307_307_301
     assert totaux["Bretagne"]["FEDER REACT-EU"] == 92_779_237
     assert detail["react_eu"]["Bretagne"] == {"FEDER REACT-EU": 92_779_237}
+
+
+def test_react_eu_justifie_agrege_par_region_hors_totaux():
+    # Bretagne n'a qu'un programme REACT-EU FEDER : le justifié s'agrège comme la maquette,
+    # mais ne doit jamais entrer dans `totaux` — c'est un taux de référence (#96), pas une
+    # enveloppe supplémentaire à additionner au dénominateur du taux de consommation.
+    totaux, detail = calculer()
+    assert detail["react_eu_justifie"]["Bretagne"] == {"FEDER REACT-EU": 101_127_972}
+    assert totaux["Bretagne"]["FEDER REACT-EU"] == 92_779_237
 
 
 def test_react_eu_fse_est_fondu_dans_le_fse():

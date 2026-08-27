@@ -492,6 +492,15 @@ MENTION_REACT_EU_FONDU = (
     "d'autant."
 )
 
+# Taux de consommation REACT-EU indépendant des opérations Synergie (issue #96) : quand le
+# fonds est fondu (mention ci-dessus), c'est la seule source qui donne un taux REACT-EU sur
+# ce périmètre. Le dire à côté du taux calculé, jamais à sa place — la provenance et la date
+# d'arrêté diffèrent (voir MENTION_PROVENANCE_ENVELOPPES).
+MENTION_REACT_EU_TAUX_REFERENCE = (
+    "Taux de référence ANCT, indépendant des opérations Synergie (rapport d'évaluation "
+    "REACT-EU, certification au 24/09/2024) : {detail}."
+)
+
 
 def fusionner_enveloppes_sans_libelle(enveloppes, fonds_engages):
     """Regroupe les enveloppes dont aucun libellé de fonds ne porte d'opération ici.

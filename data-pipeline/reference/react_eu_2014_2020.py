@@ -37,6 +37,22 @@ REACT-EU passe par le PO Rhône-Alpes, alors que les projets financés couvrent 
 l'ex-Auvergne (même chose en Normandie et Grand Est, dit le rapport p.7). Agréger ces
 maquettes par région **moderne** est donc non seulement possible mais correct ; les
 répartir entre anciennes régions n'aurait aucun sens.
+
+**`montant_justifie`** vient de la colonne « Montant justifié après le dernier appel de
+fonds au 24 septembre 2024 » des mêmes tableaux (p.8-11) — un taux de consommation
+REACT-EU indépendant des opérations Synergie, utile là où le libellé de fonds ne l'est
+pas (voir MAPPING_FONDS_DONNEES et issue #96). Le rapport publie ces montants avec des
+centimes ; ils sont arrondis à l'euro ici, par cohérence avec le reste du fichier — d'où
+un écart d'arrondi cumulé de ±1 € entre la somme des lignes et le total publié à la
+ligne TOTAL, documenté et toléré dans `_verifier_totaux()`, pas une erreur de
+transcription.
+
+**Corroboration** : `docs/sources/allocation_react_eu_regions_2021_2022.pdf` (DGCL/ANCT,
+22/03/2021, allocation initiale par région) donne des totaux régionaux FEDER et FSE qui
+recoupent exactement la somme des lignes ci-dessous par région — hors deux programmes
+guadeloupéens où 10 M€ et 2 M€ ont basculé du FEDER vers le FSE entre 2021 et 2024 (le
+total par programme, lui, ne bouge pas). Un indice de plus que la transcription est
+juste, pas une source alternative à lire par le code.
 """
 
 from collections import namedtuple
@@ -46,59 +62,67 @@ from reference.programmes_2014_2020 import programme
 # `fonds` est le fonds au sens du rapport : "FEDER" ou "FSE". Ce n'est pas le libellé
 # porté par les opérations engagées — voir MAPPING_FONDS_DONNEES plus bas, où se joue
 # toute la différence de traitement entre les deux.
-Maquette = namedtuple("Maquette", "cci fonds montant_ue nom_rapport")
+Maquette = namedtuple("Maquette", "cci fonds montant_ue montant_justifie nom_rapport")
 
 MAQUETTES = [
     # Volet FEDER — 25 programmes (p.8-9)
-    Maquette("2014FR16M0OP008", "FEDER", 88_934_928, "PO FEDER-FSE Picardie 2014-2020"),
-    Maquette("2014FR16M2OP001", "FEDER", 115_720_121, "PO FEDER-FSE Basse-Normandie 2014-2020"),
-    Maquette("2014FR16RFOP002", "FEDER", 7_822_019, "PO Interrégional FEDER Loire 2014-2020"),
-    Maquette("2014FR16M2OP009", "FEDER", 56_752_747, "PO FEDER-FSE Poitou Charentes 2014-2020"),
-    Maquette("2014FR16M2OP010", "FEDER", 160_539_061, "PO FEDER-FSE Rhône-Alpes 2014-2020"),
-    Maquette("2014FR16M0OP014", "FEDER", 52_103_383, "PO FEDER-FSE Bourgogne 2014-2020"),
-    Maquette("2014FR05M0OP001", "FEDER", 101_321_953, "PO FEDER-FSE Ile-de-France et Bassin de Seine 2014-2020"),
-    Maquette("2014FR16M0OP007", "FEDER", 111_405_335, "PO FEDER-FSE Midi-Pyrénées et Garonne 2014-2020"),
-    Maquette("2014FR16M2OP006", "FEDER", 30_630_366, "PO FEDER-FSE Limousin 2014-2020"),
-    Maquette("2014FR16M2OP003", "FEDER", 92_779_237, "PO FEDER-FSE Bretagne 2014-2020"),
-    Maquette("2014FR16M0OP015", "FEDER", 173_425_967, "PO FEDER-FSE Lorraine et Vosges 2014-2020"),
-    Maquette("2014FR16M0OP013", "FEDER", 95_044_857, "PO FEDER-FSE Provence Alpes Côte d'Azur 2014-2020"),
-    Maquette("2014FR16M2OP008", "FEDER", 67_369_800, "PO FEDER-FSE Pays de la Loire 2014-2020"),
-    Maquette("2014FR16M0OP012", "FEDER", 177_879_806, "PO FEDER-FSE Nord-Pas de Calais 2014-2020"),
-    Maquette("2014FR16M2OP005", "FEDER", 50_903_209, "PO FEDER-FSE Franche-Comté et Massif du Jura 2014-2020"),
-    Maquette("2014FR16M0OP003", "FEDER", 89_557_007, "PO FEDER-FSE Centre Val-de-Loire 2014-2020"),
-    Maquette("2014FR16M0OP001", "FEDER", 97_473_702, "PO FEDER-FSE Aquitaine 2014-2020"),
-    Maquette("2014FR16M0OP006", "FEDER", 87_532_761, "PO FEDER-FSE Languedoc-Roussillon 2014-2020"),
-    Maquette("2014FR16RFOP007", "FEDER", 340_948_106, "PO FEDER Réunion Conseil Régional 2014-2020"),
-    Maquette("2014FR16M2OP012", "FEDER", 119_115_539, "PO FEDER-FSE Mayotte Etat 2014-2020"),
-    Maquette("2014FR16M2OP004", "FEDER", 31_996_069, "PO FEDER-FSE Corse 2014-2020"),
-    Maquette("2014FR16M0OP009", "FEDER", 170_169_923, "PO FEDER-FSE Guadeloupe Conseil Régional 2014-2020"),
-    Maquette("2014FR16M2OP011", "FEDER", 133_534_305, "PO FEDER-FSE Guyane Conseil Régional 2014-2020"),
-    Maquette("2014FR05M2OP001", "FEDER", 34_231_733, "PO FEDER-FSE Guadeloupe et st Martin Etat 2014-2020"),
-    Maquette("2014FR16M0OP011", "FEDER", 159_103_812, "PO FEDER-FSE Martinique Conseil Régional 2014-2020"),
+    Maquette("2014FR16M0OP008", "FEDER", 88_934_928, 102_275_167, "PO FEDER-FSE Picardie 2014-2020"),
+    Maquette("2014FR16M2OP001", "FEDER", 115_720_121, 133_078_139, "PO FEDER-FSE Basse-Normandie 2014-2020"),
+    Maquette("2014FR16RFOP002", "FEDER", 7_822_019, 8_995_322, "PO Interrégional FEDER Loire 2014-2020"),
+    Maquette("2014FR16M2OP009", "FEDER", 56_752_747, 65_106_315, "PO FEDER-FSE Poitou Charentes 2014-2020"),
+    Maquette("2014FR16M2OP010", "FEDER", 160_539_061, 184_147_420, "PO FEDER-FSE Rhône-Alpes 2014-2020"),
+    Maquette("2014FR16M0OP014", "FEDER", 52_103_383, 59_618_294, "PO FEDER-FSE Bourgogne 2014-2020"),
+    Maquette("2014FR05M0OP001", "FEDER", 101_321_953, 114_924_356, "PO FEDER-FSE Ile-de-France et Bassin de Seine 2014-2020"),
+    Maquette("2014FR16M0OP007", "FEDER", 111_405_335, 123_969_500, "PO FEDER-FSE Midi-Pyrénées et Garonne 2014-2020"),
+    Maquette("2014FR16M2OP006", "FEDER", 30_630_366, 33_973_782, "PO FEDER-FSE Limousin 2014-2020"),
+    Maquette("2014FR16M2OP003", "FEDER", 92_779_237, 101_127_972, "PO FEDER-FSE Bretagne 2014-2020"),
+    Maquette("2014FR16M0OP015", "FEDER", 173_425_967, 183_909_853, "PO FEDER-FSE Lorraine et Vosges 2014-2020"),
+    Maquette("2014FR16M0OP013", "FEDER", 95_044_857, 100_517_723, "PO FEDER-FSE Provence Alpes Côte d'Azur 2014-2020"),
+    Maquette("2014FR16M2OP008", "FEDER", 67_369_800, 68_763_091, "PO FEDER-FSE Pays de la Loire 2014-2020"),
+    Maquette("2014FR16M0OP012", "FEDER", 177_879_806, 179_227_435, "PO FEDER-FSE Nord-Pas de Calais 2014-2020"),
+    Maquette("2014FR16M2OP005", "FEDER", 50_903_209, 51_193_917, "PO FEDER-FSE Franche-Comté et Massif du Jura 2014-2020"),
+    Maquette("2014FR16M0OP003", "FEDER", 89_557_007, 89_563_819, "PO FEDER-FSE Centre Val-de-Loire 2014-2020"),
+    Maquette("2014FR16M0OP001", "FEDER", 97_473_702, 93_886_506, "PO FEDER-FSE Aquitaine 2014-2020"),
+    Maquette("2014FR16M0OP006", "FEDER", 87_532_761, 84_243_065, "PO FEDER-FSE Languedoc-Roussillon 2014-2020"),
+    Maquette("2014FR16RFOP007", "FEDER", 340_948_106, 251_236_518, "PO FEDER Réunion Conseil Régional 2014-2020"),
+    Maquette("2014FR16M2OP012", "FEDER", 119_115_539, 80_384_080, "PO FEDER-FSE Mayotte Etat 2014-2020"),
+    Maquette("2014FR16M2OP004", "FEDER", 31_996_069, 17_100_558, "PO FEDER-FSE Corse 2014-2020"),
+    Maquette("2014FR16M0OP009", "FEDER", 170_169_923, 77_495_075, "PO FEDER-FSE Guadeloupe Conseil Régional 2014-2020"),
+    Maquette("2014FR16M2OP011", "FEDER", 133_534_305, 45_283_708, "PO FEDER-FSE Guyane Conseil Régional 2014-2020"),
+    Maquette("2014FR05M2OP001", "FEDER", 34_231_733, 7_224_874, "PO FEDER-FSE Guadeloupe et st Martin Etat 2014-2020"),
+    Maquette("2014FR16M0OP011", "FEDER", 159_103_812, 31_544_730, "PO FEDER-FSE Martinique Conseil Régional 2014-2020"),
 
     # Volet FSE — 16 programmes (p.10)
-    Maquette("2014FR16M0OP004", "FSE", 12_350_060, "PO FEDER-FSE Champagne-Ardenne 2014-2020"),
-    Maquette("2014FR05SFOP001", "FSE", 800_060_179, "PO National FSE Emploi et Inclusion 2014-2020"),
-    Maquette("2014FR16M0OP014", "FSE", 5_200_000, "PO FEDER-FSE Bourgogne 2014-2020"),
-    Maquette("2014FR16M2OP008", "FSE", 19_000_000, "PO FEDER-FSE Pays de la Loire 2014-2020"),
-    Maquette("2014FR16M2OP005", "FSE", 7_280_000, "PO FEDER-FSE Franche-Comté et Massif du Jura 2014-2020"),
-    Maquette("2014FR05SFOP003", "FSE", 31_526_760, "PO FSE Guyane Etat 2014-2020"),
-    Maquette("2014FR05SFOP005", "FSE", 148_094_472, "PO FSE Réunion Etat 2014-2020"),
-    Maquette("2014FR16M2OP010", "FSE", 28_439_941, "PO FEDER-FSE Rhône-Alpes 2014-2020"),
-    Maquette("2014FR16M0OP013", "FSE", 40_625_000, "PO FEDER-FSE Provence Alpes Côte d'Azur 2014-2020"),
-    Maquette("2014FR16M2OP009", "FSE", 7_217_693, "PO FEDER-FSE Poitou Charentes 2014-2020"),
-    Maquette("2014FR16M2OP012", "FSE", 20_000_000, "PO FEDER-FSE Mayotte Etat 2014-2020"),
-    Maquette("2014FR16M0OP001", "FSE", 10_846_859, "PO FEDER-FSE Aquitaine 2014-2020"),
-    Maquette("2014FR16M2OP006", "FSE", 5_635_448, "PO FEDER-FSE Limousin 2014-2020"),
-    Maquette("2014FR05SFOP004", "FSE", 38_830_420, "PO FSE Martinique Etat 2014-2020"),
-    Maquette("2014FR05M2OP001", "FSE", 31_570_048, "PO FEDER-FSE Guadeloupe et Saint-Martin Etat 2014-2020"),
-    Maquette("2014FR16M0OP009", "FSE", 9_000_000, "PO FEDER-FSE Guadeloupe Conseil Régional 2014-2020"),
+    Maquette("2014FR16M0OP004", "FSE", 12_350_060, 14_202_569, "PO FEDER-FSE Champagne-Ardenne 2014-2020"),
+    Maquette("2014FR05SFOP001", "FSE", 800_060_179, 894_847_747, "PO National FSE Emploi et Inclusion 2014-2020"),
+    Maquette("2014FR16M0OP014", "FSE", 5_200_000, 5_396_291, "PO FEDER-FSE Bourgogne 2014-2020"),
+    Maquette("2014FR16M2OP008", "FSE", 19_000_000, 19_000_000, "PO FEDER-FSE Pays de la Loire 2014-2020"),
+    Maquette("2014FR16M2OP005", "FSE", 7_280_000, 7_225_548, "PO FEDER-FSE Franche-Comté et Massif du Jura 2014-2020"),
+    Maquette("2014FR05SFOP003", "FSE", 31_526_760, 30_901_308, "PO FSE Guyane Etat 2014-2020"),
+    Maquette("2014FR05SFOP005", "FSE", 148_094_472, 130_489_351, "PO FSE Réunion Etat 2014-2020"),
+    Maquette("2014FR16M2OP010", "FSE", 28_439_941, 24_944_948, "PO FEDER-FSE Rhône-Alpes 2014-2020"),
+    Maquette("2014FR16M0OP013", "FSE", 40_625_000, 29_216_166, "PO FEDER-FSE Provence Alpes Côte d'Azur 2014-2020"),
+    Maquette("2014FR16M2OP009", "FSE", 7_217_693, 4_988_641, "PO FEDER-FSE Poitou Charentes 2014-2020"),
+    Maquette("2014FR16M2OP012", "FSE", 20_000_000, 12_828_614, "PO FEDER-FSE Mayotte Etat 2014-2020"),
+    Maquette("2014FR16M0OP001", "FSE", 10_846_859, 6_420_677, "PO FEDER-FSE Aquitaine 2014-2020"),
+    Maquette("2014FR16M2OP006", "FSE", 5_635_448, 2_785_445, "PO FEDER-FSE Limousin 2014-2020"),
+    Maquette("2014FR05SFOP004", "FSE", 38_830_420, 18_964_883, "PO FSE Martinique Etat 2014-2020"),
+    Maquette("2014FR05M2OP001", "FSE", 31_570_048, 0, "PO FEDER-FSE Guadeloupe et Saint-Martin Etat 2014-2020"),
+    Maquette("2014FR16M0OP009", "FSE", 9_000_000, 0, "PO FEDER-FSE Guadeloupe Conseil Régional 2014-2020"),
 ]
 
 # Lignes TOTAL des deux tableaux. Le rapport imprime le total FEDER "2 646 295,746,00 €",
 # avec une virgule de trop au milieu — coquille de mise en forme du document : la somme
 # des 25 lignes vaut bien 2 646 295 746, ce que vérifie `_verifier_totaux()`.
 _TOTAUX_PUBLIES = {"FEDER": 2_646_295_746, "FSE": 1_215_676_880}
+
+# Mêmes lignes TOTAL, colonne « Montant justifié » : 2 288 791 218,40 € et
+# 1 202 212 187,75 € dans le rapport. Arrondis à l'euro puis comparés à la somme des
+# montants ci-dessus avec une tolérance de 1 € par volet — l'arrondi ligne à ligne peut
+# dévier de l'arrondi du total (25 et 16 arrondis indépendants, pas un seul), ce qui
+# n'est pas la même chose qu'une ligne mal transcrite.
+_TOTAUX_JUSTIFIES_PUBLIES = {"FEDER": 2_288_791_218, "FSE": 1_202_212_188}
+_TOLERANCE_ARRONDI_JUSTIFIE = 1
 
 # Comment chaque volet se rapproche des opérations engagées. Cette table porte le point
 # le plus contre-intuitif de la période :
@@ -126,6 +150,17 @@ def _verifier_totaux():
     for fonds, publie in _TOTAUX_PUBLIES.items():
         calcule = par_fonds[fonds]
         assert calcule == publie, f"Total REACT-EU {fonds} : calculé={calcule} publié={publie} (écart {calcule - publie:+})"
+
+    par_fonds_justifie = {}
+    for m in MAQUETTES:
+        par_fonds_justifie[m.fonds] = par_fonds_justifie.get(m.fonds, 0) + m.montant_justifie
+    for fonds, publie in _TOTAUX_JUSTIFIES_PUBLIES.items():
+        calcule = par_fonds_justifie[fonds]
+        ecart = calcule - publie
+        assert abs(ecart) <= _TOLERANCE_ARRONDI_JUSTIFIE, (
+            f"Total justifié REACT-EU {fonds} : calculé={calcule} publié={publie} (écart {ecart:+}, "
+            f"tolérance {_TOLERANCE_ARRONDI_JUSTIFIE} € d'arrondi cumulé)"
+        )
 
     # Le rapport annonce 25 programmes FEDER et 16 FSE dans ses tableaux (son texte parle
     # de "24 maquettes" et "15 maquettes", en ne comptant pas les programmes gérés par

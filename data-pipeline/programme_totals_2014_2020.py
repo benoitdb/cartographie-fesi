@@ -7,10 +7,10 @@ données engagées — pendant de `programme_totals.py` pour la période précé
 - `data/processed/programme_totals_2014_2020.json` : {région: {fonds: montant UE}}, même
   forme que `programme_totals.json`, directement consommable par le pilotage ;
 - `data/processed/programme_detail_2014_2020.json` : ce que le premier agrège et qu'on
-  veut pouvoir montrer à part (part REACT-EU, contrepartie FSE de l'IEJ), plus la table
-  CCI → libellé de programme dont le dashboard a besoin pour nommer les programmes des
-  sources qui ne portent que leur code (issue #95) — fichier séparé pour ne rien changer
-  à la forme du premier, même choix qu'en 2021-2027.
+  veut pouvoir montrer à part (part REACT-EU, contrepartie FSE de l'IEJ, montant REACT-EU
+  justifié — issue #96), plus la table CCI → libellé de programme dont le dashboard a
+  besoin pour nommer les programmes des sources qui ne portent que leur code (issue #95)
+  — fichier séparé pour ne rien changer à la forme du premier, même choix qu'en 2021-2027.
 
 Aucun appel réseau, aucune lecture du XLSX : dérivé uniquement de `reference/`, déjà
 committé. Peut être relancé à volonté.
@@ -75,6 +75,7 @@ def calculer():
     """(totaux, detail) — région -> fonds -> montant UE programmé."""
     totaux = defaultdict(lambda: defaultdict(int))
     react_eu = defaultdict(lambda: defaultdict(int))
+    react_eu_justifie = defaultdict(lambda: defaultdict(int))
     contreparties = defaultdict(int)
 
     for d in DOTATIONS:
@@ -94,6 +95,10 @@ def calculer():
         fonds = MAPPING_FONDS_DONNEES[m.fonds]
         totaux[region][fonds] += m.montant_ue
         react_eu[region][fonds] += m.montant_ue
+        # Taux de référence indépendant (issue #96) : ne jamais l'ajouter à `totaux`, sinon
+        # le taux de consommation Synergie comparerait un engagé mi-période à un montant
+        # constaté a posteriori plutôt qu'à la maquette.
+        react_eu_justifie[region][fonds] += m.montant_justifie
 
     detail = {
         # Part REACT-EU incluse dans les totaux ci-dessus, isolée pour l'affichage : sa
@@ -103,6 +108,10 @@ def calculer():
         # Contrepartie FSE de l'IEJ, ajoutée à l'enveloppe IEJ et retranchée de
         # l'enveloppe FSE de la même région.
         "contrepartie_fse_iej": dict(contreparties),
+        # Montant REACT-EU justifié (rapport ANCT, certification au 24/09/2024), à
+        # rapprocher de "react_eu" ci-dessus pour un taux de référence indépendant des
+        # opérations Synergie — utile là où le libellé de fonds ne l'est pas (#96).
+        "react_eu_justifie": {r: dict(v) for r, v in react_eu_justifie.items()},
         # CCI -> libellé de programme, pour les sources qui ne nomment leurs programmes
         # que par leur code : le fichier régional Nouvelle-Aquitaine porte
         # `2014FR16M0OP001` là où Synergie écrit « Programme opérationnel régional... »
