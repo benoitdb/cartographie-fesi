@@ -292,7 +292,10 @@ def build_cumulative_curve(
     mode="pourcentage" (issue #33) : trace le % de l'enveloppe programmée plutôt que le
     montant cumulé — nécessite totaux_ref (categorie -> montant programmé), les catégories
     absentes de totaux_ref sont exclues (rien à quoi rapporter un %). Retombe sur mode
-    "montant" si totaux_ref est vide/absent en mode "pourcentage" (rien à diviser)."""
+    "montant" si totaux_ref est vide/absent en mode "pourcentage" (rien à diviser), ou si
+    aucune catégorie présente dans df n'a d'enveloppe dans totaux_ref (le filtre laisserait
+    un graphe vide plutôt qu'un repli — cas réel : sélectionner uniquement FEAD ou FEDER-FSE
+    en 2014-2020, deux fonds sans enveloppe, voir #100)."""
     plot_df = df[[date_col, amount_col, color_col]].copy()
     plot_df[date_col] = pd.to_datetime(plot_df[date_col])
     plot_df = (
@@ -302,7 +305,7 @@ def build_cumulative_curve(
     )
     plot_df["cumule"] = plot_df.groupby(color_col)[amount_col].cumsum()
 
-    if mode == "pourcentage" and not totaux_ref:
+    if mode == "pourcentage" and not (totaux_ref and set(plot_df[color_col]) & set(totaux_ref)):
         mode = "montant"
 
     if mode == "pourcentage":
