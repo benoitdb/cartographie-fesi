@@ -60,6 +60,7 @@ from utils.periodes import (
     MENTION_BRETAGNE_FSE_GRANULARITE,
     MENTION_DEPASSEMENT_2014_2020,
     MENTION_FONDS_HORS_RAPPROCHEMENT,
+    MENTION_MARTINIQUE_IEJ_FONDU,
     MENTION_MONTANTS_PROGRAMMES,
     MENTION_PILOTAGE_MASQUE,
     MENTION_PLAFOND_PAR_AXE,
@@ -890,6 +891,8 @@ with tab_pilotage:
                 st.caption(MENTION_REACT_EU_FONDU)
             if perimetre == "Bretagne" and "FSE" in fonds_rapprochables:
                 st.caption(MENTION_BRETAGNE_FSE_GRANULARITE)
+            if perimetre == "Martinique" and "IEJ" in fonds_rapprochables:
+                st.caption(MENTION_MARTINIQUE_IEJ_FONDU)
 
             detail_react_eu = load_programme_detail_2014_2020()
             part_react_eu_brut = detail_react_eu["react_eu"].get(cle_enveloppe, {})

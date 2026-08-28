@@ -419,6 +419,24 @@ MENTION_BRETAGNE_FSE_GRANULARITE = (
     "haut (issue #95)."
 )
 
+# Martinique affiche 0 % de taux de consommation IEJ alors que l'axe existe et est
+# programmé (issue #106). Preuve trouvée dans le texte du programme opérationnel
+# (Tableau 18b) : l'opération Synergie MQ0014333 « Dispositif Atout Inclusion »
+# (5 023 390 € étiquetés FSE) correspond à l'euro près au total combiné FSE
+# (2 511 695 €) + IEJ (2 511 695 €) de l'axe prioritaire 8(1) — Synergie fusionne les
+# deux fonds sous un seul libellé pour cette opération, au moins. Contrairement à
+# fusionner_enveloppes_sans_libelle (#96), impossible de séparer les deux moitiés dans
+# l'engagé : la ventilation ne vit que côté maquette. Documenté, pas corrigé — une
+# répartition 50/50 par opération serait une hypothèse non vérifiable depuis Synergie.
+MENTION_MARTINIQUE_IEJ_FONDU = (
+    "**L'IEJ martiniquais affiche 0 % de consommation, mais ce n'est pas un fait réel.** "
+    "Le programme opérationnel confirme que l'axe dédié (Tableau 18b) est bien programmé "
+    "(5,0 M€ combinés FSE + IEJ), et une opération Synergie (« Dispositif Atout Inclusion », "
+    "5 023 390 €) correspond à l'euro près à ce montant — mais elle est étiquetée `FSE` en "
+    "totalité, sans distinguer la part IEJ. Impossible de séparer les deux moitiés depuis "
+    "les seules données engagées (issue #106)."
+)
+
 # Où router chaque programme du fichier PON FSE (issue #95, point 3) : région pour les cinq
 # PO FSE État des DROM, None pour PON FSE et PO IEJ national — agrégés au Volet national,
 # **pas** ventilés par région malgré une opération sur deux géo-rattachée (`Region_adm`
