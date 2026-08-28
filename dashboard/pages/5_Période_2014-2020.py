@@ -307,29 +307,6 @@ if perimetre == ENSEMBLE_NATIONAL:
         national_summary = data["aggregates"]["national"]
         interregional_summary = data["aggregates"]["interregional"]
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric(f"{libelle_montant_ue} total", _fmt_millions(resume["montant_ue_total"]))
-    col2.metric("Nombre de projets", _fmt_entier(resume["count"]))
-    col3.metric("Projets en région", _fmt_entier(resume["count"] - national_summary["count"]))
-    col4.metric("Volet national", _fmt_entier(national_summary["count"]))
-    if interregional_summary["count"]:
-        st.caption(
-            f"Dont {interregional_summary['count']} opération(s) interrégionale(s) (plusieurs régions "
-            "à la fois), incluses dans le total ci-dessus mais non ventilées par région ni dans le "
-            "volet national. Les cinq programmes interrégionaux de la période (massifs, bassins "
-            "fluviaux) tombent aujourd'hui dans le volet national faute de table massif → régions "
-            "(issue #77)."
-        )
-
-    geojson = load_geojson()
-    regions_metro = {f["properties"]["nom"] for f in geojson["features"]}
-
-    # Même échelle de couleur pour la métropole et les vignettes DROM-COM : colorer
-    # chaque vignette sur son seul montant ferait ressortir un petit territoire aussi
-    # foncé qu'une grande région bien plus dotée.
-    montants_nationaux = [v["montant_ue_total"] for region, v in by_region.items() if region in regions_metro or region in DROM_COM]
-    color_range = [0, max(montants_nationaux)] if montants_nationaux else [0, 1]
-
     # Bretagne / Normandie / Nouvelle-Aquitaine ont leur propre fichier régional complet
     # (issue #68), mais `by_region` ci-dessus reste Synergie seule : sur cette carte
     # nationale, elles apparaîtraient quasi vides sans ce qui suit. Affichées avec leurs
@@ -369,6 +346,42 @@ if perimetre == ENSEMBLE_NATIONAL:
     # sous-comptés sont remplacés par le vrai montant régional quand il est disponible pour
     # les fonds sélectionnés, le reste (national, interrégional, autres régions) est inchangé.
     by_region_corrige = {**by_region, **regions_hors_synergie}
+
+    # KPI corrigé (issue #110) : même substitution que `by_region_corrige` ci-dessus,
+    # appliquée en delta sur le total déjà juste de `resume` (Synergie) plutôt que
+    # resommée depuis `by_region_corrige` seul, pour ne pas retoucher au national, à
+    # l'interrégional ni aux opérations multi-région déjà comptés correctement dedans.
+    correction_hors_synergie = sum(
+        v["montant_ue_total"] - by_region.get(region, {"montant_ue_total": 0})["montant_ue_total"]
+        for region, v in regions_hors_synergie.items()
+    )
+    montant_ue_total_corrige = resume["montant_ue_total"] + correction_hors_synergie
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric(f"{libelle_montant_ue} total", _fmt_millions(montant_ue_total_corrige))
+    col2.metric("Nombre de projets", _fmt_entier(resume["count"]))
+    col3.metric("Projets en région", _fmt_entier(resume["count"] - national_summary["count"]))
+    col4.metric("Volet national", _fmt_entier(national_summary["count"]))
+    if interregional_summary["count"]:
+        st.caption(
+            f"Dont {interregional_summary['count']} opération(s) interrégionale(s) (plusieurs régions "
+            "à la fois), incluses dans le total ci-dessus mais non ventilées par région ni dans le "
+            "volet national. Les cinq programmes interrégionaux de la période (massifs, bassins "
+            "fluviaux) tombent aujourd'hui dans le volet national faute de table massif → régions "
+            "(issue #77)."
+        )
+
+    geojson = load_geojson()
+    regions_metro = {f["properties"]["nom"] for f in geojson["features"]}
+
+    # Même échelle de couleur pour la métropole et les vignettes DROM-COM : colorer
+    # chaque vignette sur son seul montant ferait ressortir un petit territoire aussi
+    # foncé qu'une grande région bien plus dotée. Volontairement pas `by_region_corrige` :
+    # étirer l'échelle bleue avec des montants qui n'y sont de toute façon pas affichés
+    # (Bretagne/Normandie/Nouvelle-Aquitaine sont en gris, sur une échelle indépendante,
+    # voir plus bas) tasserait la couleur de toutes les autres régions sans raison (#110).
+    montants_nationaux = [v["montant_ue_total"] for region, v in by_region.items() if region in regions_metro or region in DROM_COM]
+    color_range = [0, max(montants_nationaux)] if montants_nationaux else [0, 1]
 
     # Pas de `.lower()` sur le libellé : il commence par le sigle « UE », qu'une
     # mise en minuscules transformerait en « montant ue programmé ».
