@@ -233,8 +233,9 @@ with tab_ensemble:
 
         st.caption(
             f"Rattachement département : {coverage['opération']:.0%} via la donnée pipeline (fiable), "
-            f"{coverage['approximé']:.0%} approximé via le code postal du bénéficiaire (siège du "
-            f"bénéficiaire, pas nécessairement le lieu de réalisation du projet), "
+            f"{coverage['zone']:.0%} via le champ Zone (fiable aussi — lieu du projet, comme le champ "
+            f"pipeline), {coverage['approximé']:.0%} approximé via le code postal du bénéficiaire (siège "
+            f"du bénéficiaire, pas nécessairement le lieu de réalisation du projet), "
             f"{coverage['nom du bénéficiaire']:.0%} déduit du nom du bénéficiaire (mention explicite "
             f"d'une ville ou du département), {coverage['inconnu']:.0%} non rattaché (absent de la "
             "carte, faute de département identifié, mais comptabilisé dans le tableau ci-dessous). "
@@ -245,10 +246,11 @@ with tab_ensemble:
         )
         if region == "Corse":
             st.caption(
-                "⚠️ Point de vigilance spécifique à la Corse : l'approximation par code postal du "
-                "bénéficiaire ne s'applique pas ici (un code postal débutant par 20 ne permet pas de "
-                "distinguer 2A/2B), d'où un recours plus fréquent à la déduction par nom du bénéficiaire "
-                "et une part de données non rattachées plus élevée que dans les autres régions."
+                "⚠️ Point de vigilance spécifique à la Corse : le champ Zone résout la plupart des cas "
+                "(2A/2B explicite dans son code), mais quand ni lui ni la donnée pipeline ne sont "
+                "renseignés, l'approximation par code postal du bénéficiaire ne s'applique pas (un code "
+                "postal débutant par 20 ne permet pas de distinguer 2A/2B) — d'où une part non rattachée "
+                "encore plus élevée que dans les autres régions."
             )
 
         non_reparti = df_region_dept[df_region_dept["dept"].isna()]
@@ -318,9 +320,10 @@ with tab_ensemble:
         st.subheader("Opérations rattachées à un département hors de la région")
         st.caption(
             f"Ces opérations sont bien attribuées à {region} (donnée fiable), mais leur département "
-            "assigné (donnée pipeline ou approximation via le code postal du bénéficiaire) appartient à "
-            "une autre région — le plus souvent parce que le siège du bénéficiaire est situé ailleurs "
-            "que le lieu de réalisation du projet. Elles sont incluses dans tous les totaux de la région "
+            "assigné (donnée pipeline, champ Zone, ou approximation via le code postal du bénéficiaire) "
+            f"appartient à une autre région — soit un projet réalisé hors de {region} par un porteur qui "
+            "y a son siège, soit, pour les cas approximés, le siège du bénéficiaire situé ailleurs que "
+            "le lieu de réalisation du projet. Elles sont incluses dans tous les totaux de la région "
             "affichés sur cette page, mais exclues de la carte et du tableau ci-dessus."
         )
 

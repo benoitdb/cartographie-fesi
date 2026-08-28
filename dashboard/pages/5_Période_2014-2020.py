@@ -601,9 +601,10 @@ else:
             "Origine du rattachement : "
             + " · ".join(f"{source} : {part:.0%}" for source, part in couverture_dept.items() if part >= 0.005)
             + ". La colonne « Département de l'opération » est peu renseignée sur cette "
-            "période : l'essentiel du rattachement est **approché** depuis le code postal du "
-            "bénéficiaire, puis depuis son nom — le siège du bénéficiaire, donc, et pas "
-            "nécessairement le lieu du projet. "
+            "période : l'essentiel du rattachement fiable vient du champ Zone (lieu du "
+            "projet, comme la donnée pipeline), le reste étant **approché** depuis le code "
+            "postal du bénéficiaire, puis depuis son nom — le siège du bénéficiaire, donc, "
+            "et pas nécessairement le lieu du projet. "
             + (
                 f"{part_hors_perimetre:.0%} des opérations pointent vers un département situé "
                 f"hors de {perimetre} (ligne « Hors périmètre » ci-dessous) — le rattachement "
