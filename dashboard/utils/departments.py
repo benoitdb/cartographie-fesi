@@ -125,6 +125,52 @@ def parse_departement_field(raw):
     return sorted(set(codes))
 
 
+def _commune_code_to_dept(code):
+    """Déduit le département depuis un code INSEE commune (5 caractères, DOM inclus,
+    Corse en 2A/2B) — même convention que cp_to_dept, avec la Corse en plus."""
+    if code[:2] == "97":
+        return _normalize_numeric_code(code[:3])
+    return _normalize_numeric_code(code[:2])
+
+
+def zone_dept(raw):
+    """Parse le champ "Zone" (Synergie), un champ hiérarchique à préfixe couvrant plusieurs
+    granularités : REG/xx (région), DEPT/xxx (département), COMM/xxxxx (commune, code INSEE
+    réel), ARRDT/CANT/QUAR (arrondissement/canton/quartier, sous forme de codes eux aussi
+    dérivés de l'INSEE — un chiffre/deux chiffres de moins que la commune selon le niveau) —
+    plus PAYS, hors de portée. Retourne le département si tous les segments ≥ département
+    s'accordent sur un seul, None sinon (vide, seulement REG/PAYS, ou désaccord entre
+    segments — cas non observé sur les données réelles mais pas exclu par le format).
+
+    Validé sur les 24 908 opérations 2014-2020 et les 16 625 de 2021-2027 : accord à 100 %
+    (3 219 + 665 cas comparables, zéro désaccord) avec "Département de l'opération", le champ
+    pipeline déjà tenu pour fiable — Zone porte donc la même localisation (lieu du projet),
+    pas celle du bénéficiaire. Contrairement à cp_to_dept, résout la Corse sans ambiguïté
+    (COMM/2A004, DEPT/02A... : l'alpha est déjà dans le code source, pas déduit).
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    codes = set()
+    for segment in raw.split("|"):
+        segment = segment.strip()
+        if "/" not in segment:
+            continue
+        prefix, rest = segment.split("/", 1)
+        code = rest.split("/", 1)[0]
+        if prefix == "DEPT":
+            codes.add(_normalize_numeric_code(code))
+        elif prefix == "COMM":
+            codes.add(_commune_code_to_dept(code))
+        elif prefix == "ARRDT":
+            codes.add(_normalize_numeric_code(code[:-1]))
+        elif prefix == "CANT":
+            codes.add(_normalize_numeric_code(code[:3]))
+        elif prefix == "QUAR":
+            codes.add(_commune_code_to_dept(code[:5]))
+        # REG, PAYS : granularité insuffisante pour un département, segment ignoré.
+    return codes.pop() if len(codes) == 1 else None
+
+
 def cp_to_dept(code_postal):
     """Déduit le code département depuis un code postal français. Approximation : la
     Corse (préfixe "20") n'est pas résolue en 2A/2B à partir du seul code postal."""
@@ -151,7 +197,7 @@ def assign_departments_df(df):
     return df
 
 
-DEPT_SOURCES = ("opération", "approximé", "nom du bénéficiaire", "inconnu")
+DEPT_SOURCES = ("opération", "zone", "approximé", "nom du bénéficiaire", "inconnu")
 
 
 def department_coverage_summary(df):
@@ -167,15 +213,21 @@ def department_coverage_summary(df):
 
 def assign_departement(op):
     """Rattache une opération à un département. Priorité au champ pipeline
-    "Département de l'opération" quand il désigne un département unique (fiable) ;
-    à défaut (champ vide, multi-département, ou non reconnu), approxime via le code
-    postal du bénéficiaire (siège du bénéficiaire, pas nécessairement le lieu du projet) ;
-    en dernier recours, déduit du nom du bénéficiaire quand il mentionne explicitement une
-    ville/le département (cas de la Corse notamment, où le code postal seul ne permet pas de
-    distinguer 2A/2B). Retourne (code_departement | None, source) avec source dans DEPT_SOURCES."""
+    "Département de l'opération" quand il désigne un département unique (fiable) ; à défaut,
+    au champ "Zone" (fiable aussi — cf. zone_dept, même localisation que le champ pipeline
+    quand les deux sont présents) ; à défaut, approxime via le code postal du bénéficiaire
+    (siège du bénéficiaire, pas nécessairement le lieu du projet) ; en dernier recours, déduit
+    du nom du bénéficiaire quand il mentionne explicitement une ville/le département (cas de
+    la Corse notamment, où le code postal seul ne permet pas de distinguer 2A/2B — Zone la
+    résout déjà à l'étape précédente quand elle est renseignée). Retourne
+    (code_departement | None, source) avec source dans DEPT_SOURCES."""
     codes = parse_departement_field(op.get("Département de l’opération"))
     if len(codes) == 1:
         return codes[0], "opération"
+
+    dept = zone_dept(op.get("Zone"))
+    if dept:
+        return dept, "zone"
 
     dept = cp_to_dept(op.get("Code postal du bénéficiaire"))
     if dept:

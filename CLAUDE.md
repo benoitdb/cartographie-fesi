@@ -28,6 +28,22 @@ période** y sont câblés depuis l'issue #81 (`categories_ue_2014_2020.json`, d
 14-20 et maquettes REACT-EU transcrites). Reste absente la dimension thématique, que
 la source ne porte pas (#82).
 
+**Le rattachement départemental utilise désormais le champ Zone en repli**
+(`dashboard/utils/departments.py`, issue #92) : avant le code postal du
+bénéficiaire (siège du porteur, pas nécessairement le lieu du projet), la
+cascade `assign_departement` essaie `zone_dept`, qui parse le champ Zone
+Synergie (préfixes hiérarchiques `REG/DEPT/COMM/ARRDT/CANT/QUAR`, codes INSEE
+réels). Validé sur les données réelles avant implémentation : 100 % d'accord
+(zéro désaccord sur les cas comparables, 2014-2020 et 2021-2027) avec le champ
+pipeline `Département de l'opération` déjà tenu pour fiable — Zone porte donc
+la même localisation (lieu du projet), pas celle du bénéficiaire. Gain de
+rattachement fiable en 2014-2020 : 13,0 % → 56,6 % (mieux que le 33 % de
+2021-2027). Résout aussi la Corse sans ambiguïté (2A/2B explicite dans le code
+Zone), là où `cp_to_dept` ne peut pas trancher un code postal préfixé `20`.
+`assign_departement` étant partagée entre `pages/1_Vue_Régionale.py`
+(2021-2027) et la page 2014-2020, le gain profite aux deux périodes — moindre
+côté 2021-2027 (son champ pipeline est déjà mieux renseigné).
+
 **Normandie, Nouvelle-Aquitaine et Bretagne lisent leur propre fichier régional
 hors-Synergie** depuis l'issue #95, pas l'extraction Synergie qui les sous-comptait
 fortement (Normandie en était même absente — #68) : toute la page 5, pas seulement
