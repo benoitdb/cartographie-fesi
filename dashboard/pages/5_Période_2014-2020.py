@@ -685,8 +685,14 @@ else:
                 config={"displayModeBar": False},
             )
         with col_map_dept:
+            part_approx = couverture_dept.get("approximé", 0)
+            annotation_carte = (
+                f"≈ {part_approx:.0%} du rattachement approché depuis le siège du bénéficiaire"
+                if part_approx >= 0.05
+                else None
+            )
             st.plotly_chart(
-                build_department_choropleth(df_region_dept, perimetre, show_colorbar=False),
+                build_department_choropleth(df_region_dept, perimetre, show_colorbar=False, annotation=annotation_carte),
                 width='stretch',
                 config=MAP_CONFIG,
             )
