@@ -100,9 +100,9 @@ mais **il n'est pas mort** : le dashboard lit ses fichiers géographiques
 (`frontend/public/geo/`). Ne pas supprimer ce dossier, et voir
 `frontend/public/geo/SOURCES.md` pour la provenance de chaque contour.
 
-**Déploiement Streamlit Community Cloud** (issue #119) : l'app est déployée sur
-[share.streamlit.io](https://share.streamlit.io) — repo `benoitdb/cartographie-fesi`,
-branche `main`, fichier `dashboard/Accueil.py`. Les 8 fichiers de données
+**Déploiement Streamlit Community Cloud** (issue #119) : l'app est en ligne sur
+[sid-fesi.streamlit.app](https://sid-fesi.streamlit.app/) — repo
+`benoitdb/cartographie-fesi`, branche `main`, fichier `dashboard/Accueil.py`. Les 8 fichiers de données
 principaux (~120 Mo, open data) sont committés dans le repo pour que Streamlit
 Cloud les trouve directement. **Mise à jour des données** : quand un nouveau XLSX
 sort (~5×/an), régénérer les JSON localement, committer et pousser — Streamlit
