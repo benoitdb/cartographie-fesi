@@ -100,6 +100,15 @@ mais **il n'est pas mort** : le dashboard lit ses fichiers géographiques
 (`frontend/public/geo/`). Ne pas supprimer ce dossier, et voir
 `frontend/public/geo/SOURCES.md` pour la provenance de chaque contour.
 
+**Déploiement Streamlit Community Cloud** (issue #119) : l'app est déployée sur
+[share.streamlit.io](https://share.streamlit.io) — repo `benoitdb/cartographie-fesi`,
+branche `main`, fichier `dashboard/Accueil.py`. Les 8 fichiers de données
+principaux (~120 Mo, open data) sont committés dans le repo pour que Streamlit
+Cloud les trouve directement. **Mise à jour des données** : quand un nouveau XLSX
+sort (~5×/an), régénérer les JSON localement, committer et pousser — Streamlit
+Cloud redéploie automatiquement sur push `main`. Le `requirements.txt` racine
+renvoie vers `dashboard/requirements.txt` pour éviter la duplication.
+
 ## Commandes
 
 Trois environnements, chacun avec son `requirements.txt` : `dashboard/venv/`
@@ -180,16 +189,16 @@ racine pour les tests (`requirements-dev.txt`).
 - `data/raw/` — le XLSX source, **non versionné**
 - `data/processed/` — JSON générés, **un par période** (`data.json` =
   2021-2027, `data_2014-2020.json`) : les fusionner chargerait ~100 Mo en
-  mémoire Streamlit à chaque page pour n'en afficher qu'une. Seuls ceux qui ne
-  dépendent ni du réseau ni du XLSX sont committés (voir les commentaires du
-  `.gitignore`, qui expliquent le choix fichier par fichier)
+  mémoire Streamlit à chaque page pour n'en afficher qu'une. Tous les JSON
+  sont committés (open data, nécessaire au déploiement Streamlit Cloud — voir
+  les commentaires du `.gitignore`). Le XLSX source reste gitignoré
 - `docs/sources/` — notes de travail sur les documents de référence, non versionné
 
 ## Pièges non devinables
 
-- **Un clone frais ne tourne pas.** `data/raw/*.xlsx` et les JSON qui en
-  dérivent (`data.json`, `beneficiaires_fuzzy.json`) sont gitignorés. Il faut
-  récupérer le XLSX source et relancer le pipeline.
+- **Un clone frais tourne** depuis l'issue #119 : les JSON de données sont
+  committés (open data, ~120 Mo). Le XLSX source reste gitignoré — le
+  régénérer demande de le récupérer et de relancer le pipeline.
 - **Source du XLSX** :
   [europe-en-france.gouv.fr — liste des opérations FEDER/FSE+/FTJ 2021-2027](https://www.europe-en-france.gouv.fr/fr/ressources/liste-operations-feder-fse-ftj-2021-2027).
   Version utilisée : `20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx`.

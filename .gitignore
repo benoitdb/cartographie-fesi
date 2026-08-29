@@ -36,6 +36,19 @@ data/processed/**
 # Dérivé du XLSX brut — non committé, donc non régénérable sur un clone nu — d'où
 # le versionnement du profil, pour que la page tourne sans le fichier source.
 !data/processed/profil_*.json
+# Données principales (open data europe-en-france.gouv.fr) : committées pour le
+# déploiement Streamlit Community Cloud (issue #119). ~120 Mo au total, chaque
+# fichier < 100 Mo (limite GitHub par fichier). Régénérées localement à chaque
+# nouveau millésime XLSX (~5×/an), committées et poussées — Streamlit Cloud
+# redéploie automatiquement sur push main.
+!data/processed/data.json
+!data/processed/data_2014-2020.json
+!data/processed/data_2014-2020_normandie.json
+!data/processed/data_2014-2020_nouvelle_aquitaine.json
+!data/processed/data_2014-2020_bretagne_officiel.json
+!data/processed/data_2014-2020_pon_fse.json
+!data/processed/beneficiaires_fuzzy.json
+!data/processed/transferts_solidarite.json
 
 # Python
 __pycache__/
