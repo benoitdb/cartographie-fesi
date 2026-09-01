@@ -1,10 +1,9 @@
-# Test local Metabase — Cartographie FESI
+# Stack Metabase — Cartographie FESI
 
-Test de faisabilité pour l'issue [#121](https://github.com/benoitdb/cartographie-fesi/issues/121).
-
-**Objectif :** valider que Metabase peut afficher une region map à partir du
-GeoJSON métropole existant (`frontend/public/geo/regions-metropole.geojson`),
-et explorer les capacités BI sur les données FESI.
+Déploiement Metabase pour l'issue [#121](https://github.com/benoitdb/cartographie-fesi/issues/121)
+(bascule Streamlit → Metabase, cohabitation ciblée). Phase 0 (schéma, chargement,
+vues SQL) et Phase 1 (dashboard national 2021-2027) sont livrées ; Phase 2/3/4
+restent à faire (comparateur régional, période 2014-2020, arbitrage final).
 
 ## Pré-requis
 
@@ -38,7 +37,7 @@ newgrp docker   # active le groupe dans la session courante
 ```bash
 cd metabase/
 python3 -m venv venv
-venv/bin/pip install psycopg2-binary
+venv/bin/pip install psycopg2-binary requests
 ```
 
 ## Lancement
@@ -55,6 +54,10 @@ docker compose ps
 
 # Charger les données FESI dans PostgreSQL
 venv/bin/python load_data.py
+
+# Provisionner Metabase : connexion PostgreSQL, carte GeoJSON métropole,
+# dashboard national 2021-2027 (relançable sans effet de bord)
+venv/bin/python setup_metabase.py
 ```
 
 ## Accès à Metabase
@@ -74,35 +77,47 @@ La connexion à la base FESI est déjà configurée (ajoutée via l'API au setup
 **Credentials :** tous dans `.env` (gitignoré). Ne pas coder de mot de passe
 en dur dans les fichiers versionnés.
 
-### Contenu créé par le script de test
+### Dashboard national 2021-2027 (Phase 1, issue #121)
 
-- **4 questions sauvegardées** : Montant UE par région, Répartition par fonds,
-  KPI nationaux, Engagement cumulé
-- **1 dashboard** : « FESI — Vue nationale (test) » assemblant les 4 questions
+`setup_metabase.py` crée 5 questions sauvegardées et 1 dashboard, tous scopés
+à `source_id = '2021-2027-conventionnees'` :
 
-## Test du GeoJSON
+- **Nombre d'opérations**, **Montant UE total** (scalaires, `v_by_fonds` sommé)
+- **Montant UE par fonds** (bar chart, couleurs = `FONDS_COLORS` importé
+  directement depuis `dashboard/utils/themes.py` — jamais dupliqué)
+- **Engagement cumulé** (courbe mensuelle cumulée sur `date_convention` ;
+  exclut les opérations sans date de convention)
+- **Montant UE par région** (choroplèthe, carte GeoJSON métropole)
+
+Dashboard **« FESI — Vue nationale 2021-2027 »**, avec un filtre paramétrique
+**Fonds** (FEDER/FSE+/FTJ) mappé sur les 5 cartes via un template-tag SQL
+`{{fonds}}`. Relancer le script après toute modification des questions pour
+les remettre dans cet état (recherche par nom, idempotent).
+
+**Portée volontairement limitée à 2021-2027** : les vues Phase 0 sont scopées
+par `(source_id, periode)` et ne blendent jamais plusieurs sources pour une
+période — 2014-2020 a 5 sources qui se chevauchent (Bretagne/Normandie/
+Nouvelle-Aquitaine/PON FSE avec Synergie), et cette fusion nationale reste un
+sujet de Phase 2/3. Pas de filtre « période » ici : un dashboard 2014-2020
+dédié est prévu en Phase 3.
+
+**Vérifié** (recoupement API Metabase vs SQL direct, pas seulement visuel) :
+16 625 opérations, 7 879 820 894,76 € au total pour 2021-2027 ; filtre
+`fonds=FEDER` → 6 038 opérations — identique des deux côtés.
+
+## GeoJSON
 
 Metabase bloque les URL internes (protection SSRF) — les hostnames Docker
-et les IP privées ne passent pas. Deux approches possibles :
+et les IP privées ne passent pas. `setup_metabase.py` enregistre la carte
+métropole (`fesi_metropole`) via son URL GitHub Raw publique
+(`https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/
+frontend/public/geo/regions-metropole.geojson`), identifiant de région `nom`
+des deux côtés (correspond exactement à la colonne `region` en base).
 
-**Via l'API** (utilisée ici) : référencer les GeoJSON par leur URL GitHub Raw
-publique (`https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/
-frontend/public/geo/...`). Le script de setup les enregistre automatiquement.
-
-**Via l'interface admin** : Admin > Paramètres > Cartes > Ajouter une carte,
-puis coller l'URL publique. Region identifier : `nom`, Region name : `nom`.
-
-### Résultat du test (1er sept. 2026)
-
-- **Choroplèthe métropole : fonctionne.** Le GeoJSON (13 régions, propriétés
-  `code` et `nom`) est compatible — chaque feature a un identifiant textuel
-  (`nom`) qui correspond exactement aux valeurs de la colonne `region` en base.
-- Les 3 cartes (métropole, DROM-COM, départements) sont enregistrées et
-  fonctionnelles.
-- Dashboard de test créé avec 5 visualisations : KPI, bar chart fonds, tableau
-  par région, courbe d'engagement cumulé, carte choroplèthe.
-- **Limite confirmée** : pas d'encarts DROM-COM en carte unique — chaque
-  territoire nécessite une question séparée ou une carte distincte.
+Seule la carte métropole est en scope Phase 1 (cf. issue #121). Les cartes
+DROM-COM/départements testées en Phase 0 ne sont pas (re)provisionnées ici —
+même limite déjà actée : pas d'encart DROM-COM en carte unique dans Metabase,
+chaque territoire nécessiterait sa propre question.
 
 ## Structure
 
@@ -112,7 +127,10 @@ metabase/
   .env                  — credentials locaux (gitignoré)
   init/
     01_schema.sql       — schéma fesi : tables operations, programme_totals, region_metadata
+    02_views.sql        — vues d'agrégats scopées (source_id, periode)
   load_data.py          — charge data/processed/data.json dans PostgreSQL
+  verify_aggregates.py  — recoupe les agrégats SQL vs JSON (Phase 0)
+  setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, dashboard (Phase 1)
   venv/                 — environnement Python (gitignoré)
   README.md             — ce fichier
 ```
