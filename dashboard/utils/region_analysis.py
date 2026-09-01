@@ -4,6 +4,7 @@ import streamlit as st
 
 from utils.cofinancement import plafond_categorie
 from utils.plot_style import style_hover
+from utils.retour_experience import RETOUR_EXPERIENCE_ANCT, SOURCE_ANCT
 from utils.stats import (
     build_boxplot,
     build_cofinancement_categorie_chart,
@@ -159,6 +160,24 @@ def render_region_gestion(df_region_ops, region_label):
         )
     )
     st.plotly_chart(style_hover(fig_region_os), width='stretch')
+
+    os_presents = set(df_region_os[LEVEL1])
+    os_avec_retour = [os for os in os_presents if os in RETOUR_EXPERIENCE_ANCT]
+    if os_avec_retour:
+        with st.expander("Retour d'expérience FEDER 2014-2020 (ANCT)"):
+            for os in sorted(os_avec_retour):
+                retour = RETOUR_EXPERIENCE_ANCT[os]
+                st.markdown(f"**{os}** — {retour['label_court']} *(source 14-20 : {retour['ot_source']})*")
+                cols = st.columns(2)
+                with cols[0]:
+                    st.markdown("Écueils identifiés :")
+                    for e in retour["ecueils"]:
+                        st.markdown(f"- **{e['theme']}** — {e['texte']}")
+                with cols[1]:
+                    st.markdown("Facteurs favorisants :")
+                    for f in retour["facteurs_favorisants"]:
+                        st.markdown(f"- {f}")
+            st.caption(SOURCE_ANCT)
 
 
 def render_region_audit(df_region_ops, region_label, key_suffix="", region_meta=None):
