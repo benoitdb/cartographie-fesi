@@ -685,8 +685,14 @@ else:
                 config={"displayModeBar": False},
             )
         with col_map_dept:
+            part_approx = couverture_dept.get("approximé", 0)
+            annotation_carte = (
+                f"≈ {part_approx:.0%} du rattachement approché depuis le siège du bénéficiaire"
+                if part_approx >= 0.05
+                else None
+            )
             st.plotly_chart(
-                build_department_choropleth(df_region_dept, perimetre, show_colorbar=False),
+                build_department_choropleth(df_region_dept, perimetre, show_colorbar=False, annotation=annotation_carte),
                 width='stretch',
                 config=MAP_CONFIG,
             )
@@ -854,6 +860,133 @@ with tab_ensemble:
         "Le programme est ce qui rattache une opération à sa région sur cette période, et ce "
         "qui la situe dans une programmation — pas sa date."
     )
+
+    if perimetre == VOLET_NATIONAL and ops_pon_fse_perimetre:
+        st.subheader("Ventilation régionale — PON FSE et IEJ national")
+        st.caption(
+            "Ces deux programmes sont rattachés au Volet national pour le pilotage (leur dotation "
+            "dans l'Accord de partenariat est une ligne nationale unique), mais chaque opération "
+            "porte sa région d'exécution. La carte et le tableau ci-dessous montrent l'engagé brut "
+            "par région — **sans taux de consommation**, faute d'enveloppe régionale à opposer."
+        )
+
+        by_region_pon = {}
+        for op in ops_pon_fse_perimetre:
+            regions = op.get("regions_modernes", [])
+            montant = op.get(MONTANT, 0) or 0
+            for r in regions:
+                by_region_pon.setdefault(r, {"montant_ue_total": 0, "count": 0})
+                by_region_pon[r]["montant_ue_total"] += montant
+                by_region_pon[r]["count"] += 1
+
+        ops_sans_region = sum(1 for op in ops_pon_fse_perimetre if not op.get("regions_modernes"))
+
+        if by_region_pon:
+            geojson_pon = load_geojson()
+            regions_metro_pon = {f["properties"]["nom"] for f in geojson_pon["features"]}
+            montants_pon = [v["montant_ue_total"] for v in by_region_pon.values()]
+            color_range_pon = [0, max(montants_pon)] if montants_pon else [0, 1]
+
+            col_legend_pon, col_metro_pon, col_dromcom_pon = st.columns([1, 4, 6])
+
+            with col_legend_pon:
+                st.plotly_chart(
+                    build_standalone_colorbar(color_range_pon, "Montant UE (€)", height=480),
+                    width='stretch',
+                    config={"displayModeBar": False},
+                )
+
+            with col_metro_pon:
+                st.markdown("**France métropolitaine**")
+                df_carte_pon = pd.DataFrame(
+                    [
+                        {"region": region, "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
+                        for region, v in by_region_pon.items()
+                        if region in regions_metro_pon
+                    ]
+                )
+                if not df_carte_pon.empty:
+                    fig_carte_pon = px.choropleth(
+                        df_carte_pon,
+                        geojson=geojson_pon,
+                        locations="region",
+                        featureidkey="properties.nom",
+                        color="montant_ue_total",
+                        color_continuous_scale="Blues",
+                        range_color=color_range_pon,
+                        custom_data=["count"],
+                        labels={"montant_ue_total": f"{libelle_montant_ue} (€)"},
+                    )
+                    fig_carte_pon.update_traces(
+                        hovertemplate=f"<b>%{{location}}</b><br>{libelle_montant_ue} : %{{z:,.0f}} €<br>Nb projets : %{{customdata[0]}}<extra></extra>"
+                    )
+                    fig_carte_pon.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
+                    fig_carte_pon.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
+                    st.plotly_chart(
+                        disable_map_interaction(style_map_background(style_hover(fig_carte_pon))),
+                        width='stretch',
+                        config=MAP_CONFIG,
+                    )
+
+            with col_dromcom_pon:
+                st.markdown("**DROM-COM**")
+                dromcom_geojson_pon = load_dromcom_geojson()
+                dromcom_rows_pon = st.columns(3), st.columns(3)
+                for territoire, col in zip(DROM_COM, dromcom_rows_pon[0] + dromcom_rows_pon[1], strict=True):
+                    valeurs = by_region_pon.get(territoire, {"montant_ue_total": 0, "count": 0})
+                    with col, st.container(border=True):
+                        st.markdown(f"**{territoire}**")
+                        fig_dromcom_pon = px.choropleth(
+                            pd.DataFrame([{"region": territoire, "montant_ue_total": valeurs["montant_ue_total"]}]),
+                            geojson=dromcom_geojson_pon,
+                            locations="region",
+                            featureidkey="properties.nom",
+                            color="montant_ue_total",
+                            color_continuous_scale="Blues",
+                            range_color=color_range_pon,
+                        )
+                        fig_dromcom_pon.update_traces(
+                            hovertemplate=f"<b>{territoire}</b><br>{libelle_montant_ue} : %{{z:,.0f}} €<extra></extra>"
+                        )
+                        fig_dromcom_pon.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
+                        fig_dromcom_pon.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=135, coloraxis_showscale=False)
+                        st.plotly_chart(
+                            disable_map_interaction(style_map_background(style_hover(fig_dromcom_pon))),
+                            width='stretch',
+                            config=MAP_CONFIG,
+                        )
+                        if valeurs["count"]:
+                            st.caption(f"{_fmt_millions(valeurs['montant_ue_total'])} · {valeurs['count']} projets")
+                        else:
+                            st.caption("Aucun projet")
+
+            df_regions_pon = (
+                pd.DataFrame(
+                    [
+                        {"Région": region, libelle_montant_ue: v["montant_ue_total"], "Nb projets": v["count"]}
+                        for region, v in by_region_pon.items()
+                    ]
+                )
+                .sort_values(libelle_montant_ue, ascending=False)
+                .reset_index(drop=True)
+            )
+            st.dataframe(
+                df_regions_pon,
+                width='stretch',
+                hide_index=True,
+                column_config={
+                    libelle_montant_ue: st.column_config.ProgressColumn(
+                        format="%,d €",
+                        min_value=0,
+                        max_value=int(df_regions_pon[libelle_montant_ue].max()) if len(df_regions_pon) else 1,
+                    )
+                },
+            )
+            if ops_sans_region:
+                st.caption(
+                    f"{_fmt_entier(ops_sans_region)} opération(s) sans région d'exécution connue "
+                    "(« Volet national du FSE » dans la source), non représentée(s) ci-dessus."
+                )
 
 with tab_pilotage:
     st.subheader("Pilotage : programmé vs engagé")
