@@ -2,8 +2,9 @@
 
 Déploiement Metabase pour l'issue [#121](https://github.com/benoitdb/cartographie-fesi/issues/121)
 (bascule Streamlit → Metabase, cohabitation ciblée). Phase 0 (schéma, chargement,
-vues SQL) et Phase 1 (dashboard national 2021-2027) sont livrées ; Phase 2/3/4
-restent à faire (comparateur régional, période 2014-2020, arbitrage final).
+vues SQL), Phase 1 (dashboard national 2021-2027) et Phase 2 (vues régionales,
+comparateur, volet national, vues pilotage) sont livrées ; Phase 3/4 restent à
+faire (période 2014-2020, arbitrage final).
 
 ## Pré-requis
 
@@ -105,6 +106,51 @@ dédié est prévu en Phase 3.
 16 625 opérations, 7 879 820 894,76 € au total pour 2021-2027 ; filtre
 `fonds=FEDER` → 6 038 opérations — identique des deux côtés.
 
+### Vues régionales, comparateur, volet national (Phase 2, issue #121)
+
+Trois dashboards supplémentaires, tous scopés à `2021-2027` :
+
+- **« FESI — Vue régionale 2021-2027 »** — équivalent Metabase de
+  `pages/1_Vue_Régionale.py` : KPI (montant, nombre d'opérations) et pilotage
+  (programmé vs engagé, taux, reste à engager par fonds) pour **une** région,
+  choisie via un template-tag texte `region` (même pattern que `fonds` en
+  Phase 1 — pas de field-filter, cf. gotchas ci-dessous).
+- **« FESI — Comparateur régions 2021-2027 »** — équivalent de
+  `pages/3_Comparateur.py` : deux template-tags indépendants (`region_a`,
+  `region_b`) sur des cartes **communes** (région en série/dimension), pas
+  deux jeux de cartes dupliqués — montant par fonds, taux de consommation,
+  table KPI comparant les deux régions choisies côte à côte.
+- **« FESI — Volet national 2021-2027 »** — équivalent de
+  `pages/2_Volet_National.py` : périmètre fixe (`perimetre = 'national'`,
+  même clé que `programme_totals`), pas de template-tag région. Pas de ligne
+  FEDER pour ce périmètre (les opérations nationales sont des programmes
+  FSE+/FTJ, ex. France Travail) — cohérent avec `v_pilotage`.
+
+**Vues SQL pilotage** (`metabase/init/03_pilotage.sql`) :
+- `v_engage_by_perimetre_fonds` — engagé par (période, périmètre, fonds), où
+  périmètre = région **ou** `'national'` (même clé que `programme_totals`,
+  pour pouvoir les joindre directement).
+- `v_pilotage` — jointure `programme_totals` / `v_engage_by_perimetre_fonds` :
+  `programme`, `engage`, `taux` (`engage / programme`, jamais plafonné — un
+  dépassement est un signal, pas une anomalie) et `reste_a_engager` (calculé
+  **par fonds**, planché à 0, puis à sommer si besoin — jamais
+  `programme_total - engage_total`, qui masquerait un reliquat sur un fonds
+  derrière un dépassement sur un autre, cf. `dashboard/utils/pilotage.py`
+  et l'issue #62). **Vérifiée** contre le cas documenté dans ce module :
+  Auvergne-Rhône-Alpes FEDER 2021-2027, ~141 M€ de reste à engager malgré un
+  dépassement FSE+.
+  Scopée à 2021-2027 en pratique : elle agrège l'engagé sans distinguer les
+  sources d'une période, ce qui redonnerait le double-comptage évité par
+  `02_views.sql` (#68/#95) si on l'utilisait telle quelle sur 2014-2020 (5
+  sources qui se chevauchent) — 2021-2027 n'a qu'une source, donc pas
+  d'ambiguïté ici. À revoir en Phase 3.
+
+**Init scripts appliqués sur une base déjà provisionnée** : `01_schema.sql`/
+`02_views.sql`/`03_pilotage.sql` dans `metabase/init/` ne s'exécutent
+automatiquement qu'à la création du volume Docker (`docker compose up` sur un
+volume vierge). Sur une instance déjà démarrée, appliquer un nouveau fichier
+à la main : `psql -h localhost -p 5437 -U <user> -d <db> -f metabase/init/03_pilotage.sql`.
+
 ## GeoJSON
 
 Metabase bloque les URL internes (protection SSRF) — les hostnames Docker
@@ -128,9 +174,10 @@ metabase/
   init/
     01_schema.sql       — schéma fesi : tables operations, programme_totals, region_metadata
     02_views.sql        — vues d'agrégats scopées (source_id, periode)
+    03_pilotage.sql     — vues pilotage (programmé vs engagé, taux, reste à engager) — Phase 2
   load_data.py          — charge data/processed/data.json dans PostgreSQL
   verify_aggregates.py  — recoupe les agrégats SQL vs JSON (Phase 0)
-  setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, dashboard (Phase 1)
+  setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 4 dashboards (Phase 1/2)
   venv/                 — environnement Python (gitignoré)
   README.md             — ce fichier
 ```

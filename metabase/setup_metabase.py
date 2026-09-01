@@ -165,6 +165,19 @@ def fonds_tag(tag_id):
     }
 
 
+def region_tag(tag_id, tag_name="region", display_name="Région", default=None):
+    return {
+        tag_name: {
+            "id": tag_id,
+            "name": tag_name,
+            "display-name": display_name,
+            "type": "text",
+            "required": True,
+            "default": default,
+        }
+    }
+
+
 def build_cards(session, db_id):
     cards = {}
 
@@ -288,6 +301,422 @@ def build_cards(session, db_id):
     return cards
 
 
+DEFAULT_REGION = "Île-de-France"
+DEFAULT_REGION_A = "Bretagne"
+DEFAULT_REGION_B = "Occitanie"
+
+
+def build_regional_cards(session, db_id):
+    """Phase 2 (issue #121) : équivalent Metabase de `pages/1_Vue_Régionale.py` —
+    KPI + pilotage (programmé vs engagé, taux, reste à engager) pour UNE région,
+    choisie via le template-tag `region` (texte, pas field-filter — même choix
+    que `fonds` en Phase 1, cf. gotchas README). `v_pilotage` (03_pilotage.sql)
+    porte déjà les règles de `dashboard/utils/pilotage.py` (reste à engager par
+    fonds, planché à 0, jamais programme_total - engage_total)."""
+    cards = {}
+    tag_id = "a3000000-0000-0000-0000-00000000000%d"
+
+    cards["region_montant_total"] = upsert_card(
+        session,
+        "Région — Montant UE total",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        f"SELECT montant_ue_total FROM v_by_region "
+                        f"WHERE source_id = '{SOURCE_2021_2027}' AND region = {{{{region}}}}"
+                    ),
+                    "template-tags": region_tag(tag_id % 1, default=DEFAULT_REGION),
+                },
+                "database": db_id,
+            },
+            "display": "scalar",
+            "visualization_settings": {},
+        },
+    )
+
+    cards["region_n_operations"] = upsert_card(
+        session,
+        "Région — Nombre d'opérations",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        f"SELECT n_operations FROM v_by_region "
+                        f"WHERE source_id = '{SOURCE_2021_2027}' AND region = {{{{region}}}}"
+                    ),
+                    "template-tags": region_tag(tag_id % 2, default=DEFAULT_REGION),
+                },
+                "database": db_id,
+            },
+            "display": "scalar",
+            "visualization_settings": {},
+        },
+    )
+
+    series_settings = {f: {"color": c} for f, c in FONDS_COLORS.items() if f in FONDS_2021_2027}
+    cards["region_par_fonds"] = upsert_card(
+        session,
+        "Région — Montant UE par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        f"SELECT fonds, montant_ue_total FROM v_by_region_fonds "
+                        f"WHERE source_id = '{SOURCE_2021_2027}' AND region = {{{{region}}}} ORDER BY fonds"
+                    ),
+                    "template-tags": region_tag(tag_id % 3, default=DEFAULT_REGION),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {"series_settings": series_settings},
+        },
+    )
+
+    cards["region_pilotage"] = upsert_card(
+        session,
+        "Région — Programmé vs engagé par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT fonds, programme, engage, taux, reste_a_engager FROM v_pilotage "
+                        "WHERE periode = '2021-2027' AND perimetre = {{region}} ORDER BY fonds"
+                    ),
+                    "template-tags": region_tag(tag_id % 4, default=DEFAULT_REGION),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {"graph.metrics": ["programme", "engage"], "graph.dimensions": ["fonds"]},
+        },
+    )
+
+    return cards
+
+
+def _region_dashcards(cards_layout, param_id, tag_name="region"):
+    return [
+        {
+            "id": -(i + 1),
+            "card_id": card["id"],
+            "row": row,
+            "col": col,
+            "size_x": size_x,
+            "size_y": size_y,
+            "parameter_mappings": [
+                {
+                    "parameter_id": param_id,
+                    "card_id": card["id"],
+                    "target": ["variable", ["template-tag", tag_name]],
+                }
+            ],
+        }
+        for i, (card, row, col, size_x, size_y) in enumerate(cards_layout)
+    ]
+
+
+REGIONAL_DASHBOARD_NAME = "FESI — Vue régionale 2021-2027"
+REGIONAL_PARAM_ID = "fesi-region-filter"
+
+
+def ensure_regional_dashboard(session, cards):
+    dashboards = session.get(f"{MB_URL}/api/dashboard").json()
+    existing = next((d for d in dashboards if d["name"] == REGIONAL_DASHBOARD_NAME), None)
+    dash_id = existing["id"] if existing else session.post(
+        f"{MB_URL}/api/dashboard", json={"name": REGIONAL_DASHBOARD_NAME}
+    ).json()["id"]
+
+    layout = [
+        (cards["region_montant_total"], 0, 0, 4, 3),
+        (cards["region_n_operations"], 4, 0, 4, 3),
+        (cards["region_par_fonds"], 0, 3, 8, 5),
+        (cards["region_pilotage"], 8, 0, 8, 8),
+    ]
+    r = session.put(
+        f"{MB_URL}/api/dashboard/{dash_id}",
+        json={
+            "parameters": [
+                {
+                    "id": REGIONAL_PARAM_ID,
+                    "name": "Région",
+                    "slug": "region",
+                    "type": "string/=",
+                    "default": [DEFAULT_REGION],
+                }
+            ],
+            "dashcards": _region_dashcards(layout, REGIONAL_PARAM_ID),
+        },
+    )
+    r.raise_for_status()
+    return dash_id
+
+
+def build_comparateur_cards(session, db_id):
+    """Phase 2 : équivalent Metabase de `pages/3_Comparateur.py` — deux régions
+    choisies via deux template-tags indépendants (`region_a`, `region_b`), sur
+    des cartes communes qui affichent les deux côte à côte (une dimension
+    `region` en série), pas deux jeux de cartes dupliqués."""
+    cards = {}
+    tag_id = "a4000000-0000-0000-0000-00000000000%d"
+
+    def two_regions_tag(id1, id2):
+        return {
+            **region_tag(id1, "region_a", "Région A", default=DEFAULT_REGION_A),
+            **region_tag(id2, "region_b", "Région B", default=DEFAULT_REGION_B),
+        }
+
+    cards["comparateur_par_fonds"] = upsert_card(
+        session,
+        "Comparateur — Montant UE par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT region, fonds, montant_ue_total FROM v_by_region_fonds "
+                        f"WHERE source_id = '{SOURCE_2021_2027}' "
+                        "AND (region = {{region_a}} OR region = {{region_b}}) ORDER BY region, fonds"
+                    ),
+                    "template-tags": two_regions_tag(tag_id % 1, tag_id % 2),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {"graph.dimensions": ["fonds", "region"], "graph.metrics": ["montant_ue_total"]},
+        },
+    )
+
+    cards["comparateur_taux"] = upsert_card(
+        session,
+        "Comparateur — Taux de consommation par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT perimetre AS region, fonds, taux FROM v_pilotage "
+                        "WHERE periode = '2021-2027' AND (perimetre = {{region_a}} OR perimetre = {{region_b}}) "
+                        "ORDER BY region, fonds"
+                    ),
+                    "template-tags": two_regions_tag(tag_id % 3, tag_id % 4),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {"graph.dimensions": ["fonds", "region"], "graph.metrics": ["taux"]},
+        },
+    )
+
+    cards["comparateur_kpi"] = upsert_card(
+        session,
+        "Comparateur — KPI par région",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT region, n_operations, montant_ue_total, montant_ue_moyen FROM v_by_region "
+                        f"WHERE source_id = '{SOURCE_2021_2027}' "
+                        "AND (region = {{region_a}} OR region = {{region_b}}) ORDER BY region"
+                    ),
+                    "template-tags": two_regions_tag(tag_id % 5, tag_id % 6),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {},
+        },
+    )
+
+    return cards
+
+
+COMPARATEUR_DASHBOARD_NAME = "FESI — Comparateur régions 2021-2027"
+COMPARATEUR_PARAM_A_ID = "fesi-region-a-filter"
+COMPARATEUR_PARAM_B_ID = "fesi-region-b-filter"
+
+
+def ensure_comparateur_dashboard(session, cards):
+    dashboards = session.get(f"{MB_URL}/api/dashboard").json()
+    existing = next((d for d in dashboards if d["name"] == COMPARATEUR_DASHBOARD_NAME), None)
+    dash_id = existing["id"] if existing else session.post(
+        f"{MB_URL}/api/dashboard", json={"name": COMPARATEUR_DASHBOARD_NAME}
+    ).json()["id"]
+
+    layout = [
+        (cards["comparateur_kpi"], 0, 0, 16, 3),
+        (cards["comparateur_par_fonds"], 0, 3, 8, 6),
+        (cards["comparateur_taux"], 8, 3, 8, 6),
+    ]
+    dashcards = [
+        {
+            "id": -(i + 1),
+            "card_id": card["id"],
+            "row": row,
+            "col": col,
+            "size_x": size_x,
+            "size_y": size_y,
+            "parameter_mappings": [
+                {
+                    "parameter_id": COMPARATEUR_PARAM_A_ID,
+                    "card_id": card["id"],
+                    "target": ["variable", ["template-tag", "region_a"]],
+                },
+                {
+                    "parameter_id": COMPARATEUR_PARAM_B_ID,
+                    "card_id": card["id"],
+                    "target": ["variable", ["template-tag", "region_b"]],
+                },
+            ],
+        }
+        for i, (card, row, col, size_x, size_y) in enumerate(layout)
+    ]
+    r = session.put(
+        f"{MB_URL}/api/dashboard/{dash_id}",
+        json={
+            "parameters": [
+                {
+                    "id": COMPARATEUR_PARAM_A_ID,
+                    "name": "Région A",
+                    "slug": "region_a",
+                    "type": "string/=",
+                    "default": [DEFAULT_REGION_A],
+                },
+                {
+                    "id": COMPARATEUR_PARAM_B_ID,
+                    "name": "Région B",
+                    "slug": "region_b",
+                    "type": "string/=",
+                    "default": [DEFAULT_REGION_B],
+                },
+            ],
+            "dashcards": dashcards,
+        },
+    )
+    r.raise_for_status()
+    return dash_id
+
+
+def build_national_cards(session, db_id):
+    """Phase 2 : équivalent Metabase de `pages/2_Volet_National.py` — pas de
+    template-tag région ici, le périmètre national (`perimetre = 'national'`,
+    même clé que `programme_totals`) est fixe. Pas de FEDER national (cf.
+    `v_pilotage`, aucune ligne FEDER pour ce périmètre — les opérations
+    nationales sont des programmes FSE+/FTJ, ex. France Travail)."""
+    cards = {}
+
+    cards["national_montant_total"] = upsert_card(
+        session,
+        "Volet national — Montant UE total",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        f"SELECT montant_ue_total FROM v_national WHERE source_id = '{SOURCE_2021_2027}'"
+                    ),
+                    "template-tags": {},
+                },
+                "database": db_id,
+            },
+            "display": "scalar",
+            "visualization_settings": {},
+        },
+    )
+
+    cards["national_n_operations"] = upsert_card(
+        session,
+        "Volet national — Nombre d'opérations",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": f"SELECT n_operations FROM v_national WHERE source_id = '{SOURCE_2021_2027}'",
+                    "template-tags": {},
+                },
+                "database": db_id,
+            },
+            "display": "scalar",
+            "visualization_settings": {},
+        },
+    )
+
+    cards["national_par_fonds"] = upsert_card(
+        session,
+        "Volet national — Montant UE par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT fonds, engage AS montant_ue_total FROM v_engage_by_perimetre_fonds "
+                        "WHERE periode = '2021-2027' AND perimetre = 'national' ORDER BY fonds"
+                    ),
+                    "template-tags": {},
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {
+                "series_settings": {f: {"color": c} for f, c in FONDS_COLORS.items() if f in FONDS_2021_2027}
+            },
+        },
+    )
+
+    cards["national_pilotage"] = upsert_card(
+        session,
+        "Volet national — Programmé vs engagé par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT fonds, programme, engage, taux, reste_a_engager FROM v_pilotage "
+                        "WHERE periode = '2021-2027' AND perimetre = 'national' ORDER BY fonds"
+                    ),
+                    "template-tags": {},
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {"graph.metrics": ["programme", "engage"], "graph.dimensions": ["fonds"]},
+        },
+    )
+
+    return cards
+
+
+NATIONAL_DASHBOARD_NAME = "FESI — Volet national 2021-2027"
+
+
+def ensure_national_dashboard(session, cards):
+    dashboards = session.get(f"{MB_URL}/api/dashboard").json()
+    existing = next((d for d in dashboards if d["name"] == NATIONAL_DASHBOARD_NAME), None)
+    dash_id = existing["id"] if existing else session.post(
+        f"{MB_URL}/api/dashboard", json={"name": NATIONAL_DASHBOARD_NAME}
+    ).json()["id"]
+
+    layout = [
+        (cards["national_montant_total"], 0, 0, 4, 3),
+        (cards["national_n_operations"], 4, 0, 4, 3),
+        (cards["national_par_fonds"], 0, 3, 8, 5),
+        (cards["national_pilotage"], 8, 0, 8, 8),
+    ]
+    dashcards = [
+        {"id": -(i + 1), "card_id": card["id"], "row": row, "col": col, "size_x": size_x, "size_y": size_y}
+        for i, (card, row, col, size_x, size_y) in enumerate(layout)
+    ]
+    r = session.put(f"{MB_URL}/api/dashboard/{dash_id}", json={"dashcards": dashcards})
+    r.raise_for_status()
+    return dash_id
+
+
 DASHBOARD_NAME = "FESI — Vue nationale 2021-2027"
 DASHBOARD_PARAM_ID = "fesi-fonds-filter"
 
@@ -357,8 +786,19 @@ def main():
     ensure_geojson_map(session)
     cards = build_cards(session, db_id)
     dash_id = ensure_dashboard(session, cards)
+    print(f"Dashboard national prêt : {MB_URL}/dashboard/{dash_id}")
 
-    print(f"Dashboard prêt : {MB_URL}/dashboard/{dash_id}")
+    regional_cards = build_regional_cards(session, db_id)
+    regional_dash_id = ensure_regional_dashboard(session, regional_cards)
+    print(f"Dashboard régional prêt : {MB_URL}/dashboard/{regional_dash_id}")
+
+    comparateur_cards = build_comparateur_cards(session, db_id)
+    comparateur_dash_id = ensure_comparateur_dashboard(session, comparateur_cards)
+    print(f"Dashboard comparateur prêt : {MB_URL}/dashboard/{comparateur_dash_id}")
+
+    national_cards = build_national_cards(session, db_id)
+    national_dash_id = ensure_national_dashboard(session, national_cards)
+    print(f"Dashboard volet national prêt : {MB_URL}/dashboard/{national_dash_id}")
 
 
 if __name__ == "__main__":
