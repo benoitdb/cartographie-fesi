@@ -147,6 +147,19 @@ racine pour les tests (`requirements-dev.txt`).
   le réseau. Ne pas le lancer dans une régénération de routine : son résultat
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
+- **Stack Metabase locale** (issue #121, exploratoire — cohabitation ciblée
+  Streamlit/Metabase, voir l'étude d'impact liée à l'issue) : `ingest.py` ne
+  dépend d'aucune base de données et le reste volontairement, pour que
+  Streamlit Cloud puisse régénérer les JSON sans infra. La sortie SQL est donc
+  un chargement **découplé**, à relancer après toute régénération quand la
+  stack tourne (`cd metabase && docker compose up -d`) :
+  ```
+  metabase/venv/bin/python metabase/load_data.py       # charge les 7 sources dans PostgreSQL
+  metabase/venv/bin/python metabase/verify_aggregates.py  # recoupe les agrégats SQL vs JSON
+  ```
+  Schéma dans `metabase/init/*.sql` (appliqué à la création du volume Docker
+  uniquement — `docker compose down -v` puis `up` pour repartir d'un schéma
+  modifié).
 
 - **Tests** : `venv/bin/python -m pytest -q` (376 tests, ~40 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du

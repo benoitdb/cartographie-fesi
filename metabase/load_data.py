@@ -1,16 +1,19 @@
-"""Load FESI JSON data into PostgreSQL for Metabase testing.
+"""Charge les données FESI (JSON déjà générés par `ingest.py`) dans PostgreSQL.
 
-Générique par source (Phase 0, issue #121) : lit `data-pipeline/sources.SOURCES`
-et `data-pipeline/schema_source.SCHEMAS` pour savoir, pour chaque source, quel
+C'est la « double sortie SQL » de la Phase 0 (issue #121) — décidée
+**découplée** d'`ingest.py` plutôt qu'intégrée : `ingest.py` ne dépend
+d'aucune base de données (seulement du XLSX source), ce qui permet à
+Streamlit Community Cloud de régénérer les JSON sans aucune infra. Ce script
+relit ces JSON après coup ; à relancer après toute régénération
+(`python ingest.py ...`) quand la stack Metabase locale tourne.
+
+Générique par source : lit `data-pipeline/sources.SOURCES` et
+`data-pipeline/schema_source.SCHEMAS` pour savoir, pour chaque source, quel
 fichier JSON charger et comment ses colonnes brutes (souvent en anglais, ou
 avec des libellés propres à une seule source — SIRET, AXE/OT/PI/OS...) se
 rattachent aux clés internes déjà harmonisées côté pipeline. Ce mapping n'est
-pas dupliqué ici : il est importé directement depuis data-pipeline (modules
-stdlib-only, sans dépendance lourde).
-
-Ce script reste un chargeur de test local, pas encore la double-sortie SQL de
-`ingest.py` (prochaine étape de la Phase 0) : il relit les JSON déjà générés
-plutôt que d'écrire dans Postgres au moment de l'ingestion.
+pas dupliqué ici : il est importé directement depuis data-pipeline, donc ne
+peut pas diverger.
 """
 
 import json
