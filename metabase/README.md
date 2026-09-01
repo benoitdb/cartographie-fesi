@@ -2,9 +2,10 @@
 
 Déploiement Metabase pour l'issue [#121](https://github.com/benoitdb/cartographie-fesi/issues/121)
 (bascule Streamlit → Metabase, cohabitation ciblée). Phase 0 (schéma, chargement,
-vues SQL), Phase 1 (dashboard national 2021-2027) et Phase 2 (vues régionales,
-comparateur, volet national, vues pilotage) sont livrées ; Phase 3/4 restent à
-faire (période 2014-2020, arbitrage final).
+vues SQL), Phase 1 (dashboard national 2021-2027), Phase 2 (vues régionales,
+comparateur, volet national, vues pilotage) et Phase 3 (période 2014-2020 :
+fusion des six sources, cofinancement, dashboard) sont livrées ; reste la
+Phase 4 (validation croisée et arbitrage du périmètre final).
 
 ## Pré-requis
 
@@ -57,8 +58,12 @@ docker compose ps
 venv/bin/python load_data.py
 
 # Provisionner Metabase : connexion PostgreSQL, carte GeoJSON métropole,
-# dashboard national 2021-2027 (relançable sans effet de bord)
+# les 5 dashboards (relançable sans effet de bord)
 venv/bin/python setup_metabase.py
+
+# Vérifier (facultatif) : agrégats SQL vs JSON, puis fusion 14-20 SQL vs dashboard
+venv/bin/python verify_aggregates.py
+venv/bin/python verify_pilotage_2014_2020.py
 ```
 
 ## Accès à Metabase
@@ -98,9 +103,11 @@ les remettre dans cet état (recherche par nom, idempotent).
 **Portée volontairement limitée à 2021-2027** : les vues Phase 0 sont scopées
 par `(source_id, periode)` et ne blendent jamais plusieurs sources pour une
 période — 2014-2020 a 5 sources qui se chevauchent (Bretagne/Normandie/
-Nouvelle-Aquitaine/PON FSE avec Synergie), et cette fusion nationale reste un
-sujet de Phase 2/3. Pas de filtre « période » ici : un dashboard 2014-2020
-dédié est prévu en Phase 3.
+Nouvelle-Aquitaine/PON FSE avec Synergie). Pas de filtre « période » ici : la
+fusion de ces sources est faite par les vues dédiées de la Phase 3
+(`04_periode_2014_2020.sql`), alimentant un dashboard 2014-2020 **séparé** —
+pas un sélecteur de période sur ce dashboard-ci, exactement comme le dashboard
+Streamlit garde la période 14-20 sur son propre écran (#83).
 
 **Vérifié** (recoupement API Metabase vs SQL direct, pas seulement visuel) :
 16 625 opérations, 7 879 820 894,76 € au total pour 2021-2027 ; filtre
@@ -143,13 +150,79 @@ Trois dashboards supplémentaires, tous scopés à `2021-2027` :
   sources d'une période, ce qui redonnerait le double-comptage évité par
   `02_views.sql` (#68/#95) si on l'utilisait telle quelle sur 2014-2020 (5
   sources qui se chevauchent) — 2021-2027 n'a qu'une source, donc pas
-  d'ambiguïté ici. À revoir en Phase 3.
+  d'ambiguïté ici. **C'est ce que lève la Phase 3 ci-dessous**, avec des vues
+  dédiées à la période plutôt qu'en élargissant celles-ci.
 
-**Init scripts appliqués sur une base déjà provisionnée** : `01_schema.sql`/
-`02_views.sql`/`03_pilotage.sql` dans `metabase/init/` ne s'exécutent
-automatiquement qu'à la création du volume Docker (`docker compose up` sur un
-volume vierge). Sur une instance déjà démarrée, appliquer un nouveau fichier
-à la main : `psql -h localhost -p 5437 -U <user> -d <db> -f metabase/init/03_pilotage.sql`.
+### Période 2014-2020 (Phase 3, issue #121)
+
+Dashboard **« FESI — Période 2014-2020 »**, équivalent Metabase de
+`pages/5_Période_2014-2020.py` : KPI (montant programmé, nombre d'opérations),
+montant par fonds, pilotage programmé vs engagé, et dépassements de plafond de
+cofinancement — pour **un** périmètre choisi via un template-tag texte
+`perimetre` (une région, ou `'national'` pour le volet national ; même pattern
+que `region` en Phase 2). Les six sources de la période y sont **fusionnées**,
+là où Phase 1/2 restaient scopées à une source unique.
+
+**Vues SQL** (`metabase/init/04_periode_2014_2020.sql`) :
+- `v_perimetre_2014_2020` — une ligne par opération, taguée de son périmètre
+  final. C'est là que vivent les deux règles de fusion de la période :
+  **substitution** (Bretagne/Normandie/Nouvelle-Aquitaine lisent leur fichier
+  régional et ignorent entièrement Synergie, qui ne les couvre qu'à la marge)
+  et **addition** (le PON FSE s'ajoute, routé par `libelle_programme` et non
+  par la région portée sur chaque ligne : les cinq PO FSE État des DROM vers
+  leur région, PON FSE et PO IEJ national vers le volet national). Les
+  opérations interrégionales sont exclues des totaux régionaux, comme côté
+  Python — sinon elles compteraient dans plusieurs totaux censés s'additionner.
+  Le vieux fichier Bretagne (`2014-2020-bretagne`, europe.bzh) n'y entre
+  jamais : remplacé par `2014-2020-bretagne-officiel` pour tout usage autre que
+  la page « Validation de la source ».
+- `v_engage_2014_2020` — l'engagé par (périmètre, fonds), agrégé là-dessus.
+- `v_enveloppes_2014_2020` — les enveloppes de `programme_totals`, après fusion
+  **FEDER REACT-EU → FEDER** sur les seuls périmètres qui ne portent aucune
+  opération étiquetée `FEDER REACT-EU` (seuls les DROM en ont une dans
+  Synergie ; en métropole les mêmes opérations sont rangées sous FEDER, cf.
+  `periodes.FUSIONS_ENVELOPPES_SANS_LIBELLE` et #96). La correction IEJ
+  (contrepartie FSE retranchée du FSE et ajoutée à l'IEJ) est déjà faite en
+  amont par `programme_totals_2014_2020.py` : rien à refaire ici.
+- `v_pilotage_2014_2020` — même formule que `v_pilotage`. FEAD et FEDER-FSE
+  n'y apparaissent jamais, faute d'enveloppe en face (le premier hors Fonds
+  ESI, le second pas un fonds mais le libellé du PNAT Europ'Act).
+- `v_cofinancement_2014_2020` / `_summary` — taux par opération face au plafond
+  de sa région (art. 120 §3), avec les trois fonds hors champ exclus
+  (`FEDER REACT-EU`, `IEJ`, `FEAD` — cf. `cofinancement.FONDS_HORS_PLAFOND`).
+  Part de `v_perimetre_2014_2020`, pas d'`operations` : sinon le vieux fichier
+  Bretagne et les opérations Synergie marginales des régions substituées
+  s'ajouteraient à celles déjà comptées. `depasse_plafond` compare au plafond
+  **maximum** de la fourchette (six régions modernes sur treize réunissent
+  d'anciennes régions de catégories différentes) : le plafond se fixe par axe
+  prioritaire et peut être majoré de dix points (§5), comparer au minimum
+  multiplierait les faux positifs. Un dépassement reste un écart à expliquer,
+  jamais un constat.
+
+La table `categories_ue_2014_2020` (région → catégorie de cohésion de l'époque
+et plafond min/max) est chargée par `load_data.py`, qui appelle directement
+`dashboard/utils/cofinancement.plafond_intervalle_2014_2020` plutôt que de
+retranscrire la règle.
+
+**Vérifié** par `verify_pilotage_2014_2020.py` (tests croisés Python vs SQL,
+même esprit que la Phase 0 mais sur la *fusion* des sources) : 68 couples
+(périmètre × fonds) engagés et 55 enveloppes concordent, règles relues du
+dashboard plutôt que réimplémentées. Le script a été **vu rougir** sur une
+mutation de `v_perimetre_2014_2020` (substitution retirée : Bretagne et
+Nouvelle-Aquitaine repassent en double-comptage) avant d'être livré vert.
+Recoupé aussi via l'API Metabase : Bretagne FSE ressort à **111 %** sur
+**7 opérations**, exactement ce que documente
+`periodes.MENTION_BRETAGNE_FSE_GRANULARITE` côté Streamlit (marchés de
+formation du Conseil régional, pas des opérations unitaires — un effet de
+granularité, pas une surconsommation) ; Auvergne-Rhône-Alpes FEDER affiche
+740 072 469 € programmés, soit bien la somme FEDER + maquette REACT-EU fondue,
+quand La Réunion garde ses deux lignes séparées.
+
+**Init scripts appliqués sur une base déjà provisionnée** : les fichiers de
+`metabase/init/` ne s'exécutent automatiquement qu'à la création du volume
+Docker (`docker compose up` sur un volume vierge). Sur une instance déjà
+démarrée, appliquer un nouveau fichier à la main :
+`psql -h localhost -p 5437 -U <user> -d <db> -f metabase/init/04_periode_2014_2020.sql`.
 
 ## GeoJSON
 
@@ -175,9 +248,12 @@ metabase/
     01_schema.sql       — schéma fesi : tables operations, programme_totals, region_metadata
     02_views.sql        — vues d'agrégats scopées (source_id, periode)
     03_pilotage.sql     — vues pilotage (programmé vs engagé, taux, reste à engager) — Phase 2
-  load_data.py          — charge data/processed/data.json dans PostgreSQL
-  verify_aggregates.py  — recoupe les agrégats SQL vs JSON (Phase 0)
-  setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 4 dashboards (Phase 1/2)
+    04_periode_2014_2020.sql — fusion des six sources 14-20, pilotage et
+                          cofinancement de la période, table categories_ue — Phase 3
+  load_data.py          — charge les JSON de data/processed/ dans PostgreSQL
+  verify_aggregates.py  — recoupe les agrégats SQL vs JSON, source par source (Phase 0)
+  verify_pilotage_2014_2020.py — recoupe la fusion 14-20 SQL vs dashboard (Phase 3)
+  setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 5 dashboards (Phase 1/2/3)
   venv/                 — environnement Python (gitignoré)
   README.md             — ce fichier
 ```

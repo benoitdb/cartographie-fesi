@@ -19,8 +19,8 @@ peut pas diverger.
 import json
 import os
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 try:
     import psycopg2
@@ -30,10 +30,14 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR.parent / "data" / "processed"
 PIPELINE_DIR = SCRIPT_DIR.parent / "data-pipeline"
+DASHBOARD_DIR = SCRIPT_DIR.parent / "dashboard"
 sys.path.insert(0, str(PIPELINE_DIR))
+sys.path.insert(0, str(DASHBOARD_DIR))
 
 import schema_source  # noqa: E402
 import sources as sources_module  # noqa: E402
+
+from utils.cofinancement import plafond_intervalle_2014_2020  # noqa: E402
 
 env_path = SCRIPT_DIR / ".env"
 if env_path.exists():
@@ -85,11 +89,17 @@ INTERNAL_KEY_TO_COLUMN = {
 DATE_COLUMNS = {"date_debut", "date_fin", "date_convention", "date_programmation"}
 NUMERIC_COLUMNS = {"depenses_eligibles", "taux_cofinancement", "montant_ue"}
 
-OPERATIONS_COLUMNS = (
-    ["source_id", "periode"]
-    + list(dict.fromkeys(INTERNAL_KEY_TO_COLUMN.values()))
-    + ["region_source", "region", "regions_modernes", "is_interregional", "is_national", "extra"]
-)
+OPERATIONS_COLUMNS = [
+    "source_id",
+    "periode",
+    *dict.fromkeys(INTERNAL_KEY_TO_COLUMN.values()),
+    "region_source",
+    "region",
+    "regions_modernes",
+    "is_interregional",
+    "is_national",
+    "extra",
+]
 
 
 def parse_date(val):
@@ -256,6 +266,32 @@ def load_region_metadata(cur):
     print(f"  region_metadata: {count} régions")
 
 
+def load_categories_ue_2014_2020(cur):
+    """Catégories de cohésion UE 2014-2020 par région moderne (Phase 3, #121),
+    avec le plafond de cofinancement déjà résolu en (min, max) — appelle
+    directement `dashboard/utils/cofinancement.plafond_intervalle_2014_2020`
+    plutôt que de dupliquer la règle en Python : seule la vue SQL
+    `v_cofinancement_2014_2020` (04_periode_2014_2020.sql) duplique
+    `FONDS_HORS_PLAFOND`, faute de pouvoir importer du Python dans une vue."""
+    path = DATA_DIR / "categories_ue_2014_2020.json"
+    if not path.exists():
+        print("  categories_ue_2014_2020.json non trouvé, skip")
+        return
+    with open(path) as f:
+        data = json.load(f)
+    count = 0
+    for region, infos in data.items():
+        plafond = plafond_intervalle_2014_2020(infos)
+        plafond_min, plafond_max = plafond if plafond else (None, None)
+        cur.execute(
+            "INSERT INTO categories_ue_2014_2020 (region, categorie_ue, plafond_min, plafond_max) "
+            "VALUES (%s, %s, %s, %s)",
+            (region, infos.get("categorie_ue"), plafond_min, plafond_max),
+        )
+        count += 1
+    print(f"  categories_ue_2014_2020: {count} régions")
+
+
 def main():
     conn = psycopg2.connect(**DB_PARAMS)
     conn.autocommit = True
@@ -264,6 +300,7 @@ def main():
     cur.execute("DELETE FROM operations")
     cur.execute("DELETE FROM programme_totals")
     cur.execute("DELETE FROM dotations_os")
+    cur.execute("DELETE FROM categories_ue_2014_2020")
 
     print("Chargement des opérations, par source...")
     total_ops = 0
@@ -278,6 +315,9 @@ def main():
 
     print("Chargement region_metadata...")
     load_region_metadata(cur)
+
+    print("Chargement categories_ue_2014_2020...")
+    load_categories_ue_2014_2020(cur)
 
     cur.execute("SELECT COUNT(*) FROM operations")
     print(f"\nTotal operations en base : {cur.fetchone()[0]} (attendu ~{total_ops})")

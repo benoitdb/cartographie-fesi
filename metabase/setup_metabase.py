@@ -1,16 +1,16 @@
-"""Provisionne l'instance Metabase (issue #121, Phase 1) : connexion PostgreSQL,
-carte GeoJSON métropole, dashboard national 2021-2027.
+"""Provisionne l'instance Metabase (issue #121) : connexion PostgreSQL, carte
+GeoJSON métropole, et les dashboards de chaque phase — national/régional/
+comparateur/volet national 2021-2027 (Phase 1/2), période 2014-2020 (Phase 3).
 
 Idempotent et commité, dans le même esprit que `load_data.py`/`verify_aggregates.py` :
 le test exploratoire de Phase 0 avait créé ce même dashboard via un script jetable,
 jamais versionné — celui-ci le remplace pour de bon.
 
-Portée volontairement limitée à 2021-2027 (`source_id = '2021-2027-conventionnees'`) :
-les vues Phase 0 sont scopées par (source_id, periode) et ne blendent jamais
-plusieurs sources pour une période (Bretagne/Normandie/Nouvelle-Aquitaine/PON FSE
-se chevauchent avec Synergie en 2014-2020, cf. `init/02_views.sql`) — cette fusion
-nationale reste un sujet de Phase 2/3, pas construit en SQL. Un dashboard 2014-2020
-est un sujet de Phase 3 (cf. issue #121), pas de celui-ci.
+Les dashboards 2021-2027 restent scopés à `source_id = '2021-2027-conventionnees'` :
+une seule source pour cette période, pas d'ambiguïté (cf. `init/02_views.sql`).
+Le dashboard 2014-2020 (Phase 3) s'appuie sur `init/04_periode_2014_2020.sql`,
+qui fusionne ses six sources correctement (substitution Bretagne/Normandie/
+Nouvelle-Aquitaine, addition PON FSE) plutôt que de les sommer aveuglément.
 
 Relançable sans effet de bord : chaque étape vérifie si la ressource existe déjà
 (par nom) avant de la créer.
@@ -776,6 +776,196 @@ def ensure_dashboard(session, cards):
     return dash_id
 
 
+FONDS_2014_2020 = ["FEDER", "FEDER REACT-EU", "FSE", "IEJ"]
+DEFAULT_PERIMETRE_2014_2020 = "national"
+
+
+def perimetre_tag(tag_id):
+    return {
+        "perimetre": {
+            "id": tag_id,
+            "name": "perimetre",
+            "display-name": "Périmètre",
+            "type": "text",
+            "required": True,
+            "default": DEFAULT_PERIMETRE_2014_2020,
+        }
+    }
+
+
+def build_2014_2020_cards(session, db_id):
+    """Phase 3 (issue #121) : équivalent Metabase de `pages/5_Période_2014-2020.py`
+    — KPI + pilotage (`v_pilotage_2014_2020`) + cofinancement
+    (`v_cofinancement_2014_2020_summary`), pour UN périmètre (région ou
+    `'national'`), choisi via le template-tag texte `perimetre` — même pattern
+    que `region` en Phase 2. `v_pilotage_2014_2020`/`v_perimetre_2014_2020`
+    (04_periode_2014_2020.sql) portent déjà la fusion des six sources de la
+    période (substitution Bretagne/Normandie/Nouvelle-Aquitaine, addition
+    PON FSE) : ces cartes n'ont pas à en tenir compte."""
+    cards = {}
+    tag_id = "a5000000-0000-0000-0000-00000000000%d"
+
+    cards["p14_20_montant_total"] = upsert_card(
+        session,
+        "2014-2020 — Montant programmé total",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT SUM(montant_ue) AS montant_ue FROM v_perimetre_2014_2020 "
+                        "WHERE perimetre = {{perimetre}}"
+                    ),
+                    "template-tags": perimetre_tag(tag_id % 1),
+                },
+                "database": db_id,
+            },
+            "display": "scalar",
+            "visualization_settings": {},
+        },
+    )
+
+    cards["p14_20_n_operations"] = upsert_card(
+        session,
+        "2014-2020 — Nombre d'opérations",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT COUNT(*) AS n_operations FROM v_perimetre_2014_2020 "
+                        "WHERE perimetre = {{perimetre}}"
+                    ),
+                    "template-tags": perimetre_tag(tag_id % 2),
+                },
+                "database": db_id,
+            },
+            "display": "scalar",
+            "visualization_settings": {},
+        },
+    )
+
+    series_settings = {f: {"color": c} for f, c in FONDS_COLORS.items() if f in FONDS_2014_2020}
+    cards["p14_20_par_fonds"] = upsert_card(
+        session,
+        "2014-2020 — Montant programmé par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT fonds, SUM(montant_ue) AS montant_ue FROM v_perimetre_2014_2020 "
+                        "WHERE perimetre = {{perimetre}} AND fonds IS NOT NULL "
+                        "GROUP BY fonds ORDER BY fonds"
+                    ),
+                    "template-tags": perimetre_tag(tag_id % 3),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {"series_settings": series_settings},
+        },
+    )
+
+    cards["p14_20_pilotage"] = upsert_card(
+        session,
+        "2014-2020 — Programmé vs engagé par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT fonds, programme, engage, taux, reste_a_engager FROM v_pilotage_2014_2020 "
+                        "WHERE perimetre = {{perimetre}} ORDER BY fonds"
+                    ),
+                    "template-tags": perimetre_tag(tag_id % 4),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {"graph.metrics": ["programme", "engage"], "graph.dimensions": ["fonds"]},
+        },
+    )
+
+    cards["p14_20_cofinancement"] = upsert_card(
+        session,
+        "2014-2020 — Dépassements de plafond de cofinancement",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT fonds, categorie_ue, plafond_min, plafond_max, n_operations, "
+                        "n_depassements, montant_depassements FROM v_cofinancement_2014_2020_summary "
+                        "WHERE region = {{perimetre}} ORDER BY fonds"
+                    ),
+                    "template-tags": perimetre_tag(tag_id % 5),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {},
+        },
+    )
+
+    return cards
+
+
+DASHBOARD_2014_2020_NAME = "FESI — Période 2014-2020"
+DASHBOARD_2014_2020_PARAM_ID = "fesi-perimetre-2014-2020-filter"
+
+
+def ensure_2014_2020_dashboard(session, cards):
+    dashboards = session.get(f"{MB_URL}/api/dashboard").json()
+    existing = next((d for d in dashboards if d["name"] == DASHBOARD_2014_2020_NAME), None)
+    dash_id = existing["id"] if existing else session.post(
+        f"{MB_URL}/api/dashboard", json={"name": DASHBOARD_2014_2020_NAME}
+    ).json()["id"]
+
+    layout = [
+        (cards["p14_20_montant_total"], 0, 0, 4, 3),
+        (cards["p14_20_n_operations"], 4, 0, 4, 3),
+        (cards["p14_20_par_fonds"], 0, 3, 8, 5),
+        (cards["p14_20_pilotage"], 8, 0, 8, 8),
+        (cards["p14_20_cofinancement"], 0, 8, 16, 6),
+    ]
+    dashcards = [
+        {
+            "id": -(i + 1),
+            "card_id": card["id"],
+            "row": row,
+            "col": col,
+            "size_x": size_x,
+            "size_y": size_y,
+            "parameter_mappings": [
+                {
+                    "parameter_id": DASHBOARD_2014_2020_PARAM_ID,
+                    "card_id": card["id"],
+                    "target": ["variable", ["template-tag", "perimetre"]],
+                }
+            ],
+        }
+        for i, (card, row, col, size_x, size_y) in enumerate(layout)
+    ]
+    r = session.put(
+        f"{MB_URL}/api/dashboard/{dash_id}",
+        json={
+            "parameters": [
+                {
+                    "id": DASHBOARD_2014_2020_PARAM_ID,
+                    "name": "Périmètre",
+                    "slug": "perimetre",
+                    "type": "string/=",
+                    "default": [DEFAULT_PERIMETRE_2014_2020],
+                }
+            ],
+            "dashcards": dashcards,
+        },
+    )
+    r.raise_for_status()
+    return dash_id
+
+
 def main():
     wait_for_health()
     token = get_session()
@@ -799,6 +989,10 @@ def main():
     national_cards = build_national_cards(session, db_id)
     national_dash_id = ensure_national_dashboard(session, national_cards)
     print(f"Dashboard volet national prêt : {MB_URL}/dashboard/{national_dash_id}")
+
+    cards_2014_2020 = build_2014_2020_cards(session, db_id)
+    dash_2014_2020_id = ensure_2014_2020_dashboard(session, cards_2014_2020)
+    print(f"Dashboard période 2014-2020 prêt : {MB_URL}/dashboard/{dash_2014_2020_id}")
 
 
 if __name__ == "__main__":

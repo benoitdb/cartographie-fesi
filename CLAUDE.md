@@ -156,6 +156,9 @@ racine pour les tests (`requirements-dev.txt`).
   ```
   metabase/venv/bin/python metabase/load_data.py       # charge les 7 sources dans PostgreSQL
   metabase/venv/bin/python metabase/verify_aggregates.py  # recoupe les agrégats SQL vs JSON
+  metabase/venv/bin/python metabase/verify_pilotage_2014_2020.py  # recoupe la fusion des
+                                          # six sources 14-20 (substitution des trois régions
+                                          # à fichier propre, addition du PON FSE) SQL vs dashboard
   ```
   Schéma dans `metabase/init/*.sql` (appliqué à la création du volume Docker
   uniquement — `docker compose down -v` puis `up` pour repartir d'un schéma
