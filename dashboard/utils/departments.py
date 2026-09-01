@@ -240,12 +240,14 @@ def assign_departement(op):
     return None, "inconnu"
 
 
-def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE", show_colorbar=True):
+def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE", show_colorbar=True, annotation=None):
     """Carte des départements d'une région métropolitaine, colorée par montant UE total.
     df_dept_assigned doit déjà porter les colonnes 'dept'/'dept_source' (assign_departments_df).
     show_colorbar=False désactive la légende intégrée à la carte — à utiliser quand la carte est
     affichée à côté d'une légende autonome (build_standalone_colorbar) dans une colonne séparée,
-    même principe que la carte nationale d'Accueil.py."""
+    même principe que la carte nationale d'Accueil.py.
+    annotation : texte court affiché en bas de la carte (survit à un screenshot, contrairement
+    à un st.caption extérieur). Issue #92, piste 1."""
     depts_region = [code for code, r in DEPT_TO_REGION.items() if r == region]
     geojson = load_departements_geojson()
     features = [f for f in geojson["features"] if f["properties"]["code"] in depts_region]
@@ -274,7 +276,17 @@ def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE
         hovertemplate="<b>%{customdata[0]}</b><br>Montant UE : %{z:,.0f} €<br>Nb projets : %{customdata[1]}<extra></extra>"
     )
     fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, coloraxis_showscale=show_colorbar)
+    bottom_margin = 30 if annotation else 0
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": bottom_margin}, coloraxis_showscale=show_colorbar)
+    if annotation:
+        fig.add_annotation(
+            text=annotation,
+            xref="paper", yref="paper",
+            x=0.5, y=-0.02,
+            showarrow=False,
+            font=dict(size=11, color="#888"),
+            xanchor="center", yanchor="top",
+        )
     return disable_map_interaction(style_map_background(style_hover(fig)))
 
 
