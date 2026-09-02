@@ -159,7 +159,15 @@ racine pour les tests (`requirements-dev.txt`).
   metabase/venv/bin/python metabase/verify_pilotage_2014_2020.py  # recoupe la fusion des
                                           # six sources 14-20 (substitution des trois régions
                                           # à fichier propre, addition du PON FSE) SQL vs dashboard
+  venv/bin/python metabase/verify_dashboards.py  # recoupe les cartes Metabase (interrogées
+                                          # par l'API, filtres appliqués) vs le dashboard
+                                          # Streamlit — venv RACINE, pas metabase/venv
   ```
+  Les trois scripts de vérification se recouvrent volontairement peu : les deux
+  premiers valident les **vues** en attaquant PostgreSQL, le troisième valide ce
+  qu'un utilisateur **lit** (SQL de la carte, template-tag, `parameter_mapping`),
+  seule couche où une erreur passe en silence — un paramètre mal câblé n'échoue
+  pas, le filtre est simplement ignoré.
   Schéma dans `metabase/init/*.sql` (appliqué à la création du volume Docker
   uniquement — `docker compose down -v` puis `up` pour repartir d'un schéma
   modifié).

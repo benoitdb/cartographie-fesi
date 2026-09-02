@@ -24,11 +24,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-try:
-    import psycopg2
-except ImportError:
-    sys.exit("psycopg2 requis : pip install psycopg2-binary")
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR.parent / "data" / "processed"
 DASHBOARD_DIR = SCRIPT_DIR.parent / "dashboard"
@@ -42,6 +37,7 @@ import sources as sources_module  # noqa: E402
 from utils.periodes import (  # noqa: E402
     FUSIONS_ENVELOPPES_SANS_LIBELLE,
     REGIONS_PON_FSE_2014_2020,
+    _taux,
 )
 
 env_path = SCRIPT_DIR / ".env"
@@ -122,8 +118,42 @@ def charger_source(source_id):
     return data["operations"], libelles_bruts(source_id)
 
 
-def engage_python():
-    """{(perimetre, fonds): montant}, par les règles de la page 2014-2020.
+def _ligne(op, cols, perimetre):
+    """Une opération réduite à ce dont les vues SQL et les écrans ont besoin.
+
+    `taux_cofinancement` suit la règle de `periodes.normaliser_operations`, pas
+    celle des vues SQL : le taux **déclaré par le fichier** quand la source en
+    porte un (Bretagne, Normandie, Nouvelle-Aquitaine), le quotient dérivé
+    montant/dépenses sinon (Synergie et PON FSE n'ont pas la colonne). Une valeur
+    non numérique vaut None sans repli sur le quotient — le taux Nouvelle-Aquitaine
+    est une formule Excel qui écrit parfois `#DIV/0` en toutes lettres. C'est la
+    différence avec `v_cofinancement_2014_2020`, qui recalcule toujours le
+    quotient ; `verify_dashboards.py` en fait un écart de définition chiffré
+    plutôt que de trancher tout seul.
+    """
+    montant = op.get(cols["montant_ue"])
+    depenses = op.get(cols["depenses"])
+    libelle_taux = cols.get("taux_cofinance")
+    if libelle_taux and libelle_taux in op:
+        declare = op[libelle_taux]
+        taux = declare if isinstance(declare, (int, float)) else None
+    else:
+        declare = None
+        taux = _taux(montant, depenses)
+    return {
+        "numero_operation": op.get(cols["numero_op"]),
+        "fonds": op.get(cols["fonds"]),
+        "montant_ue": montant,
+        "depenses_eligibles": depenses,
+        "taux_cofinancement": taux,
+        "taux_declare": libelle_taux is not None and libelle_taux in op,
+        "perimetre": perimetre,
+    }
+
+
+def operations_par_perimetre():
+    """Chaque opération 2014-2020 avec son périmètre final — jumeau Python de la
+    vue `v_perimetre_2014_2020`.
 
     Reproduit le grand `if/elif` de `pages/5_Période_2014-2020.py` :
       - Synergie : une opération mono-région va à sa région, une opération
@@ -131,38 +161,46 @@ def engage_python():
         (sinon elle compterait dans plusieurs totaux censés s'additionner) ;
       - les trois régions à fichier propre ignorent entièrement Synergie ;
       - PON FSE s'ajoute, routé par programme (REGIONS_PON_FSE_2014_2020).
-    """
-    engage = defaultdict(float)
 
+    Les opérations **sans fonds renseigné** sont émises comme les autres, comme
+    les émet la vue SQL : les écarter ici cacherait les 26 dossiers Normandie
+    concernés à tout appelant, alors que c'est précisément à chaque écran de
+    dire s'il les compte (`v_engage_2014_2020` les écarte, la carte KPI du
+    dashboard non — cf. verify_dashboards.py). Les agrégats de ce script
+    filtrent donc eux-mêmes `fonds is None`.
+
+    Fonction séparée plutôt qu'inline dans `engage_python` : `verify_dashboards.py`
+    (Phase 4) en a besoin pour les comptages et le cofinancement, et la fusion des
+    six sources ne doit exister qu'à un seul endroit côté Python.
+    """
     operations, cols = charger_source(SOURCE_SYNERGIE)
     for op in operations:
-        fonds = op.get(cols["fonds"])
-        montant = op.get(cols["montant_ue"]) or 0
-        if fonds is None:
-            continue
         if op.get("is_national"):
-            engage[("national", fonds)] += montant
+            yield _ligne(op, cols, "national")
         elif not op.get("is_interregional"):
             regions = op.get("regions_modernes") or []
             if len(regions) == 1 and regions[0] not in SOURCES_REGIONALES:
-                engage[(regions[0], fonds)] += montant
+                yield _ligne(op, cols, regions[0])
 
     for region, source_id in SOURCES_REGIONALES.items():
         operations, cols = charger_source(source_id)
         for op in operations:
-            fonds = op.get(cols["fonds"])
-            if fonds is None:
-                continue
-            engage[(region, fonds)] += op.get(cols["montant_ue"]) or 0
+            yield _ligne(op, cols, region)
 
     operations, cols = charger_source(SOURCE_PON_FSE)
     for op in operations:
-        fonds = op.get(cols["fonds"])
-        if fonds is None:
-            continue
         perimetre = REGIONS_PON_FSE_2014_2020.get(op.get(cols["libelle_prog"])) or "national"
-        engage[(perimetre, fonds)] += op.get(cols["montant_ue"]) or 0
+        yield _ligne(op, cols, perimetre)
 
+
+def engage_python():
+    """{(perimetre, fonds): montant}, agrégé du jumeau ci-dessus — même filtre
+    `fonds IS NOT NULL` que `v_engage_2014_2020`."""
+    engage = defaultdict(float)
+    for op in operations_par_perimetre():
+        if op["fonds"] is None:
+            continue
+        engage[(op["perimetre"], op["fonds"])] += op["montant_ue"] or 0
     return dict(engage)
 
 
@@ -227,6 +265,14 @@ def check_engage(cur, engage):
 
 
 def main():
+    # Import tardif : `verify_dashboards.py` (Phase 4) importe la fusion de ce
+    # module sans jamais toucher PostgreSQL, et tourne dans le venv racine où
+    # psycopg2 n'est pas installé. Seul ce `main` a besoin d'une connexion.
+    try:
+        import psycopg2
+    except ImportError:
+        sys.exit("psycopg2 requis : metabase/venv/bin/pip install psycopg2-binary")
+
     conn = psycopg2.connect(**DB_PARAMS)
     cur = conn.cursor()
 

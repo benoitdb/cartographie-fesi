@@ -64,6 +64,12 @@ venv/bin/python setup_metabase.py
 # Vérifier (facultatif) : agrégats SQL vs JSON, puis fusion 14-20 SQL vs dashboard
 venv/bin/python verify_aggregates.py
 venv/bin/python verify_pilotage_2014_2020.py
+
+# Vérification de bout en bout : chaque carte de chaque dashboard interrogée par
+# l'API, filtres appliqués, contre ce qu'affiche Streamlit. Se lance depuis la
+# RACINE du dépôt et avec le venv racine — il lui faut Streamlit (les règles de
+# pilotage y sont importées, pas réécrites) et pas psycopg2.
+cd .. && venv/bin/python metabase/verify_dashboards.py
 ```
 
 ## Accès à Metabase
@@ -253,6 +259,8 @@ metabase/
   load_data.py          — charge les JSON de data/processed/ dans PostgreSQL
   verify_aggregates.py  — recoupe les agrégats SQL vs JSON, source par source (Phase 0)
   verify_pilotage_2014_2020.py — recoupe la fusion 14-20 SQL vs dashboard (Phase 3)
+  verify_dashboards.py  — recoupe les cartes Metabase (via l'API, filtres appliqués)
+                          vs le dashboard Streamlit, 461 valeurs (Phase 4)
   setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 5 dashboards (Phase 1/2/3)
   venv/                 — environnement Python (gitignoré)
   README.md             — ce fichier

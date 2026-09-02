@@ -22,11 +22,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-try:
-    import psycopg2
-except ImportError:
-    sys.exit("psycopg2 requis : pip install psycopg2-binary")
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR.parent / "data" / "processed"
 PIPELINE_DIR = SCRIPT_DIR.parent / "data-pipeline"
@@ -293,6 +288,14 @@ def load_categories_ue_2014_2020(cur):
 
 
 def main():
+    # Import tardif, comme dans verify_pilotage_2014_2020.py : `verify_dashboards.py`
+    # réutilise `parse_date` d'ici pour reproduire exactement le chargement, sans
+    # jamais ouvrir de connexion — et tourne dans un venv sans psycopg2.
+    try:
+        import psycopg2
+    except ImportError:
+        sys.exit("psycopg2 requis : metabase/venv/bin/pip install psycopg2-binary")
+
     conn = psycopg2.connect(**DB_PARAMS)
     conn.autocommit = True
     cur = conn.cursor()

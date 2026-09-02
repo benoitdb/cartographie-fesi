@@ -279,10 +279,18 @@ def build_cards(session, db_id):
             "dataset_query": {
                 "type": "native",
                 "native": {
+                    # `v_by_region_fonds` et non `v_by_region` : cette dernière n'a
+                    # pas de colonne `fonds`, donc la carte tombait en erreur SQL dès
+                    # qu'un fonds était coché — un filtre jamais exercé sur cette carte
+                    # en Phase 1, attrapé par verify_dashboards.py (Phase 4). Les deux
+                    # vues partitionnent à l'identique (mono-région, hors interrégional
+                    # et national) et 2021-2027 n'a aucune opération sans fonds : le
+                    # total non filtré est le même au centime près.
                     "query": (
-                        "SELECT region, montant_ue_total FROM v_by_region "
+                        "SELECT region, SUM(montant_ue_total) AS montant_ue_total "
+                        "FROM v_by_region_fonds "
                         f"WHERE source_id = '{SOURCE_2021_2027}' "
-                        "[[AND fonds = {{fonds}}]] ORDER BY region"
+                        "[[AND fonds = {{fonds}}]] GROUP BY region ORDER BY region"
                     ),
                     "template-tags": fonds_tag("a1000000-0000-0000-0000-000000000005"),
                 },
