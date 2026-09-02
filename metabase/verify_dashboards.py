@@ -51,6 +51,7 @@ sys.path.insert(0, str(ROOT_DIR / "dashboard"))
 import load_data  # noqa: E402  (parse_date, pour reproduire le chargement à l'identique)
 import setup_metabase as setup  # noqa: E402  (noms de dashboards, ids de paramètres, défauts)
 from verify_pilotage_2014_2020 import (  # noqa: E402
+    charger,
     close_enough,
     engage_python,
     enveloppes_python,
@@ -63,7 +64,10 @@ from utils.data_loader import (  # noqa: E402
     DATA_PATH,
     PROGRAMME_TOTALS_PATH,
 )
-from utils.periodes import SEUIL_ECART_TAUX_DECLARE  # noqa: E402
+from utils.periodes import (  # noqa: E402
+    SEUIL_ECART_TAUX_DECLARE,
+    enveloppes_ensemble_national_2014_2020,
+)
 from utils.pilotage import reste_a_engager, taux_consommation  # noqa: E402
 from utils.stats import TOLERANCE_RELATIVE_PLAFOND  # noqa: E402
 
@@ -595,6 +599,52 @@ def check_periode_2014_2020(session, dash, categories):
             if fonds not in attendu_cofi:
                 erreurs.append(f"{contexte} / cofinancement : fonds {fonds} affiché par Metabase, absent côté Streamlit")
         n += len(attendu_cofi)
+
+    # « Ensemble national » (arbitrage Phase 4, #121) : pas une clé de `totaux` (qui n'a
+    # que des régions et 'national'), mais la somme de toutes ses lignes — même règle que
+    # `fusionner_ensemble_national_2014_2020` côté Streamlit et la valeur sentinelle
+    # `{{perimetre}} = 'Ensemble national'` des cartes SQL. Cofinancement exclu : un plafond
+    # n'a de sens qu'à la maille d'une région, la carte Metabase reste délibérément vide sur
+    # ce périmètre (cf. docstring de `build_2014_2020_cards`).
+    valeurs = {setup.DASHBOARD_2014_2020_PARAM_ID: "Ensemble national"}
+    contexte = "Période 2014-2020 (Ensemble national)"
+    montant_ensemble = sum(v["montant"] for v in totaux.values())
+    count_ensemble = sum(v["count"] for v in totaux.values())
+
+    montant_mb = float(scalaire(interroger(session, dash, "2014-2020 — Montant programmé total", valeurs)))
+    count_mb = scalaire(interroger(session, dash, "2014-2020 — Nombre d'opérations", valeurs))
+    n += 2
+    if not close_enough(montant_ensemble, montant_mb):
+        erreurs.append(f"{contexte} / montant total : Metabase {montant_mb:,.2f} vs Streamlit {montant_ensemble:,.2f}")
+    if count_mb != count_ensemble:
+        erreurs.append(f"{contexte} / nombre d'opérations : Metabase {count_mb} vs Streamlit {count_ensemble}")
+
+    engage_ensemble = defaultdict(float)
+    for (_, fonds), montant in engage.items():
+        engage_ensemble[fonds] += montant
+    engage_ensemble = dict(engage_ensemble)
+    erreurs += comparer_series(
+        interroger(session, dash, "2014-2020 — Montant programmé par fonds", valeurs),
+        engage_ensemble, "fonds", "montant_ue", f"{contexte} / par fonds",
+    )
+    n += len(engage_ensemble)
+
+    fonds_engages_par_perimetre = defaultdict(set)
+    for perimetre, fonds in engage:
+        fonds_engages_par_perimetre[perimetre].add(fonds)
+    totaux_enveloppes = charger("programme_totals_2014_2020.json")
+    enveloppes_ensemble, _ = enveloppes_ensemble_national_2014_2020(fonds_engages_par_perimetre, totaux_enveloppes)
+    attendu_pilotage_ensemble = pilotage_python(enveloppes_ensemble, engage_ensemble)
+    erreurs += comparer_pilotage(
+        interroger(session, dash, "2014-2020 — Programmé vs engagé par fonds", valeurs),
+        attendu_pilotage_ensemble, f"{contexte} / pilotage",
+    )
+    n += len(attendu_pilotage_ensemble)
+
+    lignes_cofi_ensemble = interroger(session, dash, "2014-2020 — Dépassements de plafond de cofinancement", valeurs)
+    if lignes_cofi_ensemble:
+        erreurs.append(f"{contexte} / cofinancement : Metabase affiche {len(lignes_cofi_ensemble)} ligne(s), attendu aucune (pas de plafond national)")
+    n += 1
 
     # Verdicts de dépassement recalculés par cofinancement_python (Metabase en
     # NUMERIC vs Streamlit en flottant tolérant, #126) : un vrai bug s'ils

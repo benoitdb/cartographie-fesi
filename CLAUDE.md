@@ -76,13 +76,20 @@ deux programmes (carte, engagé sans taux) reste possible mais n'est pas constru
 Guyane/Martinique/Réunion) : son engagé PON FSE se compare à la ligne FSE de son
 programme combiné FEDER-FSE, seule dotation FSE que porte Mayotte.
 
-Le pilotage 14-20 n'est donc plus masqué que sur « Ensemble national » — l'extraction
-Synergie n'y fusionne aucune des trois régions hors-Synergie (#68). « Volet national »
-en est sorti depuis que PON FSE et IEJ national y sont fusionnés : c'était la seule
-pièce qui lui manquait. Un taux calculé sur un engagé partiel afficherait une donnée
+Le pilotage 14-20 n'est plus masqué sur aucun périmètre agrégé depuis l'arbitrage
+Phase 4 (issue #121) : « Ensemble national » fusionne désormais les trois régions
+hors-Synergie ET le PON FSE (`dashboard/utils/periodes.fusionner_ensemble_national_2014_2020`,
+jumeau Python de `metabase/init/04_periode_2014_2020.sql`), comme « Volet national »
+depuis que PON FSE et IEJ national y sont fusionnés — c'était la seule pièce qui
+manquait à chacun. Un taux calculé sur un engagé partiel afficherait une donnée
 manquante comme une sous-consommation. Normandie, Nouvelle-Aquitaine et Bretagne
-retombent sur ce même masquage si leur fichier régional est absent du poste (repli,
-pas un cas d'erreur). Le FSE breton affiche un taux au-dessus de 100 % (111 % au
+retombent sur ce même masquage — désormais seulement régional, jamais sur un agrégat —
+si leur fichier régional est absent du poste (repli, pas un cas d'erreur), et
+« Ensemble national » retombe alors sur leur sous-comptage Synergie pour la même
+raison plutôt que d'être masqué en bloc. Le KPI d'« Ensemble national » (Vue
+d'ensemble) fusionne les six sources ; la carte et le classement par région du même
+écran restent, eux, sur la substitution seule, sans le PON FSE (issue #128) — écart
+connu, documenté à l'écran. Le FSE breton affiche un taux au-dessus de 100 % (111 % au
 12/02/2024) qui n'est pas une surconsommation mais un effet de granularité — ses sept
 lignes sont des marchés de formation du Conseil régional, pas des opérations
 unitaires (#95, point 2, non résolu par le changement de source) — signalé à l'écran

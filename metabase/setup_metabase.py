@@ -810,12 +810,24 @@ def perimetre_tag(tag_id):
 def build_2014_2020_cards(session, db_id):
     """Phase 3 (issue #121) : équivalent Metabase de `pages/5_Période_2014-2020.py`
     — KPI + pilotage (`v_pilotage_2014_2020`) + cofinancement
-    (`v_cofinancement_2014_2020_summary`), pour UN périmètre (région ou
-    `'national'`), choisi via le template-tag texte `perimetre` — même pattern
+    (`v_cofinancement_2014_2020_summary`), pour un périmètre (région ou
+    `'national'`) choisi via le template-tag texte `perimetre` — même pattern
     que `region` en Phase 2. `v_pilotage_2014_2020`/`v_perimetre_2014_2020`
     (04_periode_2014_2020.sql) portent déjà la fusion des six sources de la
     période (substitution Bretagne/Normandie/Nouvelle-Aquitaine, addition
-    PON FSE) : ces cartes n'ont pas à en tenir compte."""
+    PON FSE) : ces cartes n'ont pas à en tenir compte.
+
+    `perimetre = 'Ensemble national'` (arbitrage Phase 4, #121) est une valeur
+    **sentinelle**, pas une clé de `v_perimetre_2014_2020` (qui n'en a aucune
+    de ce nom) : elle fait sauter le filtre par périmètre des quatre cartes KPI
+    et pilotage (`WHERE ({{perimetre}} = 'Ensemble national' OR perimetre =
+    {{perimetre}})`), pour sommer sur toutes les lignes déjà fusionnées, sans
+    double-comptage — même règle que `fusionner_ensemble_national_2014_2020`
+    côté Streamlit. La carte cofinancement n'a PAS ce traitement : un plafond
+    de cofinancement n'a de sens qu'à la maille d'une région (catégorie de
+    cohésion), pas d'un agrégat national — comme le dit déjà Streamlit pour ce
+    périmètre (« Pas de plafond opposable »), elle reste donc vide sur cette
+    valeur plutôt que d'afficher un résultat qui ne voudrait rien dire."""
     cards = {}
     tag_id = "a5000000-0000-0000-0000-00000000000%d"
 
@@ -830,9 +842,18 @@ def build_2014_2020_cards(session, db_id):
                     # sur le filtre Fonds de Streamlit, qui écarte les dossiers sans
                     # fonds renseigné quel que soit le fonds coché (26 dossiers
                     # Normandie, 24,6 M€) — v_perimetre_2014_2020 les portait encore.
+                    #
+                    # `{{perimetre}} = 'Ensemble national'` (arbitrage Phase 4, #121) :
+                    # cette valeur sentinelle fait sauter le filtre par périmètre plutôt
+                    # que d'en désigner un — somme sur toutes les lignes de la vue (déjà
+                    # fusionnée, sans double-comptage), comme `ops_perimetre` côté
+                    # Streamlit (`fusionner_ensemble_national_2014_2020`). L'interrégional
+                    # Synergie n'y figure pas (la vue ne le porte pas non plus, cf. son
+                    # en-tête) — même périmètre que Streamlit, hors caption dédiée.
                     "query": (
                         "SELECT SUM(montant_ue) AS montant_ue FROM v_perimetre_2014_2020 "
-                        "WHERE perimetre = {{perimetre}} AND fonds IS NOT NULL"
+                        "WHERE ({{perimetre}} = 'Ensemble national' OR perimetre = {{perimetre}}) "
+                        "AND fonds IS NOT NULL"
                     ),
                     "template-tags": perimetre_tag(tag_id % 1),
                 },
@@ -852,7 +873,8 @@ def build_2014_2020_cards(session, db_id):
                 "native": {
                     "query": (
                         "SELECT COUNT(*) AS n_operations FROM v_perimetre_2014_2020 "
-                        "WHERE perimetre = {{perimetre}} AND fonds IS NOT NULL"
+                        "WHERE ({{perimetre}} = 'Ensemble national' OR perimetre = {{perimetre}}) "
+                        "AND fonds IS NOT NULL"
                     ),
                     "template-tags": perimetre_tag(tag_id % 2),
                 },
@@ -873,8 +895,8 @@ def build_2014_2020_cards(session, db_id):
                 "native": {
                     "query": (
                         "SELECT fonds, SUM(montant_ue) AS montant_ue FROM v_perimetre_2014_2020 "
-                        "WHERE perimetre = {{perimetre}} AND fonds IS NOT NULL "
-                        "GROUP BY fonds ORDER BY fonds"
+                        "WHERE ({{perimetre}} = 'Ensemble national' OR perimetre = {{perimetre}}) "
+                        "AND fonds IS NOT NULL GROUP BY fonds ORDER BY fonds"
                     ),
                     "template-tags": perimetre_tag(tag_id % 3),
                 },
@@ -892,9 +914,19 @@ def build_2014_2020_cards(session, db_id):
             "dataset_query": {
                 "type": "native",
                 "native": {
+                    # Recalculé par SUM(...)/GROUP BY plutôt que lu tel quel : `taux` et
+                    # `reste_a_engager` ne se somment pas (formules non linéaires, #62) —
+                    # sur un périmètre simple le WHERE ne laisse qu'une ligne par fonds,
+                    # donc SUM(x) = x et le résultat est identique à la lecture directe.
+                    # Sur « Ensemble national » (arbitrage Phase 4, #121), la même requête
+                    # somme tous les périmètres avant de recalculer les deux formules.
                     "query": (
-                        "SELECT fonds, programme, engage, taux, reste_a_engager FROM v_pilotage_2014_2020 "
-                        "WHERE perimetre = {{perimetre}} ORDER BY fonds"
+                        "SELECT fonds, SUM(programme) AS programme, SUM(engage) AS engage, "
+                        "CASE WHEN SUM(programme) > 0 THEN SUM(engage) / SUM(programme) ELSE 0 END AS taux, "
+                        "GREATEST(SUM(programme) - SUM(engage), 0) AS reste_a_engager "
+                        "FROM v_pilotage_2014_2020 "
+                        "WHERE ({{perimetre}} = 'Ensemble national' OR perimetre = {{perimetre}}) "
+                        "GROUP BY fonds ORDER BY fonds"
                     ),
                     "template-tags": perimetre_tag(tag_id % 4),
                 },

@@ -36,6 +36,7 @@ from utils.periodes import (  # noqa: E402
     COLONNES_CANONIQUES,
     COLONNES_PAR_SOURCE,
     EXPLICATIONS_ABSENCES,
+    PERIMETRE_FUSION,
     PERIODE_2014_2020,
     PERIODE_2021_2027,
     SOURCE_2021_2027,
@@ -50,6 +51,8 @@ from utils.periodes import (  # noqa: E402
     appliquer_libelles_programmes,
     capacites,
     capacites_source,
+    enveloppes_ensemble_national_2014_2020,
+    fusionner_ensemble_national_2014_2020,
     fusionner_enveloppes_sans_libelle,
     libelle_montant,
     normaliser_operations,
@@ -295,13 +298,16 @@ def test_fusionner_ne_modifie_pas_le_dictionnaire_recu():
     assert source == {"FEDER": 100, "FEDER REACT-EU": 30}
 
 
-def test_pilotage_masque_plus_que_sur_les_perimetres_agreges():
-    """Normandie, Nouvelle-Aquitaine et Bretagne sont sorties de la liste statique : leur
-    pilotage ne dépend plus de la période mais de la disponibilité de leur fichier régional
-    sur le poste (#95), une décision prise par la page, pas par cette fonction — voir
-    `test_dashboard_pages.py` pour le comportement écran, avec et sans fichier."""
-    assert not pilotage_disponible("Ensemble national", est_national=True)
-    assert not pilotage_disponible("Volet national", est_national=True)
+def test_pilotage_disponible_sur_tous_les_perimetres():
+    """Normandie, Nouvelle-Aquitaine et Bretagne ne dépendent plus d'une liste statique : leur
+    pilotage dépend de la disponibilité de leur fichier régional sur le poste (#95), une
+    décision prise par la page, pas par cette fonction — voir `test_dashboard_pages.py` pour
+    le comportement écran, avec et sans fichier. Les deux périmètres agrégés (« Ensemble
+    national », « Volet national ») ne sont plus exclus par construction depuis l'arbitrage
+    Phase 4 (#121) : `fusionner_ensemble_national_2014_2020` leur donne à tous deux un engagé
+    fusionné à opposer à une enveloppe."""
+    assert pilotage_disponible("Ensemble national")
+    assert pilotage_disponible("Volet national")
     assert pilotage_disponible("Normandie")
     assert pilotage_disponible("Nouvelle-Aquitaine")
     assert pilotage_disponible("Bretagne")
@@ -526,3 +532,68 @@ def test_regions_pon_fse_route_les_sept_programmes():
     from utils.periodes import REGIONS_PON_FSE_2014_2020
 
     assert REGIONS_PON_FSE_2014_2020 == REGIONS_ATTENDUES_PON_FSE
+
+
+# --- Fusion « Ensemble national » 2014-2020 (arbitrage Phase 4, issue #121) -----
+
+
+def test_fusion_ensemble_national_substitue_et_additionne():
+    """Cas construit couvrant les deux règles à la fois, sur un jeu minimal :
+    - Bretagne a son fichier propre (`ops_hors_synergie_par_region`) : sa ligne Synergie
+      marginale (BZH001) est ignorée, seule celle du fichier régional (BZH-OFF-1) compte ;
+    - Nouvelle-Aquitaine N'A PAS de fichier chargé ici (absente du dict) : sa ligne Synergie
+      (NAQ001) reste incluse, en repli — pas silencieusement perdue ;
+    - le national et l'interrégional Synergie sont traités différemment : le national est
+      gardé (`national`), l'interrégional est écarté (aucune vue n'a de case pour lui) ;
+    - le PON FSE s'ajoute, routé par programme et non par la région portée par la ligne
+      (PON001, région Guadeloupe portée par la ligne mais programme national → 'national')."""
+    ops_synergie = [
+        {"Fonds": "FEDER", "Montant UE": 100.0, "regions_modernes": ["Bretagne"], "is_national": False, "is_interregional": False},
+        {"Fonds": "FEDER", "Montant UE": 200.0, "regions_modernes": ["Nouvelle-Aquitaine"], "is_national": False, "is_interregional": False},
+        {"Fonds": "FEDER", "Montant UE": 300.0, "regions_modernes": ["Occitanie"], "is_national": False, "is_interregional": False},
+        {"Fonds": "FSE", "Montant UE": 50.0, "regions_modernes": [], "is_national": True, "is_interregional": False},
+        {"Fonds": "FSE", "Montant UE": 999.0, "regions_modernes": ["Bretagne", "Occitanie"], "is_national": False, "is_interregional": True},
+    ]
+    ops_hors_synergie_par_region = {
+        "Bretagne": [{"Fonds": "FEDER", "Montant UE": 150.0}],
+    }
+    ops_pon_fse = [
+        {"Fonds": "FSE", "Montant UE": 10.0, "Libellé Programme": "PO Guadeloupe", "regions_modernes": ["Guadeloupe"]},
+        {"Fonds": "FSE", "Montant UE": 20.0, "Libellé Programme": "Programme Opérationnel National FSE"},
+    ]
+
+    fusion = fusionner_ensemble_national_2014_2020(ops_synergie, ops_hors_synergie_par_region, ops_pon_fse)
+    montants_par_perimetre = {}
+    for op in fusion:
+        montants_par_perimetre.setdefault(op[PERIMETRE_FUSION], []).append(op["Montant UE"])
+
+    assert montants_par_perimetre["Bretagne"] == [150.0]  # fichier régional, pas la ligne Synergie (100.0)
+    assert montants_par_perimetre["Nouvelle-Aquitaine"] == [200.0]  # repli Synergie, aucun fichier chargé
+    assert montants_par_perimetre["Occitanie"] == [300.0]
+    assert sorted(montants_par_perimetre["national"]) == [20.0, 50.0]  # Synergie national + PON FSE national
+    assert montants_par_perimetre["Guadeloupe"] == [10.0]  # PON FSE routé par programme
+    assert sum(len(v) for v in montants_par_perimetre.values()) == 6  # l'interrégional (999.0) n'est nulle part
+
+
+def test_enveloppes_ensemble_national_fusionne_par_perimetre_avant_de_sommer():
+    """Cas construit sur le mécanisme du #96 : un DROM garde ses deux lignes FEDER/FEDER
+    REACT-EU (il porte des opérations sous ce libellé), une région métropolitaine les
+    fusionne (elle n'en porte aucune) — la décision se prend AVANT la somme nationale, pas
+    après, sinon la présence d'opérations REACT-EU quelque part en France fusionnerait à
+    tort l'enveloppe d'une région qui n'en a pas."""
+    totaux = {
+        "La Réunion": {"FEDER": 100.0, "FEDER REACT-EU": 20.0},
+        "Occitanie": {"FEDER": 200.0, "FEDER REACT-EU": 30.0},
+        "national": {"FSE": 50.0},
+    }
+    fonds_engages = {
+        "La Réunion": {"FEDER", "FEDER REACT-EU"},  # porte des opérations REACT-EU : pas de fusion
+        "Occitanie": {"FEDER"},  # aucune opération REACT-EU : fusion dans FEDER
+        "national": {"FSE"},
+    }
+    enveloppes, fonds_fusionnes = enveloppes_ensemble_national_2014_2020(fonds_engages, totaux)
+
+    assert enveloppes["FEDER REACT-EU"] == 20.0  # La Réunion seule, jamais fusionnée
+    assert enveloppes["FEDER"] == pytest.approx(100.0 + 200.0 + 30.0)  # Occitanie fusionnée avant la somme
+    assert enveloppes["FSE"] == 50.0
+    assert fonds_fusionnes == ["FEDER REACT-EU"]  # fusionné sur Occitanie, signalé malgré La Réunion

@@ -181,17 +181,27 @@ def test_pilotage_affiche_sur_une_region_couverte_par_synergie(donnees_fixture):
     assert "REACT-EU" in captions
 
 
-def test_pilotage_masque_sur_ensemble_national(donnees_fixture):
-    """Masqué **avec son explication**, et sans jamais afficher de taux : un 0 % ou un
-    taux calculé sur un engagé partiel se lirait comme une sous-consommation alors que
-    c'est une donnée manquante (issues #68, #95). Contrairement à Volet national
-    ci-dessous, aucune des trois régions hors-Synergie (Normandie, Nouvelle-Aquitaine,
-    Bretagne) n'y est fusionnée : son masquage reste inconditionnel."""
+def test_pilotage_affiche_sur_ensemble_national(donnees_fixture):
+    """N'est plus masqué depuis la fusion complète des six sources
+    (`fusionner_ensemble_national_2014_2020`, arbitrage Phase 4, issue #121) : les trois
+    régions hors-Synergie (Normandie, Nouvelle-Aquitaine, Bretagne) et le PON FSE y sont
+    désormais fusionnés, comme sur leur propre périmètre — c'était la seule pièce qui
+    manquait à un engagé complet ici, exactement comme pour Volet national (#95, point 3)."""
     at = _rendre_perimetre_2014_2020("Ensemble national")
-    infos = " ".join(el.value for el in at.info)
-    assert "Pas de taux de consommation sur ce périmètre" in infos
     textes = " ".join(el.value for el in at.markdown)
-    assert "Programmé 2014-2020" not in textes
+    assert "Programmé 2014-2020" in textes
+    infos = " ".join(el.value for el in at.info)
+    assert "Pas de taux de consommation sur ce périmètre" not in infos
+    assert "Aucun des fonds sélectionnés" not in infos
+
+    # La fusion doit se voir dans le tableau "Programmes" de la Vue d'ensemble : un
+    # programme propre à Bretagne (fichier régional, la fixture Synergie ne la couvre
+    # qu'à la marge, #68) ET un programme PON FSE routé au national (Programme
+    # Opérationnel National FSE) doivent tous deux y figurer — la table resterait
+    # Synergie seule si la fusion n'était pas branchée sur `ops_perimetre`.
+    programmes = _programmes_affiches(at)
+    assert "Programme Opérationnel National FSE" in programmes
+    assert "Programme opérationnel Bretagne FEDER 2014-2020" in programmes
 
 
 def _programmes_affiches(at):
