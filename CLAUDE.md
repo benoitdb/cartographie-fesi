@@ -166,6 +166,9 @@ racine pour les tests (`requirements-dev.txt`).
   metabase/venv/bin/python metabase/verify_pilotage_2014_2020.py  # recoupe la fusion des
                                           # six sources 14-20 (substitution des trois régions
                                           # à fichier propre, addition du PON FSE) SQL vs dashboard
+  metabase/venv/bin/python metabase/verify_vues_unifiees.py  # vérifie les vues `_all`
+                                          # (union par période, issue #129) contre les vues
+                                          # de période, et l'absence de double-comptage
   venv/bin/python metabase/verify_dashboards.py  # recoupe les cartes Metabase (interrogées
                                           # par l'API, filtres appliqués) vs le dashboard
                                           # Streamlit — venv RACINE, pas metabase/venv
@@ -178,6 +181,16 @@ racine pour les tests (`requirements-dev.txt`).
   Schéma dans `metabase/init/*.sql` (appliqué à la création du volume Docker
   uniquement — `docker compose down -v` puis `up` pour repartir d'un schéma
   modifié).
+
+  **`v_pilotage` et `v_engage_by_perimetre_fonds` ne sont pas scopées à
+  2021-2027** malgré leur usage : elles produisent aussi des lignes 2014-2020,
+  en sommant les six sources qui se chevauchent — le double-comptage que #68/#95
+  ont motivé. Elles sont justes sur 2021-2027 (source unique) et fausses sur
+  2014-2020, où seules les vues `v_*_2014_2020` le sont. Les vues unifiées
+  `v_pilotage_all` / `v_engage_all` (`init/05_vues_unifiees.sql`, issue #129)
+  filtrent donc explicitement leur côté 21-27 : **ce `WHERE periode = '2021-2027'`
+  n'est pas décoratif**, l'enlever double la période 2014-2020 (19 901 → 39 958 M€).
+  `verify_vues_unifiees.py` échoue si quelqu'un le retire.
 
 - **Tests** : `venv/bin/python -m pytest -q` (376 tests, ~40 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
