@@ -1,11 +1,14 @@
 # Stack Metabase — Cartographie FESI
 
 Déploiement Metabase pour l'issue [#121](https://github.com/benoitdb/cartographie-fesi/issues/121)
-(bascule Streamlit → Metabase, cohabitation ciblée). Phase 0 (schéma, chargement,
-vues SQL), Phase 1 (dashboard national 2021-2027), Phase 2 (vues régionales,
-comparateur, volet national, vues pilotage) et Phase 3 (période 2014-2020 :
-fusion des six sources, cofinancement, dashboard) sont livrées ; reste la
-Phase 4 (validation croisée et arbitrage du périmètre final).
+(bascule Streamlit → Metabase, cohabitation ciblée). Les cinq phases sont
+livrées : schéma et chargement (Phase 0), dashboard national 2021-2027
+(Phase 1), vues régionales/comparateur/volet national (Phase 2), période
+2014-2020 — fusion des six sources, cofinancement (Phase 3), et validation
+croisée Streamlit ↔ Metabase avec arbitrage des cinq écarts trouvés (Phase 4).
+Quelqu'un qui veut juste **utiliser** les dashboards peut aller directement à
+la section « Guide utilisateur » ci-dessous ; le reste de ce fichier
+documente comment la stack a été construite.
 
 ## Pré-requis
 
@@ -88,6 +91,54 @@ La connexion à la base FESI est déjà configurée (ajoutée via l'API au setup
 
 **Credentials :** tous dans `.env` (gitignoré). Ne pas coder de mot de passe
 en dur dans les fichiers versionnés.
+
+## Guide utilisateur — quel dashboard pour quoi
+
+**Répartition des rôles** (voir aussi l'[étude d'impact](https://claude.ai/code/artifact/2ad9ab38-a0fc-4697-ab26-651c57d952bb)) :
+Metabase couvre la consultation courante — KPI, filtres, drill-down, pilotage
+programmé vs engagé. Streamlit garde ce que Metabase ne sait pas faire : les
+choroplèthes DROM-COM en encarts sur une même page, et les analyses
+statistiques avancées (Pareto, Lorenz, IQR, détection d'anomalies). Les deux
+lisent la même base PostgreSQL — jamais deux calculs séparés du même chiffre.
+
+**Les cinq dashboards Metabase**, dans l'ordre où les construire fait sens :
+
+| Dashboard | Quand l'ouvrir |
+|---|---|
+| FESI — Vue nationale 2021-2027 | Vue d'ensemble du programme courant : total, répartition par fonds, carte de France, courbe d'engagement. Filtre Fonds. |
+| FESI — Vue régionale 2021-2027 | Suivi d'**une** région 2021-2027 : montant, pilotage programmé vs engagé. |
+| FESI — Comparateur régions 2021-2027 | Mettre deux régions 2021-2027 côte à côte sur les mêmes graphes. |
+| FESI — Volet national 2021-2027 | Les programmes nationaux (FSE+/FTJ, ex. France Travail) — périmètre fixe, pas de filtre région. |
+| FESI — Période 2014-2020 | Tout ce qui précède, mais pour 2014-2020 : région, volet national, **ou « Ensemble national »** (voir plus bas), un seul dashboard pour les trois. |
+
+**Champ « Périmètre » du dashboard 2014-2020** : texte libre, pas une liste
+déroulante — taper le nom exact d'une région, `national` (volet national), ou
+`Ensemble national` (le pays entier, régions + national fusionnés).
+
+**« Ensemble national » — deux réserves à connaître avant de lire ce
+périmètre** (arbitrage Phase 4, [#121](https://github.com/benoitdb/cartographie-fesi/issues/121)) :
+1. **Bretagne compte différemment.** Son fichier regroupe les opérations en
+   marchés de formation plutôt qu'en dossiers individuels — son nombre de
+   projets et son montant moyen ne se comparent pas terme à terme aux autres
+   régions dans cet agrégat.
+2. **Six millésimes différents.** Les six sources qui composent ce total ont
+   été extraites entre 2023 et 2026 — l'agrégat mélange des photos prises à
+   des moments différents, pas un instantané unique.
+
+La carte et le classement par région du dashboard Streamlit équivalent
+n'incluent pas encore la part PON FSE des DROM sur ce même périmètre —
+écart connu, journalisé dans l'issue [#128](https://github.com/benoitdb/cartographie-fesi/issues/128),
+pas dans le KPI ni le pilotage.
+
+**Le taux de cofinancement affiché est toujours recalculé** (montant UE /
+dépenses éligibles), jamais le taux déclaré par un fichier source — même sur
+les trois régions (Bretagne, Normandie, Nouvelle-Aquitaine) dont le fichier en
+déclare un. Un écart notable entre les deux est signalé à part sur la page
+Streamlit, jamais substitué au recalculé ([#127](https://github.com/benoitdb/cartographie-fesi/issues/127),
+fermée). Les dépassements de plafond de cofinancement appliquent une
+tolérance d'un millionième — une opération programmée pile au plafond ne doit
+pas apparaître en dépassement à cause d'un arrondi à la centime côté source
+([#126](https://github.com/benoitdb/cartographie-fesi/issues/126), fermée).
 
 ### Dashboard national 2021-2027 (Phase 1, issue #121)
 
