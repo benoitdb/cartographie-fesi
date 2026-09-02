@@ -256,11 +256,17 @@ def build_cards(session, db_id):
             "dataset_query": {
                 "type": "native",
                 "native": {
+                    # `date_debut`, pas `date_convention` (arbitrage Phase 4, #121) :
+                    # c'est la date que `build_trajectoire` utilise côté Streamlit
+                    # (dashboard/utils/pilotage.py, `date_col` par défaut). Les deux
+                    # dates existaient déjà en base ; verify_dashboards.py avait
+                    # chiffré l'écart entre les deux courbes à 2 324 M€ sur le dernier
+                    # point, porté par les opérations sans date de convention.
                     "query": (
                         "SELECT mois, SUM(montant_mois) OVER (ORDER BY mois) AS montant_cumule "
-                        "FROM (SELECT date_trunc('month', date_convention) AS mois, "
+                        "FROM (SELECT date_trunc('month', date_debut) AS mois, "
                         "SUM(montant_ue) AS montant_mois FROM operations "
-                        f"WHERE source_id = '{SOURCE_2021_2027}' AND date_convention IS NOT NULL "
+                        f"WHERE source_id = '{SOURCE_2021_2027}' AND date_debut IS NOT NULL "
                         "[[AND fonds = {{fonds}}]] GROUP BY 1) t ORDER BY mois"
                     ),
                     "template-tags": fonds_tag("a1000000-0000-0000-0000-000000000004"),
@@ -820,9 +826,13 @@ def build_2014_2020_cards(session, db_id):
             "dataset_query": {
                 "type": "native",
                 "native": {
+                    # `fonds IS NOT NULL` (arbitrage Phase 4, #121) : aligne ce total
+                    # sur le filtre Fonds de Streamlit, qui écarte les dossiers sans
+                    # fonds renseigné quel que soit le fonds coché (26 dossiers
+                    # Normandie, 24,6 M€) — v_perimetre_2014_2020 les portait encore.
                     "query": (
                         "SELECT SUM(montant_ue) AS montant_ue FROM v_perimetre_2014_2020 "
-                        "WHERE perimetre = {{perimetre}}"
+                        "WHERE perimetre = {{perimetre}} AND fonds IS NOT NULL"
                     ),
                     "template-tags": perimetre_tag(tag_id % 1),
                 },
@@ -842,7 +852,7 @@ def build_2014_2020_cards(session, db_id):
                 "native": {
                     "query": (
                         "SELECT COUNT(*) AS n_operations FROM v_perimetre_2014_2020 "
-                        "WHERE perimetre = {{perimetre}}"
+                        "WHERE perimetre = {{perimetre}} AND fonds IS NOT NULL"
                     ),
                     "template-tags": perimetre_tag(tag_id % 2),
                 },
@@ -902,9 +912,15 @@ def build_2014_2020_cards(session, db_id):
             "dataset_query": {
                 "type": "native",
                 "native": {
+                    # n_taux_divergents/montant_taux_divergents (arbitrage Phase 4, #127) :
+                    # opérations où le taux déclaré par le fichier source (Bretagne,
+                    # Normandie, Nouvelle-Aquitaine uniquement) diverge de plus d'un point
+                    # du taux recalculé qui fait foi pour n_depassements — un signal de
+                    # qualité de source affiché à part, jamais un second dépassement.
                     "query": (
                         "SELECT fonds, categorie_ue, plafond_min, plafond_max, n_operations, "
-                        "n_depassements, montant_depassements FROM v_cofinancement_2014_2020_summary "
+                        "n_depassements, montant_depassements, n_taux_divergents, "
+                        "montant_taux_divergents FROM v_cofinancement_2014_2020_summary "
                         "WHERE region = {{perimetre}} ORDER BY fonds"
                     ),
                     "template-tags": perimetre_tag(tag_id % 5),

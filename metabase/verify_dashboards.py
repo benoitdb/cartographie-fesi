@@ -21,11 +21,18 @@ de `verify_pilotage_2014_2020.py`, les plafonds de
 
     venv/bin/python metabase/verify_dashboards.py
 
-Deux sorties distinctes :
-  - les **écarts** : un chiffre qui devrait concorder et ne concorde pas — échec ;
-  - les **écarts de définition** : les endroits où Metabase et Streamlit ne
-    comptent sciemment pas la même chose. Ils sont listés, chiffrés et
-    n'échouent pas ; c'est à l'arbitrage de Phase 4 de dire lequel a raison.
+Un premier passage (2 sept. 2026) avait trouvé quatre écarts de définition —
+Metabase et Streamlit ne comptant sciemment pas la même chose au même endroit.
+Les quatre ont été arbitrés dans la foulée (issue #121, Phase 4) : le script ne
+distingue donc plus deux catégories de sortie, tout écart chiffré est un échec.
+  - l'engagement cumulé cumule désormais sur la même date des deux côtés (date de
+    début d'opération) ;
+  - la carte KPI 2014-2020 exclut désormais les dossiers sans fonds renseigné,
+    comme le filtre Fonds de Streamlit ;
+  - le taux de cofinancement affiché est désormais homogène des deux côtés
+    (toujours recalculé, jamais le taux déclaré par un fichier régional — #127) ;
+  - `detect_cofinancement_superieur_plafond` applique désormais la même
+    tolérance relative que la comparaison SQL en NUMERIC (#126).
 """
 
 import json
@@ -56,7 +63,9 @@ from utils.data_loader import (  # noqa: E402
     DATA_PATH,
     PROGRAMME_TOTALS_PATH,
 )
+from utils.periodes import SEUIL_ECART_TAUX_DECLARE  # noqa: E402
 from utils.pilotage import reste_a_engager, taux_consommation  # noqa: E402
+from utils.stats import TOLERANCE_RELATIVE_PLAFOND  # noqa: E402
 
 MB_URL = setup.MB_URL
 
@@ -64,7 +73,7 @@ MB_URL = setup.MB_URL
 # (`data.json` n'est pas normalisé, c'est la période de référence du projet).
 FONDS = "Fonds"
 MONTANT = "Montant UE"
-DATE_CONVENTION = "Date première convention"
+DATE_DEBUT = "Date de début de l'opération"
 
 
 # ------------------------------------------------------------------ API Metabase
@@ -220,7 +229,7 @@ def check_vue_nationale(session, dash, agg, data):
     """« FESI — Vue nationale 2021-2027 » : les cinq cartes, sans filtre puis
     pour chacun des trois fonds — c'est le seul dashboard dont le filtre porte
     sur toutes les cartes à la fois."""
-    erreurs, ecarts, n = [], [], 0
+    erreurs, n = [], 0
     by_fonds, by_region, by_region_fonds = agg["by_fonds"], agg["by_region"], agg["by_region_fonds"]
 
     for fonds in [None, *sorted(by_fonds)]:
@@ -265,35 +274,20 @@ def check_vue_nationale(session, dash, agg, data):
         n += len(attendu_regions)
 
         # Engagement cumulé : le dernier point de la courbe est le cumul total.
+        # Alignée sur `build_trajectoire` (arbitrage Phase 4, #121) : les deux
+        # cumulent désormais sur la date de DÉBUT D'OPÉRATION, plus sur la date de
+        # première convention — même colonne, donc un vrai écart chiffré ici.
         lignes = interroger(session, dash, "Engagement cumulé", valeurs)
         cumul_mb = float(lignes[-1]["montant_cumule"]) if lignes else 0
         cumul_ref = sum(
             op[MONTANT] or 0
             for op in data["operations"]
-            if (fonds is None or op.get(FONDS) == fonds) and load_data.parse_date(op.get(DATE_CONVENTION))
+            if (fonds is None or op.get(FONDS) == fonds) and load_data.parse_date(op.get(DATE_DEBUT))
         )
         if not close_enough(cumul_ref, cumul_mb):
-            erreurs.append(f"{contexte} / engagement cumulé : Metabase {cumul_mb:,.2f} vs date de convention {cumul_ref:,.2f}")
+            erreurs.append(f"{contexte} / engagement cumulé : Metabase {cumul_mb:,.2f} vs Streamlit {cumul_ref:,.2f}")
         n += 1
-
-        if fonds is None:
-            # La carte cumule sur la date de PREMIÈRE CONVENTION ; `build_trajectoire`
-            # côté Streamlit cumule sur la date de DÉBUT D'OPÉRATION (son `date_col`
-            # par défaut). Deux courbes différentes, et deux périmètres différents :
-            # une opération sans date de convention sort du cumul Metabase.
-            cumul_streamlit = sum(
-                op[MONTANT] or 0
-                for op in data["operations"]
-                if load_data.parse_date(op.get("Date de début de l'opération"))
-            )
-            ecarts.append(
-                "Vue nationale / « Engagement cumulé » : Metabase cumule sur la date de première "
-                f"convention ({cumul_mb / 1e6:,.1f} M€ au dernier point), la trajectoire Streamlit "
-                f"sur la date de début d'opération ({cumul_streamlit / 1e6:,.1f} M€) — "
-                f"{(cumul_streamlit - cumul_mb) / 1e6:,.1f} M€ d'écart, porté par les opérations "
-                "sans date de convention renseignée."
-            )
-    return erreurs, ecarts, n
+    return erreurs, n
 
 
 def check_vue_regionale(session, dash, agg, programme_totals):
@@ -435,7 +429,8 @@ def check_volet_national(session, dash, agg, data, programme_totals):
 
 def cofinancement_python(operations, categories):
     """Résumé du cofinancement par (périmètre, fonds), et les opérations sur
-    lesquelles Metabase et Streamlit ne rendent pas le même verdict.
+    lesquelles Metabase et Streamlit ne rendent pas le même verdict de
+    dépassement, ou pas le même signal de divergence.
 
     Périmètre commun aux deux : plafond de la région lu de `cofinancement`, fonds
     hors champ écartés par `est_hors_plafond`, comparaison au plafond HAUT de la
@@ -443,20 +438,24 @@ def cofinancement_python(operations, categories):
     porte pas l'axe prioritaire qui trancherait). Le volet national n'a pas de
     catégorie de région : aucune ligne, comme le JOIN SQL qui l'écarte.
 
-    Ce qui diffère, c'est le **taux comparé au plafond** :
-      - Metabase recalcule `montant_ue / depenses_eligibles` en `NUMERIC`, donc en
-        décimal exact. Le résumé renvoyé reproduit cette arithmétique avec
-        `Decimal` — c'est la référence à laquelle les cartes doivent concorder ;
-      - Streamlit compare le taux de `normaliser_operations` : celui **déclaré par
-        le fichier** quand la source en porte un, un quotient en flottant sinon.
+    Depuis l'arbitrage Phase 4 (#127/#126), le taux comparé au plafond est
+    **homogène** des deux côtés — toujours montant/dépenses, jamais le taux
+    déclaré par le fichier — donc les deux verdicts de dépassement doivent
+    concorder exactement (Metabase en `NUMERIC`, Streamlit en flottant avec la
+    tolérance relative de `detect_cofinancement_superieur_plafond`, cf. #126). Un
+    écart ici serait donc un vrai bug, pas un écart de définition — il tombe dans
+    `erreurs`, comme `check_engage`/`check_pilotage`.
 
-    Les deux causes d'écart sont donc distinguées et comptées (`divergences`)
-    plutôt que fondues dans un total : l'une est une différence de source
-    (taux déclaré vs recalculé), l'autre une différence d'arithmétique
-    (le flottant fait basculer une opération pile au plafond du mauvais côté).
+    Le **signal de divergence** (taux déclaré vs recalculé, #127) est, lui,
+    porté dans `resume` (`n_taux_divergents`, `montant_taux_divergents`) et
+    comparé par l'appelant à la même carte Metabase que le reste du résumé —
+    c'est un signal affiché sous condition côté Streamlit
+    (`MENTION_TAUX_DECLARE_DIVERGENT`), mais son décompte doit concorder au
+    chiffre près des deux côtés, donc une divergence de ce décompte est aussi
+    une `erreur`, pas un écart de définition.
     """
     resume = {}
-    divergences = []
+    erreurs = []
     for op in operations:
         infos = categories.get(op["perimetre"])
         fonds = op["fonds"]
@@ -477,30 +476,47 @@ def cofinancement_python(operations, categories):
                 "n_operations": 0,
                 "n_depassements": 0,
                 "montant_depassements": 0.0,
+                "n_taux_divergents": 0,
+                "montant_taux_divergents": 0.0,
             },
         )
         ligne["n_operations"] += 1
 
+        # Même tolérance des deux côtés (arbitrage Phase 4, #126) : la vue SQL
+        # l'applique aussi depuis que ce script a trouvé des opérations
+        # programmées pile au plafond (arrondi à la centime côté source) que
+        # seule une tolérance symétrique classe de la même façon ici et côté
+        # Streamlit — sans quoi Metabase et Streamlit divergeraient sur des
+        # centaines d'opérations plutôt que sur les 40 que #126 documente.
         depasse_sql = (
             depenses > 0
             and plafond_max is not None
-            and Decimal(repr(montant)) / Decimal(repr(depenses)) > Decimal(repr(plafond_max))
+            and Decimal(repr(montant)) / Decimal(repr(depenses))
+            > Decimal(repr(plafond_max)) * (1 + Decimal(repr(TOLERANCE_RELATIVE_PLAFOND)))
         )
         if depasse_sql:
             ligne["n_depassements"] += 1
             ligne["montant_depassements"] += montant
 
         taux = op["taux_cofinancement"]
-        depasse_streamlit = taux is not None and plafond_max is not None and taux > plafond_max
+        depasse_streamlit = (
+            taux is not None
+            and plafond_max is not None
+            and taux > plafond_max * (1 + TOLERANCE_RELATIVE_PLAFOND)
+        )
         if depasse_streamlit != depasse_sql:
-            divergences.append(
-                {
-                    "perimetre": op["perimetre"],
-                    "montant_ue": montant,
-                    "cause": "taux déclaré" if op["taux_declare"] else "arithmétique flottante",
-                }
+            erreurs.append(
+                f"Période 2014-2020 ({op['perimetre']}) / cofinancement / {fonds} / "
+                f"opération {op['numero_operation']} : dépassement Metabase={depasse_sql} "
+                f"vs Streamlit={depasse_streamlit} (taux {taux!r}, plafond {plafond_max!r})"
             )
-    return resume, divergences
+
+        declare = op["taux_declare"]
+        divergent = declare is not None and taux is not None and abs(declare - taux) > SEUIL_ECART_TAUX_DECLARE
+        if divergent:
+            ligne["n_taux_divergents"] += 1
+            ligne["montant_taux_divergents"] += montant
+    return resume, erreurs
 
 
 def check_periode_2014_2020(session, dash, categories):
@@ -509,53 +525,37 @@ def check_periode_2014_2020(session, dash, categories):
     Les chiffres de référence viennent de la fusion des six sources déjà écrite
     et vérifiée en Phase 3 (`verify_pilotage_2014_2020`), pas d'une seconde
     implémentation."""
-    erreurs, ecarts, n = [], [], 0
+    erreurs, n = [], 0
 
     operations = list(operations_par_perimetre())
     engage = engage_python()
     enveloppes = enveloppes_python(engage)
-    resume_cofi, divergences_cofi = cofinancement_python(operations, categories)
+    resume_cofi, erreurs_cofi = cofinancement_python(operations, categories)
 
-    # Le total et le comptage d'un périmètre, avec et sans les dossiers dont la
-    # colonne Fonds est vide : la carte KPI les compte, le filtre Fonds de
-    # Streamlit les écarte quel que soit le fonds coché.
-    totaux = defaultdict(lambda: {"montant": 0.0, "count": 0, "montant_sans_fonds": 0.0, "count_sans_fonds": 0})
+    # Total et comptage d'un périmètre, dossiers sans fonds renseigné exclus des
+    # deux côtés (arbitrage Phase 4, #121) : la carte KPI filtre désormais
+    # `fonds IS NOT NULL`, comme le filtre Fonds de Streamlit qui les écartait
+    # déjà quel que soit le fonds coché (26 dossiers Normandie, 24,6 M€).
+    totaux = defaultdict(lambda: {"montant": 0.0, "count": 0})
     for op in operations:
+        if op["fonds"] is None:
+            continue
         cible = totaux[op["perimetre"]]
         cible["montant"] += op["montant_ue"] or 0
         cible["count"] += 1
-        if op["fonds"] is None:
-            cible["montant_sans_fonds"] += op["montant_ue"] or 0
-            cible["count_sans_fonds"] += 1
 
     for perimetre in sorted(totaux):
         valeurs = {setup.DASHBOARD_2014_2020_PARAM_ID: perimetre}
         contexte = f"Période 2014-2020 ({perimetre})"
         reference = totaux[perimetre]
-        # Ce que Streamlit affiche : les dossiers sans fonds sortent du décompte.
-        montant_streamlit = reference["montant"] - reference["montant_sans_fonds"]
-        count_streamlit = reference["count"] - reference["count_sans_fonds"]
 
         montant_mb = float(scalaire(interroger(session, dash, "2014-2020 — Montant programmé total", valeurs)))
         count_mb = scalaire(interroger(session, dash, "2014-2020 — Nombre d'opérations", valeurs))
         n += 2
-        if reference["count_sans_fonds"]:
-            if close_enough(reference["montant"], montant_mb) and count_mb == reference["count"]:
-                ecarts.append(
-                    f"Période 2014-2020 / {perimetre} : la carte KPI compte les "
-                    f"{reference['count_sans_fonds']} dossier(s) sans fonds renseigné "
-                    f"({reference['montant_sans_fonds'] / 1e6:,.1f} M€), que le filtre Fonds de "
-                    f"Streamlit écarte quel que soit le fonds coché — "
-                    f"{montant_mb / 1e6:,.1f} M€ / {count_mb} opérations affichés par Metabase "
-                    f"contre {montant_streamlit / 1e6:,.1f} M€ / {count_streamlit} par Streamlit."
-                )
-            else:
-                erreurs.append(f"{contexte} / KPI : Metabase {montant_mb:,.2f} ({count_mb} op.) — ni le total avec fonds ({montant_streamlit:,.2f}) ni sans ({reference['montant']:,.2f})")
-        else:
-            if not close_enough(montant_streamlit, montant_mb):
-                erreurs.append(f"{contexte} / montant total : Metabase {montant_mb:,.2f} vs Streamlit {montant_streamlit:,.2f}")
-            if count_mb != count_streamlit:
-                erreurs.append(f"{contexte} / nombre d'opérations : Metabase {count_mb} vs Streamlit {count_streamlit}")
+        if not close_enough(reference["montant"], montant_mb):
+            erreurs.append(f"{contexte} / montant total : Metabase {montant_mb:,.2f} vs Streamlit {reference['montant']:,.2f}")
+        if count_mb != reference["count"]:
+            erreurs.append(f"{contexte} / nombre d'opérations : Metabase {count_mb} vs Streamlit {reference['count']}")
 
         attendu_fonds = {f: m for (p, f), m in engage.items() if p == perimetre}
         erreurs += comparer_series(
@@ -596,33 +596,13 @@ def check_periode_2014_2020(session, dash, categories):
                 erreurs.append(f"{contexte} / cofinancement : fonds {fonds} affiché par Metabase, absent côté Streamlit")
         n += len(attendu_cofi)
 
-    # Les verdicts de dépassement qui diffèrent, résumés par cause plutôt
-    # qu'opération par opération : c'est le nombre et le poids qui décident si
-    # l'écart mérite un correctif, pas la liste.
-    for cause in ("taux déclaré", "arithmétique flottante"):
-        concernees = [d for d in divergences_cofi if d["cause"] == cause]
-        if not concernees:
-            continue
-        perimetres = sorted({d["perimetre"] for d in concernees})
-        montant = sum(d["montant_ue"] or 0 for d in concernees)
-        if cause == "taux déclaré":
-            detail = (
-                "Streamlit compare le taux déclaré par le fichier régional, la vue SQL "
-                "recalcule montant / dépenses — deux mesures différentes du même taux"
-            )
-        else:
-            detail = (
-                "la vue SQL compare en NUMERIC (décimal exact), Streamlit en flottant : "
-                "une opération pile au plafond (60 % ou 85 %) y bascule en « dépassement » "
-                "à cause du seul arrondi binaire"
-            )
-        ecarts.append(
-            f"Période 2014-2020 / cofinancement — {len(concernees)} opération(s) "
-            f"({montant / 1e6:,.1f} M€) classées différemment des deux côtés, cause « {cause} » : "
-            f"{detail}. Périmètres concernés : {', '.join(perimetres)}."
-        )
+    # Verdicts de dépassement recalculés par cofinancement_python (Metabase en
+    # NUMERIC vs Streamlit en flottant tolérant, #126) : un vrai bug s'ils
+    # divergent depuis que le taux comparé est homogène des deux côtés (#127).
+    erreurs += erreurs_cofi
+    n += sum(v["n_operations"] for v in resume_cofi.values())
 
-    return erreurs, ecarts, n
+    return erreurs, n
 
 
 def main():
@@ -636,11 +616,10 @@ def main():
     data, programme_totals, categories = charger_references()
     agg = data["aggregates"]
 
-    erreurs, ecarts, n = [], [], 0
+    erreurs, n = [], 0
 
-    e, ec, c = check_vue_nationale(session, dash[setup.DASHBOARD_NAME], agg, data)
+    e, c = check_vue_nationale(session, dash[setup.DASHBOARD_NAME], agg, data)
     erreurs += e
-    ecarts += ec
     n += c
     print(f"Vue nationale 2021-2027 : {c} valeurs comparées.")
 
@@ -659,16 +638,10 @@ def main():
     n += c
     print(f"Volet national 2021-2027 : {c} valeurs comparées.")
 
-    e, ec, c = check_periode_2014_2020(session, dash[setup.DASHBOARD_2014_2020_NAME], categories)
+    e, c = check_periode_2014_2020(session, dash[setup.DASHBOARD_2014_2020_NAME], categories)
     erreurs += e
-    ecarts += ec
     n += c
     print(f"Période 2014-2020 : {c} valeurs comparées.")
-
-    if ecarts:
-        print(f"\nÉcarts de définition ({len(ecarts)}) — connus, à arbitrer, pas des erreurs :")
-        for ecart in ecarts:
-            print(f"    - {ecart}")
 
     print(f"\n{n} valeurs comparées au total sur les cinq dashboards.")
     if erreurs:
@@ -676,10 +649,7 @@ def main():
         for erreur in erreurs:
             print(f"    - {erreur}")
         sys.exit(1)
-    print(
-        "Aucun écart chiffré inexpliqué : Metabase affiche les mêmes montants que le "
-        f"dashboard Streamlit, hors les {len(ecarts)} écart(s) de définition listés ci-dessus."
-    )
+    print("Metabase affiche les mêmes montants que le dashboard Streamlit, sur toutes les valeurs comparées.")
 
 
 if __name__ == "__main__":

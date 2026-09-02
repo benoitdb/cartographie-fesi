@@ -121,32 +121,31 @@ def charger_source(source_id):
 def _ligne(op, cols, perimetre):
     """Une opération réduite à ce dont les vues SQL et les écrans ont besoin.
 
-    `taux_cofinancement` suit la règle de `periodes.normaliser_operations`, pas
-    celle des vues SQL : le taux **déclaré par le fichier** quand la source en
-    porte un (Bretagne, Normandie, Nouvelle-Aquitaine), le quotient dérivé
-    montant/dépenses sinon (Synergie et PON FSE n'ont pas la colonne). Une valeur
-    non numérique vaut None sans repli sur le quotient — le taux Nouvelle-Aquitaine
-    est une formule Excel qui écrit parfois `#DIV/0` en toutes lettres. C'est la
-    différence avec `v_cofinancement_2014_2020`, qui recalcule toujours le
-    quotient ; `verify_dashboards.py` en fait un écart de définition chiffré
-    plutôt que de trancher tout seul.
+    `taux_cofinancement` suit la règle de `periodes.normaliser_operations` depuis
+    l'arbitrage Phase 4 (#127) : **toujours** le quotient montant/dépenses, jamais
+    le taux déclaré par le fichier — homogène avec Synergie et PON FSE, qui n'ont
+    pas de taux déclaré du tout, et avec `v_cofinancement_2014_2020` côté SQL, qui
+    recalcule aussi. Le taux déclaré (Bretagne, Normandie, Nouvelle-Aquitaine
+    seulement) est conservé à part (`taux_declare`) : un signal de qualité de
+    source, pas une seconde vérité concurrente. Une valeur non numérique vaut
+    None sans repli sur le quotient — le taux Nouvelle-Aquitaine est une formule
+    Excel qui écrit parfois `#DIV/0` en toutes lettres.
     """
     montant = op.get(cols["montant_ue"])
     depenses = op.get(cols["depenses"])
     libelle_taux = cols.get("taux_cofinance")
     if libelle_taux and libelle_taux in op:
-        declare = op[libelle_taux]
-        taux = declare if isinstance(declare, (int, float)) else None
+        brut = op[libelle_taux]
+        declare = brut if isinstance(brut, (int, float)) else None
     else:
         declare = None
-        taux = _taux(montant, depenses)
     return {
         "numero_operation": op.get(cols["numero_op"]),
         "fonds": op.get(cols["fonds"]),
         "montant_ue": montant,
         "depenses_eligibles": depenses,
-        "taux_cofinancement": taux,
-        "taux_declare": libelle_taux is not None and libelle_taux in op,
+        "taux_cofinancement": _taux(montant, depenses),
+        "taux_declare": declare,
         "perimetre": perimetre,
     }
 

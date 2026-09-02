@@ -6,11 +6,16 @@ Deux choses à protéger ici, et elles échouent toutes les deux en silence :
    une information qui vit dans `data-pipeline/schema_source.py` (le dashboard
    n'importe pas le pipeline). Renommer une colonne d'un seul côté produirait une
    page vide, pas une erreur ;
-2. **le taux de cofinancement dérivé** — il n'existe pas dans le fichier
-   Synergie et se calcule. Un zéro à la place d'une valeur manquante se lirait
-   comme une opération financée à 0 % par l'UE, ce qui est une information, alors
-   qu'on n'en a aucune. Normandie et Nouvelle-Aquitaine, elles, portent déjà ce
-   taux en clair : rien à dériver, `normaliser_operations` ne doit pas l'écraser.
+2. **le taux de cofinancement, toujours recalculé** — montant / dépenses, sur
+   les six sources 2014-2020 (2021-2027 fait exception, hors périmètre de #127 :
+   seul le taux déclaré par son fichier existe). Un zéro à la place d'une valeur
+   manquante se lirait comme une opération financée à 0 % par l'UE, ce qui est
+   une information, alors qu'on n'en a aucune. Normandie, Nouvelle-Aquitaine et
+   Bretagne portent aussi un taux déclaré dans leur fichier : conservé à part
+   (`TAUX_COFINANCEMENT_DECLARE`) et signalé s'il diverge du recalculé de plus
+   d'un point (`TAUX_COFINANCEMENT_DIVERGENT`) — jamais retenu comme le taux
+   affiché, qui doit rester comparable entre les six sources (arbitrage Phase 4,
+   #127 : les deux mesures ne concordaient pas systématiquement).
 """
 
 import json
@@ -39,6 +44,8 @@ from utils.periodes import (  # noqa: E402
     SOURCE_NOUVELLE_AQUITAINE_2014_2020,
     SOURCE_PON_FSE_2014_2020,
     SOURCE_SYNERGIE_2014_2020,
+    TAUX_COFINANCEMENT_DECLARE,
+    TAUX_COFINANCEMENT_DIVERGENT,
     absences_expliquees,
     appliquer_libelles_programmes,
     capacites,
@@ -306,9 +313,10 @@ def test_pilotage_masque_plus_que_sur_les_perimetres_agreges():
 
 
 def test_normandie_prend_les_libelles_canoniques():
-    """Fichier bilingue franco-anglais : `Fond` (sans s) se renomme comme les autres,
-    et le taux de cofinancement existe déjà en clair — il ne doit pas être recalculé
-    (contrairement à Synergie, qui ne le porte pas)."""
+    """Fichier bilingue franco-anglais : `Fond` (sans s) se renomme comme les autres.
+    Le taux de cofinancement existe déjà en clair dans le fichier, mais c'est le taux
+    RECALCULÉ (montant / dépenses) qui fait foi (arbitrage Phase 4, #127) — le déclaré
+    est conservé à part, pour signal, pas pour remplacer le recalculé."""
     op = {
         "Fond": "FEDER",
         "Montant UE programmé": 170948.18,
@@ -327,12 +335,33 @@ def test_normandie_prend_les_libelles_canoniques():
     assert normalisee["Fonds"] == "FEDER"
     assert normalisee["Montant UE"] == 170948.18
     assert normalisee["Total des dépenses éligibles"] == 355154.47
-    assert normalisee["Taux de cofinancement"] == 0.48
+    assert normalisee["Taux de cofinancement"] == pytest.approx(170948.18 / 355154.47)
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == 0.48
+    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is False  # écart ~0,001, sous le seuil d'un point
     assert normalisee["Nom du bénéficiaire"] == "COMUE Normandie Université"
     assert normalisee["Numéro Opération"] == "15E00020"
     assert normalisee["Code postal du bénéficiaire"] == "14000"
     assert "Fond" not in normalisee
     assert "taux de cofinancement UE - EU co-financing rate" not in normalisee
+
+
+def test_taux_declare_divergent_signale_sans_ecraser_le_recalcule():
+    """Cas construit pour le seuil d'un point (#127) : taux déclaré 0,60, taux
+    recalculé 0,50 (500/1000) — plus d'un point d'écart, donc signalé. Le taux
+    affiché reste le recalculé, jamais le déclaré."""
+    op = {
+        "Fond": "FEDER",
+        "Montant UE programmé": 500.0,
+        "Total des dépenses éligibles - Total eligible costs": 1000.0,
+        "taux de cofinancement UE - EU co-financing rate": 0.60,
+        "n° Dossier": "TEST-001",
+        "Libellé programme": "Programme test",
+    }
+    (normalisee,) = normaliser_operations([op], SOURCE_NORMANDIE_2014_2020)
+
+    assert normalisee["Taux de cofinancement"] == pytest.approx(0.5)
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == 0.60
+    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is True
 
 
 def test_nouvelle_aquitaine_prend_les_libelles_canoniques():
@@ -354,7 +383,9 @@ def test_nouvelle_aquitaine_prend_les_libelles_canoniques():
     assert normalisee["Fonds"] == "FEDER"
     assert normalisee["Montant UE"] == 220000.0
     assert normalisee["Total des dépenses éligibles"] == 550000.0
-    assert normalisee["Taux de cofinancement"] == 0.4
+    assert normalisee["Taux de cofinancement"] == pytest.approx(0.4)  # recalculé, égal au déclaré ici
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == 0.4
+    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is False
     assert normalisee["Nom du bénéficiaire"] == "CIREF"
     assert normalisee["Libellé Programme"] == "2014FR16M0OP001"
     assert "Funds" not in normalisee
@@ -420,12 +451,16 @@ def test_capacites_source_par_defaut_permissive():
 
 def test_taux_existant_invalide_devient_none():
     """Nouvelle-Aquitaine porte parfois `#DIV/0` en toutes lettres (formule Excel sur une
-    dépense nulle) là où le taux devrait être un nombre. Laissé tel quel, il ferait
-    basculer toute la colonne en dtype `object` au premier groupby en aval — constaté sur
-    `compute_cofinancement_table`, qui plantait sur ce périmètre avant ce correctif."""
+    dépense nulle) là où le taux déclaré devrait être un nombre. Laissé tel quel, il
+    ferait basculer toute la colonne en dtype `object` au premier groupby en aval —
+    constaté sur `compute_cofinancement_table`, qui plantait sur ce périmètre avant ce
+    correctif. Le taux recalculé est de toute façon None ici (dépenses nulles) : les deux
+    colonnes concordent sur l'absence de valeur, pas de divergence signalée."""
     op = {"Montant UE": 100.0, "Total des dépenses éligibles": 0.0, "Taux de cofinancement": "#DIV/0"}
     (normalisee,) = normaliser_operations([op], SOURCE_NOUVELLE_AQUITAINE_2014_2020)
     assert normalisee["Taux de cofinancement"] is None
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] is None
+    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is False
 
 
 def test_capacites_source_periode_synergie_equivaut_a_sa_source():

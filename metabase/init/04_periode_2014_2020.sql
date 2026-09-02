@@ -21,11 +21,13 @@
 -- pour tout usage autre que la page « Validation de la source ».
 
 CREATE VIEW v_perimetre_2014_2020 AS
-SELECT numero_operation, fonds, montant_ue, depenses_eligibles, perimetre
+SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement AS taux_declare, perimetre
 FROM (
     -- Synergie : périmètre régional, sauf les trois régions qui ont leur
-    -- propre fichier (substitution, pas addition).
-    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, region AS perimetre
+    -- propre fichier (substitution, pas addition). `taux_cofinancement` : NULL
+    -- pour Synergie (schema_source ne lui connaît pas cette colonne) — porté
+    -- quand même pour que l'UNION ALL ait le même nombre de colonnes partout.
+    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, region AS perimetre
     FROM operations
     WHERE source_id = '2014-2020-synergie'
       AND NOT is_interregional AND NOT is_national
@@ -35,7 +37,7 @@ FROM (
     UNION ALL
 
     -- Synergie : volet national, inchangé (mêmes opérations que v_national).
-    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, 'national' AS perimetre
+    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, 'national' AS perimetre
     FROM operations
     WHERE source_id = '2014-2020-synergie' AND is_national
 
@@ -44,7 +46,10 @@ FROM (
     -- Les trois fichiers régionaux hors-Synergie qui se substituent à Synergie
     -- sur leur région (#95) : chaque ligne y est de cette région par
     -- construction (pretraitement du pipeline), pas de filtre supplémentaire.
-    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, region AS perimetre
+    -- Ces trois sources SONT celles qui portent un taux_cofinancement déclaré
+    -- par le fichier (arbitrage Phase 4, #127) — Bretagne, Normandie,
+    -- Nouvelle-Aquitaine, cf. v_cofinancement_2014_2020 plus bas.
+    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, region AS perimetre
     FROM operations
     WHERE source_id IN ('2014-2020-normandie', '2014-2020-nouvelle-aquitaine', '2014-2020-bretagne-officiel')
       AND region IS NOT NULL
@@ -54,7 +59,7 @@ FROM (
     -- PON FSE (#95, point 3) : additif, routé par PROGRAMME et non par région.
     -- REGIONS_PON_FSE_2014_2020 : 5 PO FSE État des DROM -> leur région ;
     -- PON FSE + PO IEJ national -> volet national.
-    SELECT numero_operation, fonds, montant_ue, depenses_eligibles,
+    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement,
         CASE libelle_programme
             WHEN 'PO réunion' THEN 'La Réunion'
             WHEN 'PO Guadeloupe' THEN 'Guadeloupe'
@@ -153,15 +158,40 @@ CREATE TABLE categories_ue_2014_2020 (
 -- national) n'a pas de ligne dans `categories_ue_2014_2020` : le JOIN les
 -- écarte naturellement, un plafond de cofinancement n'ayant de sens que par
 -- région.
+-- `taux` fait foi partout (dépassement de plafond compris) : c'est le seul
+-- calcul homogène sur les six sources, Synergie et PON FSE n'ayant jamais de
+-- taux déclaré à comparer. `taux_declare` (arbitrage Phase 4, #127) — porté
+-- par les trois seules sources qui en ont un dans le fichier source (Bretagne,
+-- Normandie, Nouvelle-Aquitaine) — n'est PAS une seconde vérité concurrente :
+-- c'est un signal de qualité de source, affiché à part. Un écart de plus d'un
+-- point de pourcentage entre les deux mesures de la même opération signale que
+-- la source elle-même mérite d'être regardée (arrondi humain, formule figée
+-- lors d'une régularisation ultérieure) — ni un dépassement, ni une erreur SQL.
 CREATE VIEW v_cofinancement_2014_2020 AS
 SELECT
     p.numero_operation, p.perimetre AS region, p.fonds,
     p.montant_ue, p.depenses_eligibles,
     CASE WHEN p.depenses_eligibles > 0 THEN p.montant_ue / p.depenses_eligibles END AS taux,
+    p.taux_declare,
+    CASE
+        WHEN p.depenses_eligibles > 0 AND p.taux_declare IS NOT NULL
+         AND ABS(p.montant_ue / p.depenses_eligibles - p.taux_declare) > 0.01
+        THEN TRUE ELSE FALSE
+    END AS taux_divergent,
     c.categorie_ue, c.plafond_min, c.plafond_max,
+    -- Tolérance relative 1e-6 (arbitrage Phase 4, #126 — même valeur que
+    -- dashboard/utils/stats.TOLERANCE_RELATIVE_PLAFOND, à faire évoluer ensemble) :
+    -- de nombreuses opérations sont programmées PILE au plafond par construction
+    -- (le montant UE est arrondi à la centime la plus proche de depenses*plafond
+    -- côté source), ce qui laisse un écart résiduel de quelques 10⁻⁷ à 10⁻⁶ en
+    -- relatif selon le sens de l'arrondi — un vrai dépassement, mais sous le
+    -- centime, jamais celui que l'écran cherche à signaler. Sans cette tolérance
+    -- ICI AUSSI (le calcul NUMERIC est exact, il ne l'absorbe pas tout seul),
+    -- cette vue et `detect_cofinancement_superieur_plafond` (Streamlit)
+    -- classeraient différemment les mêmes opérations.
     CASE
         WHEN p.depenses_eligibles > 0 AND c.plafond_max IS NOT NULL
-         AND p.montant_ue / p.depenses_eligibles > c.plafond_max
+         AND p.montant_ue / p.depenses_eligibles > c.plafond_max * 1.000001
         THEN TRUE ELSE FALSE
     END AS depasse_plafond
 FROM v_perimetre_2014_2020 p
@@ -174,6 +204,8 @@ SELECT
     region, fonds, categorie_ue, plafond_min, plafond_max,
     COUNT(*) AS n_operations,
     COUNT(*) FILTER (WHERE depasse_plafond) AS n_depassements,
-    COALESCE(SUM(montant_ue) FILTER (WHERE depasse_plafond), 0) AS montant_depassements
+    COALESCE(SUM(montant_ue) FILTER (WHERE depasse_plafond), 0) AS montant_depassements,
+    COUNT(*) FILTER (WHERE taux_divergent) AS n_taux_divergents,
+    COALESCE(SUM(montant_ue) FILTER (WHERE taux_divergent), 0) AS montant_taux_divergents
 FROM v_cofinancement_2014_2020
 GROUP BY region, fonds, categorie_ue, plafond_min, plafond_max;

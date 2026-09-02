@@ -72,12 +72,14 @@ from utils.periodes import (
     MENTION_REACT_EU_TAUX_REFERENCE,
     MENTION_REGION_MIXTE,
     MENTION_SOURCE_REGIONALE,
+    MENTION_TAUX_DECLARE_DIVERGENT,
     PERIODE_2014_2020,
     REGIONS_PON_FSE_2014_2020,
     SOURCE_BRETAGNE_2014_2020,
     SOURCE_NORMANDIE_2014_2020,
     SOURCE_NOUVELLE_AQUITAINE_2014_2020,
     SOURCE_PON_FSE_2014_2020,
+    TAUX_COFINANCEMENT_DIVERGENT,
     absences_expliquees,
     appliquer_libelles_programmes,
     capacites,
@@ -1186,10 +1188,21 @@ with tab_audit:
         st.plotly_chart(build_lorenz_beneficiaires(df_ops), width='stretch')
 
     st.subheader("Taux de cofinancement UE")
-    # Le fichier 2014-2020 ne porte pas de colonne de taux : il est dérivé du montant UE
-    # et des dépenses éligibles (utils/periodes.normaliser_operations), un simple quotient
-    # de deux colonnes présentes.
+    # Le taux affiché est toujours recalculé (montant UE / dépenses éligibles), pour être
+    # comparable entre les six sources de la période — Synergie et le PON FSE n'ont aucun
+    # taux déclaré à comparer (utils/periodes.normaliser_operations). Bretagne, Normandie
+    # et Nouvelle-Aquitaine, elles, en déclarent un : signalé à part plutôt que substitué
+    # (arbitrage Phase 4, #127) quand il diverge notablement du recalculé.
     st.caption(MENTION_PLAFONDS_PERIODE)
+    if TAUX_COFINANCEMENT_DIVERGENT in df_ops.columns:
+        divergentes = df_ops[df_ops[TAUX_COFINANCEMENT_DIVERGENT].fillna(False)]
+        if len(divergentes):
+            st.caption(
+                MENTION_TAUX_DECLARE_DIVERGENT.format(
+                    n=_fmt_entier(len(divergentes)),
+                    montant=_fmt_millions(divergentes[MONTANT].sum()),
+                )
+            )
     cofi_fonds = compute_cofinancement_table(df_ops, FONDS).rename(
         columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
     )

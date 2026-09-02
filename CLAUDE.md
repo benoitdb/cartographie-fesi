@@ -286,6 +286,22 @@ racine pour les tests (`requirements-dev.txt`).
     §5 le majore de **dix points** quand un axe est entièrement mis en œuvre par
     instruments financiers ou par développement local. Le fichier ne porte pas
     l'axe : un dépassement affiché est un écart à expliquer, jamais un constat ;
+  - **le taux de cofinancement affiché est toujours recalculé** (montant UE /
+    dépenses éligibles), jamais le taux déclaré par un fichier source, même
+    quand la source en porte un en clair (Bretagne, Normandie,
+    Nouvelle-Aquitaine) — arbitrage Phase 4 (issue #121, #127) : les deux
+    mesures d'une même opération ne concordaient pas systématiquement, et le
+    recalculé est seul homogène entre les six sources (Synergie et le PON FSE
+    n'ont pas de taux déclaré du tout). Le déclaré est conservé à part
+    (`TAUX_COFINANCEMENT_DECLARE`, `dashboard/utils/periodes.py`) et signalé à
+    l'écran s'il diverge de plus d'un point — un signal de qualité de source,
+    jamais une seconde vérité. La comparaison au plafond applique une
+    **tolérance relative de 1e-6** (`utils/stats.TOLERANCE_RELATIVE_PLAFOND`,
+    et sa contrepartie dans `metabase/init/04_periode_2014_2020.sql` — les deux
+    doivent rester alignées) : de nombreuses opérations sont programmées pile
+    au plafond, arrondies à la centime côté source, ce qui laisse un écart
+    résiduel de quelques 10⁻⁷ en relatif que ni le flottant ni le calcul
+    décimal exact n'absorbent tout seuls (issue #126) ;
   - la colonne région n'est remplie qu'à **16,4 %** : c'est le libellé du
     programme qui rattache le reste ;
   - **le périmètre Synergie est incomplet** (#68) : Bretagne (3 opérations) et

@@ -202,6 +202,15 @@ def test_un_taux_exactement_au_plafond_n_est_pas_un_depassement():
     assert detect_cofinancement_superieur_plafond(df, plafond=0.85).empty
 
 
+def test_un_taux_pile_au_plafond_par_arrondi_flottant_n_est_pas_un_depassement():
+    """Cas réel (#126) : une opération financée exactement à 60% (46 882,80 / 78 138,00)
+    calcule 0.6000000000000001 en flottant, pas 0.6 pile — sans tolérance, elle bascule à
+    tort en dépassement. La tolérance relative doit l'absorber sans pour autant masquer un
+    vrai dépassement de même ampleur (cf. le test au-dessus, à 88-90% pour un plafond 85%)."""
+    df = pd.DataFrame({"Taux de cofinancement": [46882.80 / 78138.00]})
+    assert detect_cofinancement_superieur_plafond(df, plafond=0.6).empty
+
+
 def test_les_taux_statistiquement_atypiques_sont_detectes_par_l_ecart_a_l_iqr():
     df = pd.DataFrame({"Taux de cofinancement": [*[0.5 + 0.001 * i for i in range(10)], 0.95]})
     assert detect_cofinancement_outliers(df)["Taux de cofinancement"].tolist() == [0.95]
