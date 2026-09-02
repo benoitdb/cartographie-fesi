@@ -178,6 +178,132 @@ def region_tag(tag_id, tag_name="region", display_name="Région", default=None):
     }
 
 
+COLLECTION_NAME = "FESI"
+COLLECTION_DESCRIPTION = (
+    "Tableaux de bord des fonds européens structurels et d'investissement. "
+    "Sans cette collection, tout atterrit à la racine, mêlé au contenu d'exemple "
+    "livré avec Metabase (issue #129)."
+)
+
+
+def ensure_collection(session):
+    """Collection dédiée : les dashboards des Phases 1-3 avaient `collection_id`
+    à NULL, donc posés à la racine à côté du `E-commerce Insights` d'exemple.
+    C'est la cause du « éparpillé » constaté à l'usage, pas une limite de l'outil."""
+    collections = session.get(f"{MB_URL}/api/collection").json()
+    existing = next((c for c in collections if c["name"] == COLLECTION_NAME), None)
+    if existing:
+        return existing["id"]
+    r = session.post(
+        f"{MB_URL}/api/collection",
+        json={"name": COLLECTION_NAME, "description": COLLECTION_DESCRIPTION},
+    )
+    r.raise_for_status()
+    return r.json()["id"]
+
+
+def move_to_collection(session, collection_id, dashboard_ids, card_ids):
+    """Range dashboards et cartes dans la collection. Idempotent.
+
+    Deux pièges d'API rencontrés ici (v0.63.16), à ne pas réapprendre :
+
+    - `PUT /api/card/:id` avec le seul `collection_id` répond **400** ; le
+      déplacement passe par `POST /api/card/collections`, qui prend une liste.
+    - la liste `GET /api/card` renvoie `dataset_query` en forme MBQL normalisée
+      (`{"stages": [...]}`), pas la forme legacy `{"type": "native", ...}` —
+      reconnaître une carte en reniflant son SQL depuis cette liste ne marche
+      donc pas. On passe les identifiants que le script vient de créer, ce qui
+      est de toute façon plus sûr que de deviner.
+    """
+    for dash_id in dashboard_ids:
+        r = session.put(f"{MB_URL}/api/dashboard/{dash_id}", json={"collection_id": collection_id})
+        r.raise_for_status()
+    if card_ids:
+        r = session.post(
+            f"{MB_URL}/api/card/collections",
+            json={"card_ids": sorted(card_ids), "collection_id": collection_id},
+        )
+        r.raise_for_status()
+
+
+ACCUEIL_NAME = "FESI — Accueil"
+
+
+def ensure_accueil_dashboard(session, collection_id, liens):
+    """Page de garde : Metabase n'a pas de navigation multipage comme Streamlit.
+    Des cartes `link` vers chaque dashboard, posées en page d'accueil de
+    l'instance, en tiennent lieu."""
+    dashboards = session.get(f"{MB_URL}/api/dashboard").json()
+    existing = next((d for d in dashboards if d["name"] == ACCUEIL_NAME), None)
+    dash_id = existing["id"] if existing else session.post(
+        f"{MB_URL}/api/dashboard",
+        json={"name": ACCUEIL_NAME, "collection_id": collection_id},
+    ).json()["id"]
+
+    dashcards = [
+        {
+            "id": -1,
+            "card_id": None,
+            "row": 0,
+            "col": 0,
+            "size_x": 24,
+            "size_y": 2,
+            "visualization_settings": {
+                "virtual_card": {
+                    "display": "text",
+                    "archived": False,
+                    "dataset_query": {},
+                    "visualization_settings": {},
+                },
+                "text": (
+                    "# Fonds européens structurels et d'investissement\n"
+                    "Montants **engagés** (opérations conventionnées) et **programmés** "
+                    "(Accord de partenariat). Un taux de consommation reste une estimation : "
+                    "les enveloppes 2021-2027 viennent de la version préliminaire de juin 2022."
+                ),
+            },
+        }
+    ]
+    for i, (titre, cible_id, description) in enumerate(liens):
+        dashcards.append({
+            "id": -(i + 2),
+            "card_id": None,
+            "row": 2 + (i // 2) * 2,
+            "col": (i % 2) * 12,
+            "size_x": 12,
+            "size_y": 2,
+            "visualization_settings": {
+                "virtual_card": {
+                    "display": "link",
+                    "archived": False,
+                    "dataset_query": {},
+                    "visualization_settings": {},
+                },
+                "link": {
+                    "entity": {
+                        "id": cible_id,
+                        "model": "dashboard",
+                        "name": titre,
+                        "description": description,
+                        "display": "dashboard",
+                    }
+                },
+            },
+        })
+
+    r = session.put(f"{MB_URL}/api/dashboard/{dash_id}", json={"dashcards": dashcards})
+    r.raise_for_status()
+    return dash_id
+
+
+def ensure_custom_homepage(session, dash_id):
+    """Sans ça, l'instance ouvre sur la page d'accueil générique de Metabase et
+    les dashboards restent à chercher."""
+    session.put(f"{MB_URL}/api/setting/custom-homepage", json={"value": True})
+    r = session.put(f"{MB_URL}/api/setting/custom-homepage-dashboard", json={"value": dash_id})
+    r.raise_for_status()
+
+
 def build_cards(session, db_id):
     cards = {}
 
@@ -1049,6 +1175,30 @@ def main():
     cards_2014_2020 = build_2014_2020_cards(session, db_id)
     dash_2014_2020_id = ensure_2014_2020_dashboard(session, cards_2014_2020)
     print(f"Dashboard période 2014-2020 prêt : {MB_URL}/dashboard/{dash_2014_2020_id}")
+
+    # Rangement et page de garde (issue #129)
+    collection_id = ensure_collection(session)
+    liens = [
+        ("FESI — Vue nationale 2021-2027", dash_id,
+         "Vue d'ensemble : montant engagé, répartition par fonds, carte des régions."),
+        ("FESI — Vue régionale 2021-2027", regional_dash_id,
+         "Une région : montant, opérations, programmé vs engagé par fonds."),
+        ("FESI — Comparateur régions 2021-2027", comparateur_dash_id,
+         "Deux régions côte à côte : montants et taux de consommation."),
+        ("FESI — Volet national 2021-2027", national_dash_id,
+         "Programmes nationaux (FSE+ et FTJ) : pas de ligne FEDER sur ce périmètre."),
+        ("FESI — Période 2014-2020", dash_2014_2020_id,
+         "Période close, six sources fusionnées. Écran séparé, pas un sélecteur de période."),
+    ]
+    toutes_les_cartes = [
+        c["id"]
+        for groupe in (cards, regional_cards, comparateur_cards, national_cards, cards_2014_2020)
+        for c in groupe.values()
+    ]
+    move_to_collection(session, collection_id, [d[1] for d in liens], toutes_les_cartes)
+    accueil_id = ensure_accueil_dashboard(session, collection_id, liens)
+    ensure_custom_homepage(session, accueil_id)
+    print(f"Collection FESI et page d'accueil prêtes : {MB_URL}/dashboard/{accueil_id}")
 
 
 if __name__ == "__main__":
