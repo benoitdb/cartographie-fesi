@@ -192,6 +192,20 @@ racine pour les tests (`requirements-dev.txt`).
   n'est pas décoratif**, l'enlever double la période 2014-2020 (19 901 → 39 958 M€).
   `verify_vues_unifiees.py` échoue si quelqu'un le retire.
 
+  **Les trois partitions d'`agregats.py` sont exclusives** (mono-région,
+  interrégional, national) : une vue qui se veut le total d'une période doit
+  porter les trois. `v_engage_all` en avait oublié une — 13 opérations, 1,625 M€
+  sur 2021-2027, soit 0,02 %, assez peu pour passer inaperçu à l'oeil et assez
+  pour faire mentir un KPI. Contrôle de complétude ajouté à
+  `verify_vues_unifiees.py` (somme des périmètres == `v_by_fonds`).
+
+  **Un field filter (`"type": "dimension"`) est multi-valeurs, un template-tag
+  `"type": "text"` ne l'est pas.** C'est la limite qui avait imposé deux
+  paramètres `region_a`/`region_b` en Phase 2, et sa levée fait disparaître
+  l'écran Comparateur (#129). Un field filter suppose que Metabase ait
+  **synchronisé la vue** comme une table : une vue créée après la synchro
+  initiale n'a pas d'id de champ, d'où `setup_metabase.sync_views()`.
+
 - **Tests** : `venv/bin/python -m pytest -q` (376 tests, ~40 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard

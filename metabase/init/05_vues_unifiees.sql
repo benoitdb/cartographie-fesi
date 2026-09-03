@@ -46,6 +46,27 @@ FROM operations
 WHERE is_national AND fonds IS NOT NULL AND periode = '2021-2027'
 GROUP BY periode, fonds
 UNION ALL
+-- Interrégional 2021-2027 : troisième partition d'`agregats.py`, sans laquelle
+-- la somme des périmètres ne redonnerait PAS le total de la source. Mesuré :
+-- 13 opérations, 1,625 M€ — v_engage_all s'arrêtait à 7 878,196 M€ contre
+-- 7 879,821 M€ pour `v_by_fonds`, un écart de 0,02 % assez petit pour passer
+-- inaperçu à l'oeil et assez réel pour faire diverger un KPI unifié de son
+-- équivalent Streamlit (issue #129, phase « charpente »).
+--
+-- Pas d'équivalent 2014-2020 : `v_perimetre_2014_2020` ne porte pas
+-- l'interrégional Synergie (cf. son en-tête), et la page Streamlit de cette
+-- période ne le compte pas non plus. L'asymétrie entre les deux périodes est
+-- donc celle des deux écrans d'origine, pas un oubli d'ici.
+SELECT
+    periode,
+    'interregional' AS perimetre,
+    fonds,
+    COUNT(*) AS n_operations,
+    SUM(montant_ue) AS engage
+FROM operations
+WHERE is_interregional AND fonds IS NOT NULL AND periode = '2021-2027'
+GROUP BY periode, fonds
+UNION ALL
 SELECT
     '2014-2020' AS periode,
     perimetre,

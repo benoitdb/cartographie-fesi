@@ -96,24 +96,57 @@ en dur dans les fichiers versionnés.
 
 **Répartition des rôles** (voir aussi l'[étude d'impact](https://claude.ai/code/artifact/2ad9ab38-a0fc-4697-ab26-651c57d952bb)) :
 Metabase couvre la consultation courante — KPI, filtres, drill-down, pilotage
-programmé vs engagé. Streamlit garde ce que Metabase ne sait pas faire : les
-choroplèthes DROM-COM en encarts sur une même page, et les analyses
-statistiques avancées (Pareto, Lorenz, IQR, détection d'anomalies). Les deux
-lisent la même base PostgreSQL — jamais deux calculs séparés du même chiffre.
+programmé vs engagé. Streamlit garde pour l'instant les analyses statistiques
+avancées (Pareto, Lorenz, IQR, détection d'anomalies) et les choroplèthes
+DROM-COM en encarts ; [#129](https://github.com/benoitdb/cartographie-fesi/issues/129)
+en ramène la plus grande part dans Metabase, phase par phase. Les deux lisent
+la même base PostgreSQL — jamais deux calculs séparés du même chiffre.
 
-**Les cinq dashboards Metabase**, dans l'ordre où les construire fait sens :
+**Cinq dashboards, organisés par question posée** et non par page Streamlit
+([#129](https://github.com/benoitdb/cartographie-fesi/issues/129)). La
+**période** et le **périmètre** y sont des **paramètres**, pas des écrans :
 
 | Dashboard | Quand l'ouvrir |
 |---|---|
-| FESI — Vue nationale 2021-2027 | Vue d'ensemble du programme courant : total, répartition par fonds, carte de France, courbe d'engagement. Filtre Fonds. |
-| FESI — Vue régionale 2021-2027 | Suivi d'**une** région 2021-2027 : montant, pilotage programmé vs engagé. |
-| FESI — Comparateur régions 2021-2027 | Mettre deux régions 2021-2027 côte à côte sur les mêmes graphes. |
-| FESI — Volet national 2021-2027 | Les programmes nationaux (FSE+/FTJ, ex. France Travail) — périmètre fixe, pas de filtre région. |
-| FESI — Période 2014-2020 | Tout ce qui précède, mais pour 2014-2020 : région, volet national, **ou « Ensemble national »** (voir plus bas), un seul dashboard pour les trois. |
+| FESI — Territoires | Où va l'argent : carte des régions, classement des périmètres, détail d'un périmètre. |
+| FESI — Structure & répartition | Comment se répartit l'enveloppe : par fonds, puis (phase C) par thématique et par programme. |
+| FESI — Pilotage | Où en est la consommation : programmé vs engagé, trajectoire, comparaison entre périmètres. |
+| FESI — Analyses & contrôle | Ce que la moyenne cache : cofinancement face au plafond, puis (phase D) distribution, concentration, cohérence. |
+| FESI — Qualité des sources | D'où viennent les chiffres : sources chargées, champs non renseignés. |
 
-**Champ « Périmètre » du dashboard 2014-2020** : texte libre, pas une liste
-déroulante — taper le nom exact d'une région, `national` (volet national), ou
-`Ensemble national` (le pays entier, régions + national fusionnés).
+L'instance ouvre sur **FESI — Accueil**, une page de garde qui renvoie vers les
+cinq. Tout est rangé dans la collection **FESI** ; le contenu d'exemple livré
+avec Metabase reste où il est.
+
+**Les trois filtres, communs à tous les dashboards :**
+
+- **Période** — `2021-2027` par défaut. Sans valeur, les cartes somment les
+  deux périodes, ce qui ne veut rien dire : 2014-2020 est close, 2021-2027 en
+  cours.
+- **Périmètre** — une région, `national` (programmes nationaux) ou
+  `interregional`. **Il accepte plusieurs valeurs** : comparer deux régions,
+  c'est en cocher deux. C'est ce qui a fait disparaître l'ancien écran
+  Comparateur. Sans valeur, le chiffre porte sur toute la période.
+- **Fonds** — FEDER / FSE+ / FTJ en 2021-2027, FEDER / FEDER REACT-EU / FSE /
+  IEJ en 2014-2020. Un même graphique montre donc des séries différentes selon
+  la période : ce n'est pas une anomalie.
+
+**Trois cartes ignorent volontairement un filtre**, et leur libellé le dit sur
+le dashboard :
+
+- *Engagement cumulé 2021-2027* ignore **Période** (scopée en dur ; une
+  trajectoire 2014-2020 demanderait des dates sur le périmètre fusionné des six
+  sources — phase C) ;
+- *Taux de consommation par périmètre* ignore **Périmètre** (elle sert à situer
+  un périmètre parmi tous les autres) ;
+- *Dépassements de plafond de cofinancement* ignore **Période** : le plafond de
+  l'art. 120 du règlement 1303/2013 s'adosse aux catégories de cohésion de
+  2014-2020.
+
+**Sans filtre Périmètre sur la période 2014-2020**, le chiffre couvre le pays
+entier, régions et volet national fusionnés — ce que l'ancien écran appelait
+« Ensemble national » via une valeur sentinelle, devenue inutile avec un filtre
+non obligatoire. Les deux réserves de lecture, elles, restent entières.
 
 **« Ensemble national » — deux réserves à connaître avant de lire ce
 périmètre** (arbitrage Phase 4, [#121](https://github.com/benoitdb/cartographie-fesi/issues/121)) :
@@ -139,6 +172,16 @@ fermée). Les dépassements de plafond de cofinancement appliquent une
 tolérance d'un millionième — une opération programmée pile au plafond ne doit
 pas apparaître en dépassement à cause d'un arrondi à la centime côté source
 ([#126](https://github.com/benoitdb/cartographie-fesi/issues/126), fermée).
+
+### Historique de construction — les écrans des Phases 1-3
+
+> Les cinq sections qui suivent décrivent les dashboards des Phases 1-3, **dissous
+> par [#129](https://github.com/benoitdb/cartographie-fesi/issues/129)** au profit
+> de l'organisation par usage ci-dessus. `setup_metabase.archive_legacy()` les
+> archive (archivage réversible, pas suppression). Elles sont conservées pour qui
+> construit ou reprend le provisionnement : les arbitrages de calcul qu'elles
+> documentent (dates d'engagement, `fonds IS NOT NULL`, taux recalculé, tolérance
+> de plafond) valent toujours, ce sont les mêmes que portent les cartes actuelles.
 
 ### Dashboard national 2021-2027 (Phase 1, issue #121)
 

@@ -131,7 +131,31 @@ def main():
         else:
             print("  OK   pas de double-comptage")
 
-        print("\n3. Aucune période inattendue")
+        print("\n3. Complétude 2021-2027 : la somme des périmètres == la source")
+        # `v_engage_all` sert de socle aux KPI unifiés (montant, opérations) des
+        # dashboards par usage : sans filtre de périmètre, la carte doit rendre
+        # le total de la période, exactement ce que lit Streamlit. Or les trois
+        # partitions d'`agregats.py` (mono-région, interrégional, national) sont
+        # exclusives : en oublier une fait un KPI silencieusement trop bas.
+        # Ce contrôle a d'abord rougi (13 opérations interrégionales, 1,625 M€
+        # manquantes), d'où la troisième branche de l'union.
+        (ops_src, eur_src), = fetch(cur, """
+            SELECT SUM(n_operations), round(SUM(montant_ue_total)::numeric, 2)
+            FROM v_by_fonds WHERE periode = '2021-2027'
+        """)
+        (ops_all, eur_all), = fetch(cur, """
+            SELECT SUM(n_operations), round(SUM(engage)::numeric, 2)
+            FROM v_engage_all WHERE periode = '2021-2027'
+        """)
+        print(f"  v_by_fonds[2021-2027]  (source)  : {ops_src:>6} op., {float(eur_src) / 1e6:>10,.3f} M€")
+        print(f"  v_engage_all[2021-2027] (mesuré) : {ops_all:>6} op., {float(eur_all) / 1e6:>10,.3f} M€")
+        if (ops_src, eur_src) != (ops_all, eur_all):
+            ecarts.append("v_engage_all[2021-2027] ne couvre pas toute la source")
+            print("  ÉCART : une partition manque à l'union (interrégional ? national ?)")
+        else:
+            print("  OK   somme des périmètres == total de la source")
+
+        print("\n4. Aucune période inattendue")
         for vue in ("v_pilotage_all", "v_engage_all"):
             periodes = [p for (p,) in fetch(cur, f"SELECT DISTINCT periode FROM {vue} ORDER BY 1")]
             if periodes != ["2014-2020", "2021-2027"]:
