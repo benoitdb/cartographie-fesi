@@ -199,6 +199,20 @@ racine pour les tests (`requirements-dev.txt`).
   pour faire mentir un KPI. Contrôle de complétude ajouté à
   `verify_vues_unifiees.py` (somme des périmètres == `v_by_fonds`).
 
+  **`v_repartition_all` porte `'Non renseigné'` et non un filtre** : la
+  dimension thématique de 2014-2020 (`domaine_intervention`) n'est renseignée
+  que sur 9,6 % du montant (trois fichiers régionaux). Filtrer les opérations
+  sans domaine rendrait un treemap muet sur 90 % de la période — sans que rien
+  à l'écran n'en explique la cause. Le `COALESCE(…, 'Non renseigné')` rend
+  l'asymétrie visible et le contrôle de complétude possible (point 5 de
+  `verify_vues_unifiees.py`).
+
+  **`plafond_cofinancement` dans `region_metadata` est calculé en Python**, pas
+  en SQL : une catégorie mixte (Auvergne-Rhône-Alpes) est une moyenne pondérée
+  extraite du libellé par regex (`dashboard/utils/cofinancement.plafond_categorie`).
+  `load_data.py` l'appelle au chargement, et `verify_vues_unifiees.py` contrôle
+  que la valeur en base correspond au calcul Python (point 8).
+
   **Un field filter (`"type": "dimension"`) est multi-valeurs, un template-tag
   `"type": "text"` ne l'est pas.** C'est la limite qui avait imposé deux
   paramètres `region_a`/`region_b` en Phase 2, et sa levée fait disparaître

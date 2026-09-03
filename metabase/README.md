@@ -304,6 +304,40 @@ et plafond min/max) est chargée par `load_data.py`, qui appelle directement
 `dashboard/utils/cofinancement.plafond_intervalle_2014_2020` plutôt que de
 retranscrire la règle.
 
+### Vues unifiées par période (Phase B, issue #129)
+
+**Vues SQL** (`metabase/init/05_vues_unifiees.sql`) — ajoutées en Phase B :
+- `v_repartition_all` — répartition thématique par (période, périmètre, fonds,
+  niveau1, niveau2). Les deux périodes ne décrivent pas la même chose :
+  2021-2027 a objectif stratégique → objectif spécifique, 2014-2020 a domaine
+  d'intervention (dimension plate, `niveau2` = NULL). **Couverture très
+  inégale** : 100 % en 2021-2027, **9,6 % du montant** en 2014-2020 (seuls
+  Bretagne officiel, Normandie, Nouvelle-Aquitaine). Les opérations sans
+  dimension restent comptées comme `'Non renseigné'`.
+- `v_cofinancement_2021_2027` — taux par opération face au plafond de la
+  catégorie de sa région (art. 112, règlement 2021/1060). Pendant de
+  `v_cofinancement_2014_2020`, mêmes conventions.
+- `v_cofinancement_all` — union des deux périodes au niveau résumé (par
+  région × fonds). `plafond_min`/`plafond_max` valent le même nombre côté
+  2021-2027 (une région = une catégorie, sauf la mixte déjà résolue en
+  moyenne pondérée).
+
+**Tables** ajoutées en Phase B :
+- `allocations_rup` — allocation additionnelle ultrapériphérique (RUP,
+  art. 349 TFUE), 2021-2027 : 7 périmètres, 11 lignes. Contenue dans
+  `programme_totals` (pas en plus). Source : `programme_detail.json` clé `rup`.
+- `region_metadata.plafond_cofinancement` — plafond 2021-2027, calculé en
+  Python au chargement (`cofinancement.plafond_categorie`).
+
+**Vérifié** par `verify_vues_unifiees.py` (contrôles 5-9) : complétude de la
+répartition thématique, fidélité du cofinancement unifié, plafond SQL == Python,
+allocations RUP cohérentes avec le JSON et `region_metadata.ultraperipherique`.
+
+**`v_perimetre_2014_2020` étendue** (`CREATE OR REPLACE`) : `domaine_intervention`
+ajouté en fin de liste pour que `v_repartition_all` le porte sans réécrire les
+règles de substitution/addition — la colonne est en appendice, les vues en
+aval (`v_engage_2014_2020`, `v_cofinancement_2014_2020`) restent inchangées.
+
 **Vérifié** par `verify_pilotage_2014_2020.py` (tests croisés Python vs SQL,
 même esprit que la Phase 0 mais sur la *fusion* des sources) : 68 couples
 (périmètre × fonds) engagés et 55 enveloppes concordent, règles relues du
@@ -350,11 +384,16 @@ metabase/
     03_pilotage.sql     — vues pilotage (programmé vs engagé, taux, reste à engager) — Phase 2
     04_periode_2014_2020.sql — fusion des six sources 14-20, pilotage et
                           cofinancement de la période, table categories_ue — Phase 3
+    05_vues_unifiees.sql — vues unifiées par période (v_engage_all, v_pilotage_all,
+                          v_repartition_all, v_cofinancement_*), table allocations_rup,
+                          colonne plafond_cofinancement — Phase A/B #129
   load_data.py          — charge les JSON de data/processed/ dans PostgreSQL
   verify_aggregates.py  — recoupe les agrégats SQL vs JSON, source par source (Phase 0)
   verify_pilotage_2014_2020.py — recoupe la fusion 14-20 SQL vs dashboard (Phase 3)
   verify_dashboards.py  — recoupe les cartes Metabase (via l'API, filtres appliqués)
-                          vs le dashboard Streamlit, 461 valeurs (Phase 4)
+                          vs le dashboard Streamlit, 28 792 valeurs (Phase A #129)
+  verify_vues_unifiees.py — 9 contrôles sur les vues unifiées : fidélité, double-comptage,
+                          complétude thématique, cofinancement, plafond, RUP (Phase A/B #129)
   setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 5 dashboards (Phase 1/2/3)
   venv/                 — environnement Python (gitignoré)
   README.md             — ce fichier

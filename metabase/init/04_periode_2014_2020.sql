@@ -20,14 +20,23 @@
 -- europe.bzh) n'y figure jamais : remplacé par `2014-2020-bretagne-officiel`
 -- pour tout usage autre que la page « Validation de la source ».
 
-CREATE VIEW v_perimetre_2014_2020 AS
-SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement AS taux_declare, perimetre
+-- `CREATE OR REPLACE` et non `CREATE` : la Phase B de #129 a eu besoin d'y
+-- ajouter `domaine_intervention` (la dimension thématique de cette période)
+-- pour construire `v_repartition_all` SANS réécrire ici les règles de
+-- substitution et d'addition — les redupliquer serait exactement l'erreur que
+-- cette vue existe pour empêcher. La colonne est ajoutée EN FIN de liste :
+-- PostgreSQL n'accepte de remplacer une vue que si les colonnes existantes
+-- gardent leur nom, leur type et leur position.
+CREATE OR REPLACE VIEW v_perimetre_2014_2020 AS
+SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement AS taux_declare, perimetre,
+       domaine_intervention
 FROM (
     -- Synergie : périmètre régional, sauf les trois régions qui ont leur
     -- propre fichier (substitution, pas addition). `taux_cofinancement` : NULL
     -- pour Synergie (schema_source ne lui connaît pas cette colonne) — porté
     -- quand même pour que l'UNION ALL ait le même nombre de colonnes partout.
-    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, region AS perimetre
+    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, region AS perimetre,
+           domaine_intervention
     FROM operations
     WHERE source_id = '2014-2020-synergie'
       AND NOT is_interregional AND NOT is_national
@@ -37,7 +46,8 @@ FROM (
     UNION ALL
 
     -- Synergie : volet national, inchangé (mêmes opérations que v_national).
-    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, 'national' AS perimetre
+    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, 'national' AS perimetre,
+           domaine_intervention
     FROM operations
     WHERE source_id = '2014-2020-synergie' AND is_national
 
@@ -49,7 +59,8 @@ FROM (
     -- Ces trois sources SONT celles qui portent un taux_cofinancement déclaré
     -- par le fichier (arbitrage Phase 4, #127) — Bretagne, Normandie,
     -- Nouvelle-Aquitaine, cf. v_cofinancement_2014_2020 plus bas.
-    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, region AS perimetre
+    SELECT numero_operation, fonds, montant_ue, depenses_eligibles, taux_cofinancement, region AS perimetre,
+           domaine_intervention
     FROM operations
     WHERE source_id IN ('2014-2020-normandie', '2014-2020-nouvelle-aquitaine', '2014-2020-bretagne-officiel')
       AND region IS NOT NULL
@@ -67,7 +78,8 @@ FROM (
             WHEN 'PO Guyane' THEN 'Guyane'
             WHEN 'PO Mayotte' THEN 'Mayotte'
             ELSE 'national'
-        END AS perimetre
+        END AS perimetre,
+        domaine_intervention
     FROM operations
     WHERE source_id = '2014-2020-pon-fse'
 ) x;

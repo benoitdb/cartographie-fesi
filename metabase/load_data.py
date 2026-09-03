@@ -32,7 +32,7 @@ sys.path.insert(0, str(DASHBOARD_DIR))
 import schema_source  # noqa: E402
 import sources as sources_module  # noqa: E402
 
-from utils.cofinancement import plafond_intervalle_2014_2020  # noqa: E402
+from utils.cofinancement import plafond_categorie, plafond_intervalle_2014_2020  # noqa: E402
 
 env_path = SCRIPT_DIR / ".env"
 if env_path.exists():
@@ -242,12 +242,23 @@ def load_region_metadata(cur):
 
     count = 0
     for region, meta in data.items():
+        # `plafond_cofinancement` (2021-2027) est résolu ICI, par la fonction
+        # Streamlit elle-même, et non dans la vue SQL qui s'en sert
+        # (v_cofinancement_2021_2027, init/05_vues_unifiees.sql) : une région
+        # sur dix-neuf porte une catégorie mixte dont le plafond est une
+        # moyenne pondérée extraite du libellé par regex. Même arbitrage que
+        # `load_categories_ue_2014_2020` ci-dessous, et pour la même raison —
+        # une règle transcrite deux fois est une règle qui divergera.
         cur.execute(
-            """INSERT INTO region_metadata (region, population, superficie_km2, chef_lieu, categorie_ue, ultraperipherique)
-               VALUES (%s, %s, %s, %s, %s, %s)
+            """INSERT INTO region_metadata (region, population, superficie_km2, chef_lieu, categorie_ue,
+                                            ultraperipherique, plafond_cofinancement)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (region) DO UPDATE SET
                  population = EXCLUDED.population,
-                 superficie_km2 = EXCLUDED.superficie_km2""",
+                 superficie_km2 = EXCLUDED.superficie_km2,
+                 categorie_ue = EXCLUDED.categorie_ue,
+                 ultraperipherique = EXCLUDED.ultraperipherique,
+                 plafond_cofinancement = EXCLUDED.plafond_cofinancement""",
             (
                 region,
                 meta.get("population"),
@@ -255,10 +266,44 @@ def load_region_metadata(cur):
                 meta.get("chef_lieu"),
                 meta.get("categorie_ue"),
                 meta.get("ultraperipherique", False),
+                plafond_categorie(meta.get("categorie_ue"), meta.get("ultraperipherique", False)),
             ),
         )
         count += 1
     print(f"  region_metadata: {count} régions")
+
+
+def load_allocations_rup(cur):
+    """Allocation additionnelle ultrapériphérique (RUP, art. 349 TFUE) 2021-2027,
+    lue dans `programme_detail.json` clé `rup` — le seul agrégat de ce fichier
+    qu'aucune table SQL ne portait jusqu'ici, alors que l'écran régional
+    Streamlit l'affiche déjà (#129, phase B).
+
+    Sept périmètres seulement y figurent : les cinq DROM, Saint-Martin, et
+    `national` (part FSE+). Les clés sont donc déjà des périmètres au sens de
+    `programme_totals`, aucune conversion à faire.
+
+    Cette allocation est CONTENUE dans `programme_totals`, pas en plus : la
+    charger à part sert à isoler la part qui tient à l'ultrapériphéricité, et
+    l'additionner au programmé la compterait deux fois."""
+    path = DATA_DIR / "programme_detail.json"
+    if not path.exists():
+        print("  programme_detail.json non trouvé, skip")
+        return
+    with open(path) as f:
+        data = json.load(f)
+    rup = data.get("rup") or {}
+    count = 0
+    for perimetre, fonds_dict in rup.items():
+        if not isinstance(fonds_dict, dict):
+            continue
+        for fonds, montant in fonds_dict.items():
+            cur.execute(
+                "INSERT INTO allocations_rup (periode, perimetre, fonds, montant_ue) VALUES (%s, %s, %s, %s)",
+                ("2021-2027", perimetre, fonds, montant),
+            )
+            count += 1
+    print(f"  allocations_rup: {count} lignes ({len(rup)} périmètres)")
 
 
 def load_categories_ue_2014_2020(cur):
@@ -304,6 +349,7 @@ def main():
     cur.execute("DELETE FROM programme_totals")
     cur.execute("DELETE FROM dotations_os")
     cur.execute("DELETE FROM categories_ue_2014_2020")
+    cur.execute("DELETE FROM allocations_rup")
 
     print("Chargement des opérations, par source...")
     total_ops = 0
@@ -318,6 +364,9 @@ def main():
 
     print("Chargement region_metadata...")
     load_region_metadata(cur)
+
+    print("Chargement allocations_rup...")
+    load_allocations_rup(cur)
 
     print("Chargement categories_ue_2014_2020...")
     load_categories_ue_2014_2020(cur)
