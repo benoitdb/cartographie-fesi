@@ -48,6 +48,15 @@ from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)"
 
+
+@st.cache_resource
+def _build_national_ops(_ops, cache_key):
+    """Conversion list-of-dicts → DataFrame + fillna, cachée entre reruns (#130)."""
+    df = pd.DataFrame(_ops)
+    df[LEVEL1] = df[LEVEL1].fillna("Non spécifié")
+    df[LEVEL2] = df[LEVEL2].fillna("Non spécifié")
+    return df
+
 st.set_page_config(page_title="Cartographie FESI", layout="wide")
 
 data = load_data()
@@ -178,9 +187,10 @@ with col_dromcom:
                 else:
                     st.caption("Aucun projet")
 
-df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
-df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
-df_national_ops[LEVEL2] = df_national_ops[LEVEL2].fillna("Non spécifié")
+df_national_ops = _build_national_ops(
+    [op for op in data["operations"] if op.get("Fonds") in selected_fonds],
+    cache_key=frozenset(selected_fonds),
+)
 
 mono_region = df_national_ops["regions_modernes"].apply(lambda r: isinstance(r, list) and len(r) == 1)
 df_mono_region = df_national_ops[

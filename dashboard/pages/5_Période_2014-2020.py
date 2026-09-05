@@ -120,6 +120,19 @@ FONDS = "Fonds"
 MONTANT = "Montant UE"
 BENEFICIAIRE = "Nom du bénéficiaire"
 
+
+@st.cache_resource
+def _ops_to_dataframe(_ops, cache_key):
+    """Conversion list-of-dicts → DataFrame, cachée entre reruns (#130).
+
+    +54 Mo mesuré à chaque rerun de widget sur « Ensemble national » (54 755
+    opérations). Le préfixe ``_`` dit à Streamlit de ne pas hasher la liste ;
+    ``cache_key`` (périmètre + fonds sélectionnés) identifie la donnée.
+    ``cache_resource`` renvoie le même objet — aucun code aval ne mute
+    ``df_ops``, vérifié sur toutes les fonctions appelantes.
+    """
+    return pd.DataFrame(_ops)
+
 ENSEMBLE_NATIONAL = "Ensemble national"
 VOLET_NATIONAL = "Volet national"
 
@@ -270,8 +283,14 @@ if not ops_perimetre:
     st.info("Aucune opération sur ce périmètre avec les fonds sélectionnés.")
     st.stop()
 
-df_ops = pd.DataFrame(ops_perimetre)
-resume = summarize_ops(ops_perimetre)
+df_ops = _ops_to_dataframe(ops_perimetre, cache_key=(perimetre, frozenset(selected_fonds)))
+montant_total_perimetre = df_ops[MONTANT].sum()
+count_perimetre = len(df_ops)
+resume = {
+    "montant_ue_total": montant_total_perimetre,
+    "count": count_perimetre,
+    "montant_ue_moyen": montant_total_perimetre / count_perimetre if count_perimetre else 0,
+}
 
 montant_col_config = st.column_config.NumberColumn(format="%,d €")
 taux_col_config = st.column_config.NumberColumn(format="percent")
