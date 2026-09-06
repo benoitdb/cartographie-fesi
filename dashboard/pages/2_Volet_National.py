@@ -26,9 +26,10 @@ st.caption(
     "opérations France Travail pour l'emploi, financées par le FSE+)."
 )
 
-national_ops = [op for op in data["operations"] if op.get("is_national") and op.get("Fonds") in selected_fonds]
+all_ops = data["operations"]
+national_ops = all_ops[all_ops["is_national"] & all_ops["Fonds"].isin(selected_fonds)]
 
-if not national_ops:
+if national_ops.empty:
     st.info("Aucune opération du Volet national pour les fonds sélectionnés.")
     st.stop()
 
@@ -42,8 +43,8 @@ else:
 # des repères pertinents pour un volet national — population (pour le ratio par habitant, même
 # source Wikidata que les Vues Régionales) et le poids de ce volet dans l'ensemble FESI.
 population_totale = sum(v["population"] for v in load_region_metadata().values() if v["population"])
-beneficiaires_distincts = len({op.get("Nom du bénéficiaire") for op in national_ops})
-montant_tous_perimetres = sum(op["Montant UE"] for op in data["operations"] if op.get("Fonds") in selected_fonds)
+beneficiaires_distincts = int(national_ops["Nom du bénéficiaire"].nunique())
+montant_tous_perimetres = all_ops.loc[all_ops["Fonds"].isin(selected_fonds), "Montant UE"].sum()
 part_national = national_data["montant_ue_total"] / montant_tous_perimetres if montant_tous_perimetres else 0
 
 meta_col1, meta_col2, meta_col3 = st.columns(3)
@@ -95,7 +96,7 @@ with tab_pilotage:
     st.subheader("Pilotage : programmé vs engagé")
 
     if montant_programme_national:
-        engage_by_fonds_national = pd.DataFrame(national_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
+        engage_by_fonds_national = national_ops.groupby("Fonds")["Montant UE"].sum().to_dict()
         df_fonds_pilotage_national = pd.DataFrame(
             [
                 {"fonds": f, "engage": engage_by_fonds_national.get(f, 0), "programme": programme_totals_national[f]}
@@ -116,7 +117,7 @@ with tab_pilotage:
 
         traj_col_national, bullet_col_national = st.columns(2)
         with traj_col_national:
-            st.plotly_chart(build_trajectoire(pd.DataFrame(national_ops), montant_programme_national), width='stretch')
+            st.plotly_chart(build_trajectoire(national_ops, montant_programme_national), width='stretch')
         with bullet_col_national:
             if not df_fonds_pilotage_national.empty:
                 st.plotly_chart(

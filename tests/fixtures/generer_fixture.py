@@ -41,7 +41,6 @@ pour Normandie, les opérations à fonds vide, cf. #95).
 import json
 import shutil
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
@@ -127,49 +126,34 @@ SOURCES_HORS_SYNERGIE = {
 }
 
 
-def region_de(op):
-    regions = op.get("regions_modernes") or []
-    return regions[0] if regions else "(sans région)"
-
-
-def tronquer_champ_volumineux(op, champ):
-    op = dict(op)
-    texte = op.get(champ)
-    if isinstance(texte, str) and len(texte) > LONGUEUR_MAX:
-        op[champ] = texte[:LONGUEUR_MAX] + "…"
-    return op
-
-
-def echantillonner(operations, champ_volumineux):
+def echantillonner(df, champ_volumineux):
     """Opérations retenues : les `OPS_PAR_REGION` premières de chaque région, plus
     toutes les interrégionales (cf. docstring du module). L'ordre du fichier
     source est conservé, pour que deux régénérations donnent le même résultat."""
-    par_region = defaultdict(list)
-    for op in operations:
-        par_region[region_de(op)].append(op)
+    regions = df["regions_modernes"].apply(
+        lambda r: r[0] if isinstance(r, list) and r else "(sans région)"
+    )
 
-    retenus = {}
-    for region in sorted(par_region):
-        for op in par_region[region][:OPS_PAR_REGION]:
-            retenus[op["Numéro Opération"]] = op
-    for op in operations:
-        if op.get("is_interregional"):
-            retenus[op["Numéro Opération"]] = op
+    indices = set()
+    for region in sorted(regions.unique()):
+        region_indices = df.index[regions == region][:OPS_PAR_REGION]
+        indices.update(region_indices)
 
-    ordre = {op["Numéro Opération"]: rang for rang, op in enumerate(operations)}
-    return [
-        tronquer_champ_volumineux(op, champ_volumineux)
-        for op in sorted(retenus.values(), key=lambda o: ordre[o["Numéro Opération"]])
-    ]
+    inter_mask = df["is_interregional"].fillna(False).astype(bool)
+    indices.update(df.index[inter_mask])
+
+    result = df.loc[sorted(indices)].copy()
+
+    if champ_volumineux in result.columns:
+        result[champ_volumineux] = result[champ_volumineux].apply(
+            lambda t: t[:LONGUEUR_MAX] + "…" if isinstance(t, str) and len(t) > LONGUEUR_MAX else t
+        )
+
+    return result
 
 
-def recalculer(echantillon, metadata_source, schema):
-    """Agrégats et métadonnées de l'échantillon, par le même code que le pipeline.
-
-    Le DataFrame est reconstruit depuis les enregistrements JSON : leurs clés sont
-    les libellés réels des colonnes, dans l'ordre du fichier source, donc
-    `build_cols` retrouve le mapping comme au moment de l'ingestion."""
-    df = pd.DataFrame(echantillon)
+def recalculer(df, metadata_source, schema):
+    """Agrégats et métadonnées de l'échantillon, par le même code que le pipeline."""
     cols = build_cols(df.columns, schema=schema)
     partitions = partitionner(df)
     agregats = calculer_agregats(df, cols, partitions)
@@ -202,23 +186,35 @@ def recalculer(echantillon, metadata_source, schema):
 
 def generer(periode, config):
     """Écrit la fixture d'une période et renvoie son bloc metadata."""
-    data = json.loads((SOURCE / config["fichier"]).read_text(encoding="utf-8"))
+    json_path = SOURCE / config["fichier"]
+    parquet_path = SOURCE / config["fichier"].replace(".json", ".parquet")
 
-    echantillon = echantillonner(data["operations"], config["champ_volumineux"])
-    agregats, metadata = recalculer(echantillon, data["metadata"], config["schema"])
+    with open(json_path, encoding="utf-8") as f:
+        sidecar = json.load(f)
+    df = pd.read_parquet(parquet_path)
+    if "regions_modernes" in df.columns:
+        df["regions_modernes"] = df["regions_modernes"].apply(
+            lambda v: list(v) if v is not None else v
+        )
+
+    echantillon = echantillonner(df, config["champ_volumineux"])
+    agregats, metadata = recalculer(echantillon, sidecar["metadata"], config["schema"])
 
     # allow_nan=False : un NaN résiduel produirait un JSON que les parseurs
     # stricts refusent, et surtout une valeur qui ne veut rien dire dans un
     # agrégat. Mieux vaut échouer ici qu'écrire la fixture.
     (CIBLE / config["fichier"]).write_text(
         json.dumps(
-            {"metadata": metadata, "operations": echantillon, "aggregates": agregats},
+            {"metadata": metadata, "aggregates": agregats},
             ensure_ascii=False,
             indent=2,
             allow_nan=False,
         ),
         encoding="utf-8",
     )
+
+    cible_parquet = CIBLE / config["fichier"].replace(".json", ".parquet")
+    echantillon.to_parquet(cible_parquet, index=False)
 
     print(
         f"{periode} : {len(echantillon)} opérations · "
@@ -232,33 +228,39 @@ def generer_hors_synergie(source, config):
     s'il est absent du poste (gitignoré, non régénérable sans le fichier XLSX/XLS source
     correspondant) — la fixture existante, si elle est déjà committée, n'est alors pas
     écrasée par un échantillon appauvri."""
-    chemin = SOURCE / config["fichier"]
-    if not chemin.exists():
-        print(f"{source} : fichier absent ({chemin}), fixture non régénérée")
+    parquet_path = SOURCE / config["fichier"].replace(".json", ".parquet")
+    json_path = SOURCE / config["fichier"]
+    if not parquet_path.exists():
+        print(f"{source} : fichier absent ({parquet_path}), fixture non régénérée")
         return
 
-    data = json.loads(chemin.read_text(encoding="utf-8"))
-    operations = data["operations"]
+    with open(json_path, encoding="utf-8") as f:
+        sidecar = json.load(f)
+    df = pd.read_parquet(parquet_path)
+    if "regions_modernes" in df.columns:
+        df["regions_modernes"] = df["regions_modernes"].apply(
+            lambda v: list(v) if v is not None else v
+        )
 
-    echantillon = []
-    vus = set()
+    indices = set()
     for debut, fin in config["tranches"]:
-        for op in operations[debut:fin]:
-            cle = id(op)
-            if cle not in vus:
-                vus.add(cle)
-                echantillon.append(op)
+        indices.update(range(debut, min(fin, len(df))))
+    echantillon = df.iloc[sorted(indices)]
 
-    agregats, metadata = recalculer(echantillon, data["metadata"], config["schema"])
+    agregats, metadata = recalculer(echantillon, sidecar["metadata"], config["schema"])
     (CIBLE / config["fichier"]).write_text(
         json.dumps(
-            {"metadata": metadata, "operations": echantillon, "aggregates": agregats},
+            {"metadata": metadata, "aggregates": agregats},
             ensure_ascii=False,
             indent=2,
             allow_nan=False,
         ),
         encoding="utf-8",
     )
+
+    cible_parquet = CIBLE / config["fichier"].replace(".json", ".parquet")
+    echantillon.to_parquet(cible_parquet, index=False)
+
     print(
         f"{source} : {len(echantillon)} opérations · "
         f"{metadata['nb_regions_harmonized']} région(s) · partitions {metadata['partitions']}"
@@ -277,8 +279,9 @@ def main():
     for nom in COPIES_INTEGRALES:
         shutil.copy(SOURCE / nom, CIBLE / nom)
 
-    for chemin in sorted(CIBLE.glob("*.json")):
-        print(f"  {chemin.stat().st_size // 1024:>5} Ko  {chemin.name}")
+    for chemin in sorted(CIBLE.iterdir()):
+        if chemin.suffix in (".json", ".parquet"):
+            print(f"  {chemin.stat().st_size // 1024:>5} Ko  {chemin.name}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -60,8 +59,7 @@ def render_region_ensemble(region_ops, region_label, fonds_breakdown_df=None, ke
         df_region_fonds = fonds_breakdown_df
     else:
         df_region_fonds = (
-            pd.DataFrame(region_ops)
-            .groupby("Fonds")
+            region_ops.groupby("Fonds")
             .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
             .reset_index()
             .rename(columns={"Fonds": "fonds"})
@@ -80,7 +78,7 @@ def render_region_ensemble(region_ops, region_label, fonds_breakdown_df=None, ke
         mode_courbe = st.radio("Courbe cumulée", ["Montant", "%"], horizontal=True, key=f"mode_courbe{key_suffix}")
         mode_courbe_val = "pourcentage" if mode_courbe == "%" else "montant"
         st.plotly_chart(
-            build_cumulative_curve(pd.DataFrame(region_ops), color_map=FONDS_COLORS, totaux_ref=programme_totals, mode=mode_courbe_val),
+            build_cumulative_curve(region_ops, color_map=FONDS_COLORS, totaux_ref=programme_totals, mode=mode_courbe_val),
             width='stretch',
         )
         st.caption(
@@ -91,7 +89,7 @@ def render_region_ensemble(region_ops, region_label, fonds_breakdown_df=None, ke
             "connue sont affichés."
         )
 
-    df_region_ops = pd.DataFrame(region_ops)
+    df_region_ops = region_ops.copy()
     df_region_ops[LEVEL1] = df_region_ops[LEVEL1].fillna("Non spécifié")
     df_region_ops[LEVEL2] = df_region_ops[LEVEL2].fillna("Non spécifié")
     df_region_ops[LEVEL3] = df_region_ops[LEVEL3].fillna("Non spécifié")

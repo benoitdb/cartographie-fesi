@@ -13,10 +13,10 @@ Deux choses à protéger ici, et elles échouent toutes les deux en silence :
    taux en clair : rien à dériver, `normaliser_operations` ne doit pas l'écraser.
 """
 
-import json
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -66,9 +66,11 @@ def _libelles(source):
 
 
 def _cles_fixture(nom):
-    """Clés réellement présentes sur une opération du fichier committé."""
-    operations = json.loads((FIXTURE / nom).read_text(encoding="utf-8"))["operations"]
-    return set(operations[0])
+    """Colonnes réellement présentes dans le fichier Parquet committé."""
+    import pyarrow.parquet as pq
+
+    parquet_nom = nom.replace(".json", ".parquet")
+    return set(pq.read_schema(FIXTURE / parquet_nom).names)
 
 
 @pytest.mark.parametrize("source", sorted(COLONNES_PAR_SOURCE))
@@ -130,7 +132,7 @@ def test_les_operations_2014_2020_prennent_les_libelles_canoniques():
         "Libellé programme": "PO FEDER-FSE Bretagne 2014-2020",
         "Fonds": "FEDER",
     }
-    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
 
     assert normalisee["Montant UE"] == 1000.0
     assert normalisee["Total des dépenses éligibles"] == 2000.0
@@ -144,7 +146,7 @@ def test_les_operations_2014_2020_prennent_les_libelles_canoniques():
 
 def test_le_taux_de_cofinancement_est_derive_des_deux_montants():
     op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": 1000.0}
-    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
     assert normalisee["Taux de cofinancement"] == pytest.approx(0.85)
 
 
@@ -157,15 +159,15 @@ def test_le_taux_est_absent_plutot_que_nul_quand_il_est_indeterminable(depenses)
     """None, jamais 0 : un taux de 0 % se lit comme une opération sans financement
     UE, ce qui est un fait ; ici on n'a simplement pas de quoi le calculer."""
     op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": depenses}
-    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
-    assert normalisee["Taux de cofinancement"] is None
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
+    assert pd.isna(normalisee["Taux de cofinancement"])
 
 
 def test_le_taux_existant_de_2021_2027_n_est_pas_recalcule():
     """En 2021-2027 le taux est une colonne de la source. Le recalculer écraserait
     la valeur publiée par une valeur dérivée, silencieusement différente."""
     op = {"Montant UE": 500.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.42}
-    (normalisee,) = normaliser_operations([op], PERIODE_2021_2027)
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2021_2027).iloc[0]
     assert normalisee["Taux de cofinancement"] == 0.42
 
 
@@ -183,15 +185,14 @@ def test_le_taux_existant_de_2021_2027_n_est_pas_recalcule():
     ids=["2014-2020", "2021-2027"],
 )
 def test_normaliser_ne_modifie_pas_les_operations_recues(periode, op):
-    """Les opérations viennent d'un `st.cache_data` partagé entre pages : les
+    """Les opérations viennent d'un `st.cache_resource` partagé entre pages : les
     muter contaminerait le cache pour toute la session."""
-    avant = dict(op)
-    normalisees = normaliser_operations([op], periode)
+    df = pd.DataFrame([op])
+    avant = df.copy()
+    result = normaliser_operations(df, periode)
 
-    assert op == avant
-    # Et la copie, elle, porte bien le taux dérivé : sans quoi le test passerait
-    # aussi sur une fonction qui ne fait plus rien.
-    assert normalisees[0]["Taux de cofinancement"] == pytest.approx(0.5)
+    pd.testing.assert_frame_equal(df, avant)
+    assert result.iloc[0]["Taux de cofinancement"] == pytest.approx(0.5)
 
 
 def test_2021_2027_a_toutes_les_capacites():
@@ -322,7 +323,7 @@ def test_normandie_prend_les_libelles_canoniques():
         "CP / zip code": "14000",
         "Libellé programme": "Programme opérationnel Basse-Normandie 2014-2020",
     }
-    (normalisee,) = normaliser_operations([op], SOURCE_NORMANDIE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NORMANDIE_2014_2020).iloc[0]
 
     assert normalisee["Fonds"] == "FEDER"
     assert normalisee["Montant UE"] == 170948.18
@@ -349,7 +350,7 @@ def test_nouvelle_aquitaine_prend_les_libelles_canoniques():
         "Operation number": 14310,
         "Colonne à masquer lors de la diffusion": "2014FR16M0OP001",
     }
-    (normalisee,) = normaliser_operations([op], SOURCE_NOUVELLE_AQUITAINE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NOUVELLE_AQUITAINE_2014_2020).iloc[0]
 
     assert normalisee["Fonds"] == "FEDER"
     assert normalisee["Montant UE"] == 220000.0
@@ -362,27 +363,27 @@ def test_nouvelle_aquitaine_prend_les_libelles_canoniques():
 
 def test_appliquer_libelles_programmes_traduit_le_code_cci():
     """Nouvelle-Aquitaine ne nomme ses programmes que par ce code (issue #95, étape 1)."""
-    operations = [{"Libellé Programme": "2014FR16M0OP001"}, {"Libellé Programme": "2014FR16M0OP001"}]
+    df = pd.DataFrame([{"Libellé Programme": "2014FR16M0OP001"}, {"Libellé Programme": "2014FR16M0OP001"}])
     libelles = {"2014FR16M0OP001": "PO FEDER-FSE Nouvelle Aquitaine"}
 
-    traduites = appliquer_libelles_programmes(operations, libelles)
+    traduites = appliquer_libelles_programmes(df, libelles)
 
-    assert all(op["Libellé Programme"] == "PO FEDER-FSE Nouvelle Aquitaine" for op in traduites)
+    assert (traduites["Libellé Programme"] == "PO FEDER-FSE Nouvelle Aquitaine").all()
 
 
 def test_appliquer_libelles_programmes_garde_un_code_inconnu_tel_quel():
     """Un code absent de la table ne doit pas faire disparaître l'opération ni la
     rattacher à un mauvais programme — il reste visible tel quel, à corriger le jour où
     la table est complétée."""
-    (traduite,) = appliquer_libelles_programmes([{"Libellé Programme": "CODE-INCONNU"}], {})
+    traduite = appliquer_libelles_programmes(pd.DataFrame([{"Libellé Programme": "CODE-INCONNU"}]), {}).iloc[0]
     assert traduite["Libellé Programme"] == "CODE-INCONNU"
 
 
 def test_appliquer_libelles_programmes_ne_modifie_pas_les_operations_recues():
-    op = {"Libellé Programme": "2014FR16M0OP001"}
-    avant = dict(op)
-    appliquer_libelles_programmes([op], {"2014FR16M0OP001": "PO Nouvelle-Aquitaine"})
-    assert op == avant
+    df = pd.DataFrame([{"Libellé Programme": "2014FR16M0OP001"}])
+    avant = df.copy()
+    appliquer_libelles_programmes(df, {"2014FR16M0OP001": "PO Nouvelle-Aquitaine"})
+    pd.testing.assert_frame_equal(df, avant)
 
 
 def test_capacites_source_synergie_a_tout():
@@ -424,8 +425,8 @@ def test_taux_existant_invalide_devient_none():
     basculer toute la colonne en dtype `object` au premier groupby en aval — constaté sur
     `compute_cofinancement_table`, qui plantait sur ce périmètre avant ce correctif."""
     op = {"Montant UE": 100.0, "Total des dépenses éligibles": 0.0, "Taux de cofinancement": "#DIV/0"}
-    (normalisee,) = normaliser_operations([op], SOURCE_NOUVELLE_AQUITAINE_2014_2020)
-    assert normalisee["Taux de cofinancement"] is None
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NOUVELLE_AQUITAINE_2014_2020).iloc[0]
+    assert pd.isna(normalisee["Taux de cofinancement"])
 
 
 def test_capacites_source_periode_synergie_equivaut_a_sa_source():
@@ -452,7 +453,7 @@ def test_pon_fse_prend_les_libelles_canoniques():
         "Date fin réalisation": "2016-12-31",
         "Fonds": "FSE",
     }
-    (normalisee,) = normaliser_operations([op], SOURCE_PON_FSE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_PON_FSE_2014_2020).iloc[0]
 
     assert normalisee["Numéro Opération"] == "201603870"
     assert normalisee["Libellé Programme"] == "Programme Opérationnel National FSE"

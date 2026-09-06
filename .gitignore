@@ -42,11 +42,17 @@ data/processed/**
 # nouveau millésime XLSX (~5×/an), committées et poussées — Streamlit Cloud
 # redéploie automatiquement sur push main.
 !data/processed/data.json
+!data/processed/data.parquet
 !data/processed/data_2014-2020.json
+!data/processed/data_2014-2020.parquet
 !data/processed/data_2014-2020_normandie.json
+!data/processed/data_2014-2020_normandie.parquet
 !data/processed/data_2014-2020_nouvelle_aquitaine.json
+!data/processed/data_2014-2020_nouvelle_aquitaine.parquet
 !data/processed/data_2014-2020_bretagne_officiel.json
+!data/processed/data_2014-2020_bretagne_officiel.parquet
 !data/processed/data_2014-2020_pon_fse.json
+!data/processed/data_2014-2020_pon_fse.parquet
 !data/processed/beneficiaires_fuzzy.json
 !data/processed/transferts_solidarite.json
 

@@ -46,6 +46,8 @@ dans le schéma sans report ici fait rougir la suite, au lieu de produire une
 page vide en silence.
 """
 
+import pandas as pd
+
 PERIODE_2021_2027 = "2021-2027"
 PERIODE_2014_2020 = "2014-2020"
 
@@ -204,16 +206,17 @@ def capacites_source(source):
     return CAPACITES_SOURCE.get(source, {"trajectoire": True, "departement": True})
 
 
-def appliquer_libelles_programmes(operations, libelles_programmes):
+def appliquer_libelles_programmes(df, libelles_programmes):
     """Remplace un code CCI de programme par son libellé humain (issue #95, étape 1).
 
     Nouvelle-Aquitaine ne nomme ses programmes que par ce code — `libelles_programmes`
     vient de `programme_detail_2014_2020.json` (clé `libelles_programmes`). Une opération
     dont le code n'y figure pas garde son code tel quel plutôt que de disparaître."""
-    return [
-        {**op, "Libellé Programme": libelles_programmes.get(op["Libellé Programme"], op["Libellé Programme"])}
-        for op in operations
-    ]
+    return df.assign(
+        **{"Libellé Programme": df["Libellé Programme"].map(
+            lambda x: libelles_programmes.get(x, x)
+        )}
+    )
 
 MONTANT_UE = "Montant UE"
 DEPENSES = "Total des dépenses éligibles"
@@ -598,7 +601,7 @@ def _taux(montant_ue, depenses):
     return montant_ue / depenses
 
 
-def normaliser_operations(operations, source):
+def normaliser_operations(df, source):
     """Opérations aux libellés canoniques du dashboard.
 
     `source` est une clé de `RENOMMAGES` (`SOURCE_2021_2027`, `SOURCE_SYNERGIE_2014_2020`,
@@ -620,20 +623,12 @@ def normaliser_operations(operations, source):
     qui dit à la page de ne pas les demander.
     """
     renommage = RENOMMAGES.get(source, {})
-    normalisees = []
-    for op in operations:
-        if renommage:
-            op = {renommage.get(cle, cle): valeur for cle, valeur in op.items()}
-        else:
-            op = dict(op)
-        if TAUX_COFINANCEMENT not in op:
-            op[TAUX_COFINANCEMENT] = _taux(op.get(MONTANT_UE), op.get(DEPENSES))
-        else:
-            # Le taux de Nouvelle-Aquitaine est une formule Excel (montant / dépenses),
-            # qui porte parfois `#DIV/0` en toutes lettres pour une dépense nulle — une
-            # chaîne d'erreur de tableur, pas un taux. La laisser telle quelle ferait
-            # basculer toute la colonne en dtype `object` au premier groupby en aval, une
-            # seule ligne fautive suffit (constaté sur `compute_cofinancement_table`).
-            op[TAUX_COFINANCEMENT] = op[TAUX_COFINANCEMENT] if isinstance(op[TAUX_COFINANCEMENT], (int, float)) else None
-        normalisees.append(op)
-    return normalisees
+    if renommage:
+        df = df.rename(columns=renommage)
+    if TAUX_COFINANCEMENT not in df.columns:
+        montant = pd.to_numeric(df.get(MONTANT_UE), errors="coerce")
+        depenses = pd.to_numeric(df.get(DEPENSES), errors="coerce")
+        df = df.assign(**{TAUX_COFINANCEMENT: montant / depenses.replace(0, float("nan"))})
+    else:
+        df = df.assign(**{TAUX_COFINANCEMENT: pd.to_numeric(df[TAUX_COFINANCEMENT], errors="coerce")})
+    return df
