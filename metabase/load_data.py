@@ -19,7 +19,7 @@ peut pas diverger.
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -129,21 +129,33 @@ def build_raw_to_internal(schema_key):
 
 
 def valeur_python(val):
-    """Ramène une valeur lue depuis Parquet au type que la suite du chargeur attend.
+    """Ramène une valeur lue depuis Parquet au type que produisait le JSON.
 
-    Deux écarts avec le JSON, tous deux silencieux si on les laisse passer :
+    La cible n'est pas « un type Python quelconque » mais **exactement ce
+    qu'écrivait `prepare_for_json`** : c'est ce qui rend les deux chemins de
+    lecture indiscernables pour la suite du chargeur, au lieu de les faire
+    diverger sur les bords.
+
+    Trois écarts, tous silencieux ou tardifs si on les laisse passer :
 
     - pyarrow redonne les colonnes de listes (`regions_modernes`) en
-      `numpy.ndarray`, que psycopg2 n'adapte pas en `TEXT[]` — et dont le test de
-      vérité (`regions_modernes if regions_modernes else None`) lève au lieu de
-      renvoyer un booléen ;
+      `numpy.ndarray`, que psycopg2 n'adapte pas en `TEXT[]`. Le piège est
+      **latent** : un tableau à un élément a une valeur de vérité définie, seules
+      les opérations à deux régions ou plus font lever le test
+      `regions_modernes if regions_modernes else None` ;
     - une valeur absente vaut `NaN`/`NaT` et non `None`. Elle passerait les tests
       `not in (None, "")` du constructeur de lignes et finirait insérée en
       `"nan"` littéral (colonnes texte) ou en `NaN` numérique — que PostgreSQL
-      accepte sans broncher, à la place du NULL attendu.
+      accepte sans broncher, à la place du NULL attendu ;
+    - une date revient en `Timestamp` et non en chaîne. `parse_date` s'en
+      accommode (il fait `str(val)[:10]`), mais une colonne de date **non mappée**
+      part dans le JSONB `extra`, où `json.dumps` lève
+      `Object of type Timestamp is not JSON serializable`. C'est le cas des
+      colonnes de date propres aux fichiers hors-Synergie : le chargement plante
+      à la quatrième source, après trois sources déjà insérées.
     """
     if isinstance(val, np.ndarray):
-        return list(val)
+        return [valeur_python(v) for v in val]
     if isinstance(val, (str, bool, list, dict)):
         return val
     try:
@@ -151,6 +163,9 @@ def valeur_python(val):
             return None
     except (TypeError, ValueError):
         pass
+    if isinstance(val, (pd.Timestamp, datetime, date)):
+        # Même format que `prepare_for_json` : '%Y-%m-%d', sans composante horaire.
+        return val.strftime("%Y-%m-%d")
     return val
 
 
