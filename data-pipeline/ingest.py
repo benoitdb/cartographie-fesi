@@ -37,16 +37,23 @@ OUTPUT_DIR = Path(__file__).parent.parent / "data" / "processed"
 SOURCE_PAR_DEFAUT = "2021-2027-conventionnees"
 
 
-def prepare_for_json(df):
-    """Convertir les types non-sérialisables en types JSON-compatibles"""
+def prepare_for_parquet(df):
+    """Prépare le DataFrame pour l'écriture Parquet.
+
+    Parquet gère nativement les types (datetime, float, null) : pas besoin de
+    convertir en chaînes ni de remplacer NaN par None comme pour JSON. Seuls les
+    arrondis de float sont conservés pour la cohérence des valeurs affichées.
+
+    Les colonnes `object` à types mélangés (ex. Numéro Opération : str + int)
+    sont uniformisées en str — pyarrow refuse les colonnes hétérogènes."""
     df_copy = df.copy()
     for col in df_copy.columns:
-        if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
-            df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d')
-        elif pd.api.types.is_float_dtype(df_copy[col]):
+        if pd.api.types.is_float_dtype(df_copy[col]):
             df_copy[col] = df_copy[col].round(2)
-        # Remplacer NaN par None pour JSON
-        df_copy[col] = df_copy[col].where(pd.notna(df_copy[col]), None)
+        elif df_copy[col].dtype == "object":
+            inferred = pd.api.types.infer_dtype(df_copy[col], skipna=True)
+            if inferred == "mixed-integer":
+                df_copy[col] = df_copy[col].astype(str).where(pd.notna(df_copy[col]), None)
     return df_copy
 
 
@@ -180,23 +187,8 @@ def main(source_id=SOURCE_PAR_DEFAUT):
     # national sans lever d'erreur.
     df = harmoniser_regions(df, cols, indexer_programmes(conf['programme_to_region']))
 
-    df_json = prepare_for_json(df)
+    df_parquet = prepare_for_parquet(df)
 
-    # Opérations sérialisables, reprises telles quelles dans la sortie plus bas.
-    #
-    # Elles étaient aussi écrites à part dans operations.json, retiré (issue #46) :
-    # 44 Mo par régénération pour un fichier que personne ne lisait. Ce n'était pas
-    # un vestige du prototype React — il est né avec le dépôt (commit initial, qui ne
-    # contenait que le pipeline), data.json embarquait déjà la même liste dès ce
-    # commit, et le frontend chargeait data.json, jamais celui-ci. Un doublon dès la
-    # première ligne, donc, pas un usage disparu : rien à restaurer si la question
-    # se repose.
-    print("🧹 Préparation des opérations...")
-    operations = clean_nans(df_json.to_dict(orient='records'))
-
-    # Calcul délégué à agregats.py : il était écrit à plat ici, dépendant des
-    # variables globales de ce script, donc ni testable ni rejouable sur un
-    # sous-ensemble (issue #60).
     print("📊 Calcul des agrégats harmonisés...")
     partitions = partitionner(df)
     print(
@@ -205,27 +197,34 @@ def main(source_id=SOURCE_PAR_DEFAUT):
     )
     aggregates = clean_nans(calculer_agregats(df, cols, partitions))
 
-    # Créer le fichier final
-    print("💾 Création du fichier de sortie...")
+    print("💾 Création des fichiers de sortie...")
+    sortie_json = OUTPUT_DIR / conf['fichier_sortie']
+    sortie_parquet = sortie_json.with_suffix('.parquet')
+
+    # Opérations en Parquet : colonnaire, typé, compressé — facteur
+    # d'amplification ~1× au chargement au lieu de ~3,6× en JSON (#130 piste 2).
+    df_parquet.to_parquet(sortie_parquet, index=False)
+
+    # Metadata + agrégats en JSON (petits, arborescents, pas de gain Parquet).
     output_data = {
         'metadata': construire_metadata(df, cols, conf, chemin, aggregates, partitions),
-        'operations': operations,
         'aggregates': aggregates,
     }
-
-    sortie = OUTPUT_DIR / conf['fichier_sortie']
-    with open(sortie, 'w', encoding='utf-8') as f:
+    with open(sortie_json, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
-    resumer(df, cols, aggregates, partitions, sortie, operations)
+    resumer(df, cols, aggregates, partitions, sortie_json, sortie_parquet)
 
 
-def resumer(df, cols, aggregates, partitions, sortie, operations):
+def resumer(df, cols, aggregates, partitions, sortie_json, sortie_parquet):
     """Résumé lu à l'œil après chaque régénération : c'est là qu'un écart de
     volume ou de montant se voit avant que le dashboard ne l'affiche."""
+    taille_parquet = sortie_parquet.stat().st_size / (1024 * 1024)
+    taille_json = sortie_json.stat().st_size / 1024
     print("\n✅ Pipeline terminé !")
     print(f"   📁 Fichiers générés dans: {OUTPUT_DIR}")
-    print(f"   - {sortie.name} ({len(operations)} opérations + agrégats harmonisés)")
+    print(f"   - {sortie_parquet.name} ({len(df)} opérations, {taille_parquet:.1f} Mo)")
+    print(f"   - {sortie_json.name} (metadata + agrégats, {taille_json:.0f} Ko)")
     print("\n📊 Résumé harmonisé:")
     print(f"   Régions harmonisées: {len(aggregates['by_region'])} (brutes: {df[cols['region']].nunique()})")
     print(f"   Fonds: {df[cols['fonds']].nunique()}")

@@ -1,57 +1,75 @@
 import json
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DATA_PATH = REPO_ROOT / "data" / "processed" / "data.json"
-DATA_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020.json"
-DATA_2014_2020_NORMANDIE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020_normandie.json"
-DATA_2014_2020_NOUVELLE_AQUITAINE_PATH = (
-    REPO_ROOT / "data" / "processed" / "data_2014-2020_nouvelle_aquitaine.json"
-)
-DATA_2014_2020_BRETAGNE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020_bretagne_officiel.json"
-DATA_2014_2020_PON_FSE_PATH = REPO_ROOT / "data" / "processed" / "data_2014-2020_pon_fse.json"
+PROCESSED_DIR = REPO_ROOT / "data" / "processed"
+
+DATA_JSON_PATH = PROCESSED_DIR / "data.json"
+DATA_PARQUET_PATH = PROCESSED_DIR / "data.parquet"
+DATA_2014_2020_JSON_PATH = PROCESSED_DIR / "data_2014-2020.json"
+DATA_2014_2020_PARQUET_PATH = PROCESSED_DIR / "data_2014-2020.parquet"
+DATA_2014_2020_NORMANDIE_JSON_PATH = PROCESSED_DIR / "data_2014-2020_normandie.json"
+DATA_2014_2020_NORMANDIE_PARQUET_PATH = PROCESSED_DIR / "data_2014-2020_normandie.parquet"
+DATA_2014_2020_NOUVELLE_AQUITAINE_JSON_PATH = PROCESSED_DIR / "data_2014-2020_nouvelle_aquitaine.json"
+DATA_2014_2020_NOUVELLE_AQUITAINE_PARQUET_PATH = PROCESSED_DIR / "data_2014-2020_nouvelle_aquitaine.parquet"
+DATA_2014_2020_BRETAGNE_JSON_PATH = PROCESSED_DIR / "data_2014-2020_bretagne_officiel.json"
+DATA_2014_2020_BRETAGNE_PARQUET_PATH = PROCESSED_DIR / "data_2014-2020_bretagne_officiel.parquet"
+DATA_2014_2020_PON_FSE_JSON_PATH = PROCESSED_DIR / "data_2014-2020_pon_fse.json"
+DATA_2014_2020_PON_FSE_PARQUET_PATH = PROCESSED_DIR / "data_2014-2020_pon_fse.parquet"
 GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.geojson"
 GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
 DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
-REGION_METADATA_PATH = REPO_ROOT / "data" / "processed" / "region_metadata.json"
-CATEGORIES_UE_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "categories_ue_2014_2020.json"
-PROGRAMME_TOTALS_PATH = REPO_ROOT / "data" / "processed" / "programme_totals.json"
-PROGRAMME_DETAIL_PATH = REPO_ROOT / "data" / "processed" / "programme_detail.json"
-PROGRAMME_TOTALS_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "programme_totals_2014_2020.json"
-PROGRAMME_DETAIL_2014_2020_PATH = REPO_ROOT / "data" / "processed" / "programme_detail_2014_2020.json"
-BENEFICIAIRES_FUZZY_PATH = REPO_ROOT / "data" / "processed" / "beneficiaires_fuzzy.json"
-DOTATIONS_OS_PATH = REPO_ROOT / "data" / "processed" / "dotations_os.json"
-INTERREG_PATH = REPO_ROOT / "data" / "processed" / "interreg.json"
-TRANSFERTS_SOLIDARITE_PATH = REPO_ROOT / "data" / "processed" / "transferts_solidarite.json"
-PROCESSED_DIR = REPO_ROOT / "data" / "processed"
+REGION_METADATA_PATH = PROCESSED_DIR / "region_metadata.json"
+CATEGORIES_UE_2014_2020_PATH = PROCESSED_DIR / "categories_ue_2014_2020.json"
+PROGRAMME_TOTALS_PATH = PROCESSED_DIR / "programme_totals.json"
+PROGRAMME_DETAIL_PATH = PROCESSED_DIR / "programme_detail.json"
+PROGRAMME_TOTALS_2014_2020_PATH = PROCESSED_DIR / "programme_totals_2014_2020.json"
+PROGRAMME_DETAIL_2014_2020_PATH = PROCESSED_DIR / "programme_detail_2014_2020.json"
+BENEFICIAIRES_FUZZY_PATH = PROCESSED_DIR / "beneficiaires_fuzzy.json"
+DOTATIONS_OS_PATH = PROCESSED_DIR / "dotations_os.json"
+INTERREG_PATH = PROCESSED_DIR / "interreg.json"
+TRANSFERTS_SOLIDARITE_PATH = PROCESSED_DIR / "transferts_solidarite.json"
 
 
-@st.cache_data
+def _load_operations_data(json_path, parquet_path):
+    """Charge un jeu de données d'opérations : Parquet pour les opérations (DataFrame),
+    JSON pour metadata + agrégats (petits, arborescents)."""
+    with open(json_path, encoding="utf-8") as f:
+        data = json.load(f)
+    df = pd.read_parquet(parquet_path)
+    if "regions_modernes" in df.columns:
+        df["regions_modernes"] = df["regions_modernes"].apply(
+            lambda v: list(v) if v is not None else v
+        )
+    data["operations"] = df
+    return data
+
+
+@st.cache_resource
 def load_data():
-    with open(DATA_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    return _load_operations_data(DATA_JSON_PATH, DATA_PARQUET_PATH)
 
 
-@st.cache_data
+@st.cache_resource
 def load_data_2014_2020():
     """Jeu 2014-2020 (extraction Synergie), **fichier distinct** de `data.json`.
 
     Un fichier par période, et un chargeur par fichier : les deux pèsent 45 et
     42 Mo, un chargeur unique qui les lirait tous les deux mettrait ~100 Mo en
     mémoire pour n'en afficher qu'un (arbitrage 1 de l'issue #12). Seule la page
-    qui appelle cette fonction paie le chargement, et `st.cache_data` fait qu'une
+    qui appelle cette fonction paie le chargement, et le cache fait qu'une
     session ne le paie qu'une fois.
 
     Les libellés de colonnes des opérations ne sont **pas** ceux de `data.json` :
     passer le résultat par `utils.periodes.normaliser_operations` avant de le
     donner au reste du dashboard (issue #83)."""
-    with open(DATA_2014_2020_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    return _load_operations_data(DATA_2014_2020_JSON_PATH, DATA_2014_2020_PARQUET_PATH)
 
 
-@st.cache_data
+@st.cache_resource
 def load_data_2014_2020_normandie():
     """Fichier régional Normandie, hors extraction Synergie (issue #68), lu directement par
     la page 2014-2020 pour ce périmètre plutôt que d'en rester au sous-comptage marginal de
@@ -65,13 +83,12 @@ def load_data_2014_2020_normandie():
 
     Libellés de colonnes propres à ce fichier (bilingue franco-anglais) : passer par
     `utils.periodes.normaliser_operations(ops, periodes.SOURCE_NORMANDIE_2014_2020)`."""
-    if not DATA_2014_2020_NORMANDIE_PATH.exists():
+    if not DATA_2014_2020_NORMANDIE_PARQUET_PATH.exists():
         return None
-    with open(DATA_2014_2020_NORMANDIE_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    return _load_operations_data(DATA_2014_2020_NORMANDIE_JSON_PATH, DATA_2014_2020_NORMANDIE_PARQUET_PATH)
 
 
-@st.cache_data
+@st.cache_resource
 def load_data_2014_2020_nouvelle_aquitaine():
     """Fichier régional Nouvelle-Aquitaine, hors extraction Synergie (issue #68), lu
     directement par la page 2014-2020 pour ce périmètre plutôt que le sous-comptage marginal
@@ -81,13 +98,14 @@ def load_data_2014_2020_nouvelle_aquitaine():
     (None). Ses programmes ne sont nommés que par code CCI (`Colonne à masquer lors de la
     diffusion`) — voir `utils.periodes.appliquer_libelles_programmes` et
     `load_programme_detail_2014_2020()["libelles_programmes"]`."""
-    if not DATA_2014_2020_NOUVELLE_AQUITAINE_PATH.exists():
+    if not DATA_2014_2020_NOUVELLE_AQUITAINE_PARQUET_PATH.exists():
         return None
-    with open(DATA_2014_2020_NOUVELLE_AQUITAINE_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    return _load_operations_data(
+        DATA_2014_2020_NOUVELLE_AQUITAINE_JSON_PATH, DATA_2014_2020_NOUVELLE_AQUITAINE_PARQUET_PATH
+    )
 
 
-@st.cache_data
+@st.cache_resource
 def load_data_2014_2020_bretagne():
     """Fichier régional Bretagne, export officiel data.bretagne.bzh (issue #95), lu
     directement par la page 2014-2020 pour ce périmètre — Bretagne n'apparaît qu'à la
@@ -97,13 +115,12 @@ def load_data_2014_2020_bretagne():
     absence (None). Remplace le premier fichier Bretagne (2022, europe.bzh) pour cet
     usage ; celui-ci reste ingéré à part et consultable sur la page « Validation de la
     source » sous son propre identifiant, le temps de confirmer qu'il n'apporte plus rien."""
-    if not DATA_2014_2020_BRETAGNE_PATH.exists():
+    if not DATA_2014_2020_BRETAGNE_PARQUET_PATH.exists():
         return None
-    with open(DATA_2014_2020_BRETAGNE_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    return _load_operations_data(DATA_2014_2020_BRETAGNE_JSON_PATH, DATA_2014_2020_BRETAGNE_PARQUET_PATH)
 
 
-@st.cache_data
+@st.cache_resource
 def load_data_2014_2020_pon_fse():
     """Fichier programme opérationnel national FSE, hors extraction Synergie (issue #68).
 
@@ -118,10 +135,9 @@ def load_data_2014_2020_pon_fse():
     Mêmes garanties que `load_data_2014_2020_normandie` : gitignoré, tolérant à son absence
     (None). Libellés de colonnes propres à ce fichier : passer par
     `utils.periodes.normaliser_operations(ops, periodes.SOURCE_PON_FSE_2014_2020)`."""
-    if not DATA_2014_2020_PON_FSE_PATH.exists():
+    if not DATA_2014_2020_PON_FSE_PARQUET_PATH.exists():
         return None
-    with open(DATA_2014_2020_PON_FSE_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    return _load_operations_data(DATA_2014_2020_PON_FSE_JSON_PATH, DATA_2014_2020_PON_FSE_PARQUET_PATH)
 
 
 @st.cache_data

@@ -91,16 +91,15 @@ region = st.selectbox("Région", sorted(by_region))
 
 st.title(f"Vue Régionale - {region}")
 
-region_ops = [
-    op
-    for op in data["operations"]
-    if op.get("regions_modernes") == [region]
-    and not op.get("is_interregional")
-    and not op.get("is_national")
-    and op.get("Fonds") in selected_fonds
+all_ops = data["operations"]
+region_ops = all_ops[
+    (all_ops["regions_modernes"].apply(lambda r: r == [region]))
+    & ~all_ops["is_interregional"]
+    & ~all_ops["is_national"]
+    & all_ops["Fonds"].isin(selected_fonds)
 ]
 
-if not region_ops:
+if region_ops.empty:
     st.info("Aucune opération pour cette région avec les fonds sélectionnés.")
     st.stop()
 
@@ -111,7 +110,7 @@ if not region_ops:
 # dessous, donc pas de "Détail par département" pour ces régions).
 region_meta = load_region_metadata().get(region)
 est_metropole = region in DEPT_TO_REGION.values()
-df_region_dept = assign_departments_df(pd.DataFrame(region_ops)) if est_metropole else None
+df_region_dept = assign_departments_df(region_ops) if est_metropole else None
 
 if not est_metropole:
     bubbles_df, couverture_localisation = build_bubbles_localisation(region_ops, region, load_dromcom_codes_postaux())
@@ -358,19 +357,19 @@ with tab_ensemble:
     # d'Azur — surtout des actions "massif"/"fleuve" (Rhône-Saône, massif des Alpes) à cheval sur
     # plusieurs régions au sein d'un même programme régional (voir issue #19, à ne pas confondre
     # avec Interreg).
-    ops_interregionaux_region = [
-        op
-        for op in data["operations"]
-        if op.get("is_interregional") and op.get("Fonds") in selected_fonds and region in (op.get("regions_modernes") or [])
+    ops_interregionaux_region = all_ops[
+        all_ops["is_interregional"]
+        & all_ops["Fonds"].isin(selected_fonds)
+        & all_ops["regions_modernes"].apply(lambda r: isinstance(r, list) and region in r)
     ]
-    if ops_interregionaux_region:
+    if not ops_interregionaux_region.empty:
         st.subheader("Opérations interrégionales impliquant cette région")
         st.caption(
             f"{len(ops_interregionaux_region)} opération(s) dont le territoire couvre plusieurs régions à la "
             "fois, dont celle-ci — pour information uniquement, non comptées dans les totaux et graphes "
             "ci-dessus (déjà comptabilisées une fois au niveau national, voir Accueil)."
         )
-        df_interregionaux_region = pd.DataFrame(ops_interregionaux_region)
+        df_interregionaux_region = ops_interregionaux_region.copy()
         df_interregionaux_region["Autres régions"] = df_interregionaux_region["regions_modernes"].apply(
             lambda regions: ", ".join(r for r in regions if r != region)
         )
@@ -396,7 +395,7 @@ with tab_pilotage:
     st.subheader("Pilotage : programmé vs engagé")
 
     if montant_programme_region:
-        engage_by_fonds = pd.DataFrame(region_ops).groupby("Fonds")["Montant UE"].sum().to_dict()
+        engage_by_fonds = region_ops.groupby("Fonds")["Montant UE"].sum().to_dict()
         df_fonds_pilotage = pd.DataFrame(
             [
                 {"fonds": f, "engage": engage_by_fonds.get(f, 0), "programme": programme_totals_region[f]}
@@ -453,7 +452,7 @@ with tab_pilotage:
 
         traj_col, bullet_col = st.columns(2)
         with traj_col:
-            st.plotly_chart(build_trajectoire(pd.DataFrame(region_ops), montant_programme_region), width='stretch')
+            st.plotly_chart(build_trajectoire(region_ops, montant_programme_region), width='stretch')
         with bullet_col:
             if not df_fonds_pilotage.empty:
                 st.plotly_chart(

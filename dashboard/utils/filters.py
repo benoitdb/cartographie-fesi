@@ -1,4 +1,3 @@
-import pandas as pd
 import streamlit as st
 
 FONDS_OPTIONS = ["FEDER", "FSE+", "FTJ"]
@@ -27,9 +26,8 @@ def render_fonds_filter(options=None, key="filtre_fonds"):
     return selected
 
 
-def summarize_ops(ops):
-    """Résumé montant/count/moyenne à partir d'une liste d'opérations brutes."""
-    df = pd.DataFrame(ops)
+def summarize_ops(df):
+    """Résumé montant/count/moyenne à partir d'un DataFrame d'opérations."""
     if df.empty:
         return {"montant_ue_total": 0, "count": 0, "montant_ue_moyen": 0}
     montant_total = df["Montant UE"].sum()
@@ -41,10 +39,9 @@ def summarize_ops(ops):
     }
 
 
-def compute_by_region(ops):
+def compute_by_region(df):
     """Équivalent de aggregates.by_region, recalculé depuis des opérations brutes
     (mono-région, hors interrégional/national) — utilisé quand un filtre fonds est actif."""
-    df = pd.DataFrame(ops)
     if df.empty:
         return {}
     mono_region = df["regions_modernes"].apply(lambda r: isinstance(r, list) and len(r) == 1)

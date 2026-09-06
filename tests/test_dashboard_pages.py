@@ -56,21 +56,37 @@ def donnees_fixture(monkeypatch):
 
     from utils import data_loader
 
-    monkeypatch.setattr(data_loader, "DATA_PATH", FIXTURE / "data.json")
-    monkeypatch.setattr(data_loader, "DATA_2014_2020_PATH", FIXTURE / "data_2014-2020.json")
+    monkeypatch.setattr(data_loader, "DATA_JSON_PATH", FIXTURE / "data.json")
+    monkeypatch.setattr(data_loader, "DATA_PARQUET_PATH", FIXTURE / "data.parquet")
+    monkeypatch.setattr(data_loader, "DATA_2014_2020_JSON_PATH", FIXTURE / "data_2014-2020.json")
+    monkeypatch.setattr(data_loader, "DATA_2014_2020_PARQUET_PATH", FIXTURE / "data_2014-2020.parquet")
     monkeypatch.setattr(
-        data_loader, "DATA_2014_2020_NORMANDIE_PATH", FIXTURE / "data_2014-2020_normandie.json"
+        data_loader, "DATA_2014_2020_NORMANDIE_JSON_PATH", FIXTURE / "data_2014-2020_normandie.json"
+    )
+    monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_NORMANDIE_PARQUET_PATH", FIXTURE / "data_2014-2020_normandie.parquet"
     )
     monkeypatch.setattr(
         data_loader,
-        "DATA_2014_2020_NOUVELLE_AQUITAINE_PATH",
+        "DATA_2014_2020_NOUVELLE_AQUITAINE_JSON_PATH",
         FIXTURE / "data_2014-2020_nouvelle_aquitaine.json",
     )
     monkeypatch.setattr(
-        data_loader, "DATA_2014_2020_BRETAGNE_PATH", FIXTURE / "data_2014-2020_bretagne_officiel.json"
+        data_loader,
+        "DATA_2014_2020_NOUVELLE_AQUITAINE_PARQUET_PATH",
+        FIXTURE / "data_2014-2020_nouvelle_aquitaine.parquet",
     )
     monkeypatch.setattr(
-        data_loader, "DATA_2014_2020_PON_FSE_PATH", FIXTURE / "data_2014-2020_pon_fse.json"
+        data_loader, "DATA_2014_2020_BRETAGNE_JSON_PATH", FIXTURE / "data_2014-2020_bretagne_officiel.json"
+    )
+    monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_BRETAGNE_PARQUET_PATH", FIXTURE / "data_2014-2020_bretagne_officiel.parquet"
+    )
+    monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_PON_FSE_JSON_PATH", FIXTURE / "data_2014-2020_pon_fse.json"
+    )
+    monkeypatch.setattr(
+        data_loader, "DATA_2014_2020_PON_FSE_PARQUET_PATH", FIXTURE / "data_2014-2020_pon_fse.parquet"
     )
     monkeypatch.setattr(
         data_loader, "BENEFICIAIRES_FUZZY_PATH", FIXTURE / "beneficiaires_fuzzy.json"
@@ -80,11 +96,11 @@ def donnees_fixture(monkeypatch):
         "TRANSFERTS_SOLIDARITE_PATH",
         FIXTURE / "transferts_solidarite.json",
     )
-    # Sans cela, la première page rendue mettrait ses données en cache et les
-    # suivantes les réutiliseraient : le monkeypatch n'aurait plus aucun effet.
     st.cache_data.clear()
+    st.cache_resource.clear()
     yield
     st.cache_data.clear()
+    st.cache_resource.clear()
 
 
 @pytest.mark.parametrize("page", PAGES, ids=lambda p: p.stem)
@@ -125,7 +141,7 @@ def test_la_fixture_est_auto_coherente(donnees_fixture):
     )
     assert par_partition == len(data["operations"])
 
-    montant_total = sum(op["Montant UE"] for op in data["operations"] if op["Montant UE"])
+    montant_total = data["operations"]["Montant UE"].sum()
     montant_par_fonds = sum(v["montant_ue_total"] for v in agregats["by_fonds"].values())
     assert montant_par_fonds == pytest.approx(montant_total)
 
@@ -295,8 +311,9 @@ def test_normandie_disparait_du_selecteur_si_son_fichier_est_absent(donnees_fixt
 
     from utils import data_loader
 
-    monkeypatch.setattr(data_loader, "DATA_2014_2020_NORMANDIE_PATH", FIXTURE / "chemin_absent.json")
+    monkeypatch.setattr(data_loader, "DATA_2014_2020_NORMANDIE_PARQUET_PATH", FIXTURE / "chemin_absent.parquet")
     st.cache_data.clear()
+    st.cache_resource.clear()
 
     at = AppTest.from_file(str(PAGE_2014_2020), default_timeout=120).run()
     assert "Normandie" not in at.selectbox(key="perimetre_2014_2020").options
@@ -312,9 +329,10 @@ def test_pilotage_masque_sur_nouvelle_aquitaine_si_son_fichier_est_absent(donnee
     from utils import data_loader
 
     monkeypatch.setattr(
-        data_loader, "DATA_2014_2020_NOUVELLE_AQUITAINE_PATH", FIXTURE / "chemin_absent.json"
+        data_loader, "DATA_2014_2020_NOUVELLE_AQUITAINE_PARQUET_PATH", FIXTURE / "chemin_absent.parquet"
     )
     st.cache_data.clear()
+    st.cache_resource.clear()
 
     at = _rendre_perimetre_2014_2020("Nouvelle-Aquitaine")
     infos = " ".join(el.value for el in at.info)
@@ -332,8 +350,9 @@ def test_pilotage_masque_sur_bretagne_si_son_fichier_est_absent(donnees_fixture,
 
     from utils import data_loader
 
-    monkeypatch.setattr(data_loader, "DATA_2014_2020_BRETAGNE_PATH", FIXTURE / "chemin_absent.json")
+    monkeypatch.setattr(data_loader, "DATA_2014_2020_BRETAGNE_PARQUET_PATH", FIXTURE / "chemin_absent.parquet")
     st.cache_data.clear()
+    st.cache_resource.clear()
 
     at = _rendre_perimetre_2014_2020("Bretagne")
     infos = " ".join(el.value for el in at.info)

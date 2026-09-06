@@ -120,19 +120,6 @@ FONDS = "Fonds"
 MONTANT = "Montant UE"
 BENEFICIAIRE = "Nom du bénéficiaire"
 
-
-@st.cache_resource
-def _ops_to_dataframe(_ops, cache_key):
-    """Conversion list-of-dicts → DataFrame, cachée entre reruns (#130).
-
-    +54 Mo mesuré à chaque rerun de widget sur « Ensemble national » (54 755
-    opérations). Le préfixe ``_`` dit à Streamlit de ne pas hasher la liste ;
-    ``cache_key`` (périmètre + fonds sélectionnés) identifie la donnée.
-    ``cache_resource`` renvoie le même objet — aucun code aval ne mute
-    ``df_ops``, vérifié sur toutes les fonctions appelantes.
-    """
-    return pd.DataFrame(_ops)
-
 ENSEMBLE_NATIONAL = "Ensemble national"
 VOLET_NATIONAL = "Volet national"
 
@@ -201,10 +188,10 @@ render_millesime((data_regionale if lit_source_regionale else data).get("metadat
 filtre_actif = set(selected_fonds) != set(fonds_periode)
 
 operations = normaliser_operations(data["operations"], PERIODE_2014_2020)
-ops_fonds = [op for op in operations if op.get(FONDS) in selected_fonds]
+ops_fonds = operations[operations[FONDS].isin(selected_fonds)]
 
-ops_fonds_regionaux = []
-ops_fond_vide_normandie = []
+ops_fonds_regionaux = pd.DataFrame()
+ops_fond_vide_normandie = pd.DataFrame()
 if lit_source_regionale:
     operations_regionales = normaliser_operations(data_regionale["operations"], source_regionale)
     if perimetre == "Nouvelle-Aquitaine":
@@ -217,24 +204,26 @@ if lit_source_regionale:
         # ~26 dossiers hors répertoire (2021-2023, probable reste à payer post-clôture —
         # voir data-pipeline/sources.py) sans `Fond` renseigné : le filtre Fonds les écarte
         # silencieusement quel que soit le fonds sélectionné, faute d'y figurer.
-        ops_fond_vide_normandie = [op for op in operations_regionales if not op.get(FONDS)]
-    ops_fonds_regionaux = [op for op in operations_regionales if op.get(FONDS) in selected_fonds]
+        ops_fond_vide_normandie = operations_regionales[operations_regionales[FONDS].fillna("") == ""]
+    ops_fonds_regionaux = operations_regionales[operations_regionales[FONDS].isin(selected_fonds)]
 
-ops_pon_fse_fonds = []
+ops_pon_fse_fonds = pd.DataFrame()
 if data_pon_fse is not None:
     operations_pon_fse = normaliser_operations(data_pon_fse["operations"], SOURCE_PON_FSE_2014_2020)
-    ops_pon_fse_fonds = [op for op in operations_pon_fse if op.get(FONDS) in selected_fonds]
+    ops_pon_fse_fonds = operations_pon_fse[operations_pon_fse[FONDS].isin(selected_fonds)]
 
 # Ce périmètre reçoit-il des opérations PON FSE, et lesquelles — calculé avant le grand
 # if/elif ci-dessous pour être fusionné dans chaque branche concernée (Volet national, ou
 # une des cinq régions DROM) sans dupliquer la logique de routage.
-if perimetre == VOLET_NATIONAL:
-    ops_pon_fse_perimetre = [
-        op for op in ops_pon_fse_fonds if REGIONS_PON_FSE_2014_2020.get(op.get("Libellé Programme")) is None
+if ops_pon_fse_fonds.empty:
+    ops_pon_fse_perimetre = ops_pon_fse_fonds
+elif perimetre == VOLET_NATIONAL:
+    ops_pon_fse_perimetre = ops_pon_fse_fonds[
+        ops_pon_fse_fonds["Libellé Programme"].map(REGIONS_PON_FSE_2014_2020.get).isna()
     ]
 else:
-    ops_pon_fse_perimetre = [
-        op for op in ops_pon_fse_fonds if REGIONS_PON_FSE_2014_2020.get(op.get("Libellé Programme")) == perimetre
+    ops_pon_fse_perimetre = ops_pon_fse_fonds[
+        ops_pon_fse_fonds["Libellé Programme"].map(REGIONS_PON_FSE_2014_2020.get) == perimetre
     ]
 
 # Catégorie de cohésion de la période, et le plafond de cofinancement qui en découle.
@@ -248,42 +237,45 @@ st.title(f"FESI 2014-2020 — {perimetre}")
 st.caption(MENTION_MONTANTS_PROGRAMMES)
 if lit_source_regionale:
     st.info(MENTION_SOURCE_REGIONALE)
-elif perimetre == VOLET_NATIONAL and ops_pon_fse_perimetre:
+elif perimetre == VOLET_NATIONAL and not ops_pon_fse_perimetre.empty:
     st.info(MENTION_PON_FSE_NATIONAL)
-elif ops_pon_fse_perimetre:
+elif not ops_pon_fse_perimetre.empty:
     st.info(MENTION_PON_FSE_REGIONAL)
 elif not capa["perimetre_complet"]:
     st.warning(AVERTISSEMENT_PERIMETRE)
 
 if perimetre == ENSEMBLE_NATIONAL:
-    ops_perimetre = ops_fonds
+    df_ops = ops_fonds
 elif perimetre == VOLET_NATIONAL:
-    ops_perimetre = [op for op in ops_fonds if op.get("is_national")] + ops_pon_fse_perimetre
+    parts = [ops_fonds[ops_fonds["is_national"]]]
+    if not ops_pon_fse_perimetre.empty:
+        parts.append(ops_pon_fse_perimetre)
+    df_ops = pd.concat(parts, ignore_index=True)
 elif lit_source_regionale:
     # Le fichier régional ne couvre que ce périmètre par construction (issue #68) : pas
     # besoin du filtre regions_modernes/is_interregional/is_national de la branche Synergie
     # ci-dessous, il ne changerait rien ici. Ces trois régions n'ont pas de PO FSE État
     # dans le fichier PON FSE (ops_pon_fse_perimetre est vide) : rien à y fusionner.
-    ops_perimetre = ops_fonds_regionaux
+    df_ops = ops_fonds_regionaux
 else:
     # Même découpage que la Vue Régionale 2021-2027 : les opérations
     # interrégionales et nationales sont exclues du total d'une région, sinon
     # elles seraient comptées dans plusieurs totaux censés s'additionner.
     # `ops_pon_fse_perimetre` n'ajoute quelque chose que pour les cinq DROM dont le PO FSE
     # État est routé ici (issue #95, point 3) : vide pour toute autre région.
-    ops_perimetre = [
-        op
-        for op in ops_fonds
-        if op.get("regions_modernes") == [perimetre]
-        and not op.get("is_interregional")
-        and not op.get("is_national")
-    ] + ops_pon_fse_perimetre
+    ops_region = ops_fonds[
+        (ops_fonds["regions_modernes"].apply(lambda r: r == [perimetre]))
+        & ~ops_fonds["is_interregional"]
+        & ~ops_fonds["is_national"]
+    ]
+    if not ops_pon_fse_perimetre.empty:
+        df_ops = pd.concat([ops_region, ops_pon_fse_perimetre], ignore_index=True)
+    else:
+        df_ops = ops_region
 
-if not ops_perimetre:
+if df_ops.empty:
     st.info("Aucune opération sur ce périmètre avec les fonds sélectionnés.")
     st.stop()
-
-df_ops = _ops_to_dataframe(ops_perimetre, cache_key=(perimetre, frozenset(selected_fonds)))
 montant_total_perimetre = df_ops[MONTANT].sum()
 count_perimetre = len(df_ops)
 resume = {
@@ -304,8 +296,8 @@ def _fmt_entier(valeur):
     return f"{valeur:,}".replace(",", " ")
 
 
-if ops_fond_vide_normandie:
-    montant_fond_vide = sum(op.get(MONTANT) or 0 for op in ops_fond_vide_normandie)
+if not ops_fond_vide_normandie.empty:
+    montant_fond_vide = ops_fond_vide_normandie[MONTANT].fillna(0).sum()
     st.caption(
         f"{_fmt_entier(len(ops_fond_vide_normandie))} opération(s) sans fonds renseigné "
         f"({_fmt_millions(montant_fond_vide)}) écartée(s) par le filtre Fonds ci-contre, quel "
@@ -319,8 +311,8 @@ if ops_fond_vide_normandie:
 if perimetre == ENSEMBLE_NATIONAL:
     if filtre_actif:
         by_region = compute_by_region(ops_fonds)
-        national_summary = summarize_ops([op for op in ops_fonds if op.get("is_national")])
-        interregional_summary = summarize_ops([op for op in ops_fonds if op.get("is_interregional")])
+        national_summary = summarize_ops(ops_fonds[ops_fonds["is_national"]])
+        interregional_summary = summarize_ops(ops_fonds[ops_fonds["is_interregional"]])
     else:
         by_region = data["aggregates"]["by_region"]
         national_summary = data["aggregates"]["national"]
@@ -344,19 +336,19 @@ if perimetre == ENSEMBLE_NATIONAL:
         if fichier_region is None:
             continue
         ops_region_norm = normaliser_operations(fichier_region["operations"], source)
-        ops_region_carte = [op for op in ops_region_norm if op.get(FONDS) in selected_fonds]
-        if not ops_region_carte:
+        ops_region_carte = ops_region_norm[ops_region_norm[FONDS].isin(selected_fonds)]
+        if ops_region_carte.empty:
             continue
         # Dossiers sans fonds renseigné (ex. Normandie, ~26 dossiers/24,6 M€, voir la page
-        # dédiée à cette région) : `op.get(FONDS) in selected_fonds` les écarte quel que soit
+        # dédiée à cette région) : le filtre `.isin(selected_fonds)` les écarte quel que soit
         # le filtre — sous-total systématiquement légèrement inférieur au vrai total régional.
         # Compté ici plutôt que sur la seule page Normandie, pour ne pas le taire sur cette
         # vue agrégée où le montant affiché prétend justement être « le vrai montant ».
-        sans_fonds = [op for op in ops_region_norm if not op.get(FONDS)]
+        sans_fonds = ops_region_norm[ops_region_norm[FONDS].fillna("") == ""]
         regions_hors_synergie[region] = {
             **summarize_ops(ops_region_carte),
             "millesime": libelle_millesime(fichier_region.get("metadata")),
-            "montant_sans_fonds": sum(op.get(MONTANT) or 0 for op in sans_fonds),
+            "montant_sans_fonds": sans_fonds[MONTANT].fillna(0).sum(),
             "count_sans_fonds": len(sans_fonds),
         }
 
@@ -597,7 +589,7 @@ else:
                 "porte ni code postal ni département."
             )
         else:
-            bulles, couverture = build_bubbles_localisation(ops_perimetre, perimetre, load_dromcom_codes_postaux())
+            bulles, couverture = build_bubbles_localisation(df_ops, perimetre, load_dromcom_codes_postaux())
             dromcom_geojson = load_dromcom_geojson()
             if len(bulles):
                 st.plotly_chart(
@@ -880,7 +872,7 @@ with tab_ensemble:
         "qui la situe dans une programmation — pas sa date."
     )
 
-    if perimetre == VOLET_NATIONAL and ops_pon_fse_perimetre:
+    if perimetre == VOLET_NATIONAL and not ops_pon_fse_perimetre.empty:
         st.subheader("Ventilation régionale — PON FSE et IEJ national")
         st.caption(
             "Ces deux programmes sont rattachés au Volet national pour le pilotage (leur dotation "
@@ -889,16 +881,19 @@ with tab_ensemble:
             "par région — **sans taux de consommation**, faute d'enveloppe régionale à opposer."
         )
 
-        by_region_pon = {}
-        for op in ops_pon_fse_perimetre:
-            regions = op.get("regions_modernes", [])
-            montant = op.get(MONTANT, 0) or 0
-            for r in regions:
-                by_region_pon.setdefault(r, {"montant_ue_total": 0, "count": 0})
-                by_region_pon[r]["montant_ue_total"] += montant
-                by_region_pon[r]["count"] += 1
+        df_pon_exploded = ops_pon_fse_perimetre.explode("regions_modernes")
+        df_pon_with_region = df_pon_exploded[df_pon_exploded["regions_modernes"].notna()]
+        by_region_pon = (
+            df_pon_with_region.groupby("regions_modernes")
+            .agg(montant_ue_total=(MONTANT, lambda x: x.fillna(0).sum()), count=(MONTANT, "count"))
+            .to_dict("index")
+        )
 
-        ops_sans_region = sum(1 for op in ops_pon_fse_perimetre if not op.get("regions_modernes"))
+        ops_sans_region = int(
+            ops_pon_fse_perimetre["regions_modernes"].apply(
+                lambda r: not isinstance(r, list) or len(r) == 0
+            ).sum()
+        )
 
         if by_region_pon:
             geojson_pon = load_geojson()
@@ -1103,7 +1098,7 @@ with tab_pilotage:
                         build_ranking_programme_vs_engage(df_fonds_pilotage, "fonds", "engage", "programme", height=400),
                         width='stretch',
                     )
-                if ops_pon_fse_perimetre:
+                if not ops_pon_fse_perimetre.empty:
                     # Voir MENTION_PON_FSE_REGIONAL/NATIONAL en haut de page : ce fichier n'a
                     # pas de date de programmation, ses opérations disparaissent silencieusement
                     # du groupby de build_trajectoire (NaT). Le rappeler ici, où le manque se
