@@ -22,6 +22,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR.parent / "data" / "processed"
 PIPELINE_DIR = SCRIPT_DIR.parent / "data-pipeline"
@@ -125,18 +128,69 @@ def build_raw_to_internal(schema_key):
     return {raw_label: internal_key for internal_key, raw_label in schema_source.SCHEMAS[schema_key]}
 
 
+def valeur_python(val):
+    """Ramène une valeur lue depuis Parquet au type que la suite du chargeur attend.
+
+    Deux écarts avec le JSON, tous deux silencieux si on les laisse passer :
+
+    - pyarrow redonne les colonnes de listes (`regions_modernes`) en
+      `numpy.ndarray`, que psycopg2 n'adapte pas en `TEXT[]` — et dont le test de
+      vérité (`regions_modernes if regions_modernes else None`) lève au lieu de
+      renvoyer un booléen ;
+    - une valeur absente vaut `NaN`/`NaT` et non `None`. Elle passerait les tests
+      `not in (None, "")` du constructeur de lignes et finirait insérée en
+      `"nan"` littéral (colonnes texte) ou en `NaN` numérique — que PostgreSQL
+      accepte sans broncher, à la place du NULL attendu.
+    """
+    if isinstance(val, np.ndarray):
+        return list(val)
+    if isinstance(val, (str, bool, list, dict)):
+        return val
+    try:
+        if pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return val
+
+
+def lire_operations(source_id, fichier_sortie):
+    """Opérations d'une source, quel que soit le format de sortie du pipeline.
+
+    Depuis la PR #132 (issue #130, piste 2), `ingest.py` écrit les opérations en
+    Parquet et ne laisse dans le JSON que `metadata` + `aggregates`. La branche de
+    repli sur `operations` dans le JSON sert le temps que les branches en cours
+    rattrapent `main` — elle peut disparaître une fois la fusion faite (#134).
+
+    None si la source est absente du poste (fichiers régionaux gitignorés).
+    """
+    json_path = DATA_DIR / fichier_sortie
+    parquet_path = json_path.with_suffix(".parquet")
+
+    if parquet_path.exists():
+        df = pd.read_parquet(parquet_path)
+        return [
+            {cle: valeur_python(val) for cle, val in enregistrement.items()}
+            for enregistrement in df.to_dict("records")
+        ]
+
+    if not json_path.exists():
+        return None
+    with open(json_path) as f:
+        data = json.load(f)
+    return data.get("operations")
+
+
 def load_operations_for_source(cur, source_id, descriptor):
     fichier_sortie = descriptor.get("fichier_sortie")
     if not fichier_sortie:
         return 0
-    json_path = DATA_DIR / fichier_sortie
-    if not json_path.exists():
+
+    ops = lire_operations(source_id, fichier_sortie)
+    if ops is None:
         print(f"  {source_id}: {fichier_sortie} absent, skip")
         return 0
 
-    with open(json_path) as f:
-        data = json.load(f)
-    ops = data["operations"]
     periode = descriptor["periode"]
     raw_to_internal = build_raw_to_internal(schema_key_for(source_id, descriptor))
     known_raw_labels = set(raw_to_internal)

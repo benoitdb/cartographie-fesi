@@ -42,8 +42,12 @@ newgrp docker   # active le groupe dans la session courante
 ```bash
 cd metabase/
 python3 -m venv venv
-venv/bin/pip install psycopg2-binary requests
+venv/bin/pip install psycopg2-binary requests pandas "pyarrow>=15.0.0"
 ```
+
+`pandas` et `pyarrow` sont nécessaires depuis que le pipeline écrit les
+opérations en Parquet (issue #130, piste 2) : `load_data.py` les lit avec
+`pd.read_parquet`. Sans `pyarrow`, le chargement échoue à l'import.
 
 ## Lancement
 
