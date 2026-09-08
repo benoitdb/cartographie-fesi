@@ -74,9 +74,7 @@ from utils.periodes import (
     MENTION_SOURCE_REGIONALE,
     PERIODE_2014_2020,
     REGIONS_PON_FSE_2014_2020,
-    SOURCE_BRETAGNE_2014_2020,
-    SOURCE_NORMANDIE_2014_2020,
-    SOURCE_NOUVELLE_AQUITAINE_2014_2020,
+    REGIONS_SUBSTITUEES_2014_2020,
     SOURCE_PON_FSE_2014_2020,
     absences_expliquees,
     appliquer_libelles_programmes,
@@ -131,18 +129,13 @@ data = load_data_2014_2020()
 capa = capacites(PERIODE_2014_2020)
 libelle_montant_ue = libelle_montant(PERIODE_2014_2020)
 
-# Fichiers hors-Synergie lus directement par cette page pour leur périmètre (issue #95) :
-# Normandie n'apparaît même pas dans `aggregates.by_region` de Synergie, Nouvelle-Aquitaine
-# n'y figure qu'à la marge (25 opérations), et Bretagne (3 opérations) en est sortie à son
-# tour depuis l'export officiel data.bretagne.bzh. Seul le PON FSE reste hors passe : ses
-# opérations couvrent sept programmes distincts à ventiler, pas un seul périmètre régional
-# (#95, point 3). None si le fichier est absent (gitignoré, non régénérable sans le XLSX
-# source) : la page se rabat alors sur le sous-comptage Synergie plutôt que de planter.
-SOURCE_HORS_SYNERGIE = {
-    "Normandie": SOURCE_NORMANDIE_2014_2020,
-    "Nouvelle-Aquitaine": SOURCE_NOUVELLE_AQUITAINE_2014_2020,
-    "Bretagne": SOURCE_BRETAGNE_2014_2020,
-}
+# Fichiers hors-Synergie lus directement par cette page pour leur périmètre (issue #95).
+# La table elle-même vit dans `utils/periodes.py` : c'est une règle métier de la période,
+# pas un détail d'écran, et d'autres consommateurs que Streamlit en ont besoin (voir sa
+# docstring). `data_hors_synergie` reste ici — c'est le CHARGEMENT, propre à la page.
+# None si le fichier est absent : la page se rabat alors sur le sous-comptage Synergie
+# plutôt que de planter.
+SOURCE_HORS_SYNERGIE = REGIONS_SUBSTITUEES_2014_2020
 data_hors_synergie = {
     "Normandie": load_data_2014_2020_normandie(),
     "Nouvelle-Aquitaine": load_data_2014_2020_nouvelle_aquitaine(),
