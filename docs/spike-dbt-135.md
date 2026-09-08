@@ -7,6 +7,10 @@ Issue [#135](https://github.com/benoitdb/cartographie-fesi/issues/135). Branche
 est nettement inférieur à l'hypothèse haute de l'issue, et le cas réputé le plus
 dur s'est révélé le plus rentable. Détail et réserves plus bas.
 
+> **Suite donnée (2026-09-08, même journée).** La recommandation ayant été
+> validée, les **19 vues** sont désormais portées, pas seulement les 10 du
+> spike. Voir « Chantier réalisé » en fin de document.
+
 ## Ce qui a été construit
 
 | | |
@@ -123,3 +127,78 @@ six fonctions de prétraitement) est hors périmètre dbt par nature.
 **Estimation révisée : 2 à 3 jours**, contre « deux jours comme deux semaines »
 dans l'issue. Le socle est fait, le cas dur est fait et exact, et le fork entre
 moteurs est nul sur la couche qui compte.
+
+
+---
+
+# Chantier réalisé
+
+Les 9 vues restantes ont été portées dans la foulée, la recommandation ayant été
+validée. **Le chantier est complet sur la couche marts.**
+
+| | Spike | Après chantier |
+|---|---|---|
+| Marts | 10 | **20** (19 vues + 1 modèle intermédiaire) |
+| Staging | 6 | 6 |
+| Nœuds dbt | 18 | **29** |
+| Lignes de code SQL (marts) | 115 | 255 |
+| Fork de cible dans les marts | 0 | **0** |
+
+Ajoutés : la période 2014-2020 complète (`engage_2014_2020`,
+`enveloppes_2014_2020`, `pilotage_2014_2020`, `cofinancement_2014_2020` et son
+résumé) et les quatre vues unifiées (`engage_all`, `pilotage_all`,
+`repartition_all`, `cofinancement_all`).
+
+## Fidélité : 18 vues sur 19 identiques ligne à ligne
+
+La dix-neuvième diverge **exprès**, et dans le bon sens :
+`engage_by_perimetre_fonds` porte les trois partitions d'`agregats.py` là où la
+vue d'origine n'en porte que deux. Le modèle dbt retombe sur `v_by_fonds` au
+centime (7 879 820 894,76 €) ; la vue existante s'arrête 1,625 M€ plus bas
+(13 opérations interrégionales). C'est le bug que #129 avait corrigé dans
+`v_engage_all` sans le reporter — [#138](https://github.com/benoitdb/cartographie-fesi/issues/138).
+
+## Les règles métier ne sont plus recopiées
+
+`generer.py` écrit un bloc de variables dans `dbt_project.yml` depuis leur source
+de vérité Python : routage du PON FSE, fonds hors plafond, fusion des enveloppes
+sans libellé. Le SQL les déplie par Jinja. **C'est la réponse complète à #125** —
+à une exception près, documentée dans le codegen : la liste des trois régions
+substituées vit dans un dictionnaire de `pages/5_Période_2014-2020.py`, donc
+dans un module Streamlit non importable. La remonter dans `utils/periodes.py`
+est un déplacement de trois lignes, à faire côté dashboard.
+
+## Deux résultats structurels
+
+**Le piège central de `05_vues_unifiees.sql` disparaît par construction.** La vue
+d'origine devait écrire un `WHERE periode = '2021-2027'` explicite, faute de quoi
+la période 2014-2020 était comptée deux fois (19 901 → 39 958 M€). Les staging
+étant par **source**, un modèle 21-27 ne peut plus produire de ligne 14-20 : le
+filtre cesse d'être une condition de justesse qu'on peut oublier.
+
+**Le Parquet n'est pas un contrat typé.** « Union co-financing rate (%) » de
+Nouvelle-Aquitaine est une chaîne (`'0.4'`, `'0.150000078336386'`) là où
+Normandie et Bretagne publient des flottants. PostgreSQL ne le voit jamais,
+`load_data.parse_numeric` normalisant en amont. La branche DuckDB a donc besoin
+d'un `TRY_CAST` explicite sur les colonnes numériques et de date — équivalent
+exact de `parse_numeric`/`parse_date`, qui renvoient `None` sur échec.
+
+Écart de dialecte supplémentaire : `GROUP BY 'national'` est refusé par
+PostgreSQL (« non-integer constant in GROUP BY ») et accepté par DuckDB.
+
+## Empreinte finale
+
+`dbt build` complet, 29 nœuds : **8,0 s de mur, 236 Mo de RSS crête**, base
+DuckDB de 16 Mo. Aucune régression sur les 246 Mo gagnés par #132.
+
+## Ce qui reste à faire pour une mise en production
+
+1. **Remonter `SOURCE_HORS_SYNERGIE` dans `utils/periodes.py`** pour éliminer la
+   dernière règle recopiée.
+2. **Brancher le harnais d'équivalence en CI**, sur la cible DuckDB — il n'a pas
+   besoin de PostgreSQL, donc il lève l'obstacle qui bloque #125 aujourd'hui.
+   Le harnais actuel couvre les 6 marts de base ; l'étendre aux 14 autres.
+3. **Décider du sort des vues `metabase/init/`** : les remplacer par les tables
+   dbt, ou les garder le temps d'une période de recouvrement.
+4. **`region_mapping.py` reste hors périmètre** — l'harmonisation des régions
+   s'exécute en amont du Parquet et n'a toujours pas été mesurée.
