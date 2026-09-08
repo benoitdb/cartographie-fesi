@@ -1,6 +1,13 @@
 # Dépendances du spike dbt (issue #135) — VOLONTAIREMENT séparées de
 # dashboard/requirements.txt : dbt ne doit jamais partir sur Streamlit Cloud,
 # qui ne régénère aucune donnée (les Parquet sont committés, cf. CLAUDE.md).
+# pandas et pyarrow sont déclarés ICI, explicitement, et non hérités de
+# data-pipeline/requirements.txt : `generer.py` lit les Parquet pour apparier les
+# libellés réels, et `verifier_equivalence.py` rejoue `calculer_agregats` dessus.
+# Les tirer par transitivité, c'est le défaut qui a fait rougir la CI la première
+# fois qu'elle a tourné (le venv local les avait, installés à la main).
+pandas>=2.0.0
+pyarrow>=15.0.0
 dbt-core~=1.9
 dbt-duckdb~=1.9
 dbt-postgres~=1.9
