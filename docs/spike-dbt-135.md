@@ -201,8 +201,8 @@ Streamlit qu'un script ne peut pas importer. Elle devient
 l'importe : **les quatre règles métier de la période viennent désormais toutes de
 leur source Python, aucune recopie.**
 
-**2. Le harnais en CI — sur les 6 marts de base.** ✅ Fait. Job `equivalence-dbt`,
-séparé des tests. Ce qui le rend possible là où `metabase/verify_*.py` ne l'est
+**2. Le harnais en CI — sur les 6 marts de base.** ✅ Fait, et **vérifié sur
+GitHub Actions** (PR #141, 39 s). Job `equivalence-dbt`, séparé des tests. Ce qui le rend possible là où `metabase/verify_*.py` ne l'est
 pas (#125) : la cible DuckDB ne demande aucune infrastructure, et les Parquet
 sont committés depuis #119/#132 — le clone nu a tout.
 
@@ -215,6 +215,17 @@ Couverture assumée : les 14 autres marts n'ont pas d'oracle Python — leur vé
 est la vue SQL, absente du clone nu — et les couvrir supposerait de figer des
 valeurs de référence ou de réimplémenter la règle côté test, ce qui recréerait la
 duplication qu'on vient de supprimer.
+
+*Ce que la première exécution réelle a révélé* — et qui justifie à lui seul
+d'avoir branché la CI : le job a d'abord échoué sur un `pyarrow` manquant. Le
+venv local du spike l'avait, installé à la main au montage ; aucun des deux
+fichiers de dépendances ne le déclarait. En remontant la cause, on trouve un
+**bug préexistant sans rapport avec dbt** : `ingest.py` écrit du Parquet depuis
+la PR #132, mais `data-pipeline/requirements.txt` ne déclare pas pyarrow. Un
+environnement de pipeline installé seul — celui que décrit `CLAUDE.md` — ne
+pouvait plus régénérer les données depuis #132. Invisible jusque-là parce que
+`requirements-dev.txt` tire les deux fichiers de dépendances : la CI avait
+pyarrow par le dashboard, et les 406 tests passaient.
 
 **3. Les vues `metabase/init/` — période de recouvrement.** ✅ Fait. Les vues
 restent la vérité pour Metabase, dbt écrit dans son schéma, et
