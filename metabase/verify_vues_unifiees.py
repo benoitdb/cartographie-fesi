@@ -172,6 +172,30 @@ def main():
         else:
             print("  OK   somme des périmètres == total de la source")
 
+        print("\n3 bis. Complétude 2021-2027 de v_engage_by_perimetre_fonds")
+        # MÊME contrôle qu'au point 3, sur la vue dont il manquait (issue #138).
+        # `v_engage_all` avait ce garde-fou et `v_engage_by_perimetre_fonds` non,
+        # si bien que la correction de la partition interrégionale faite en #129
+        # n'a jamais été reportée sur elle : elle est restée 1,625 M€ trop basse
+        # pendant tout ce temps, sans que rien ne le dise.
+        #
+        # Scopé à 2021-2027 comme le point 3, et pour la même raison : cette vue
+        # n'est pas scopée par période et produit aussi des lignes 2014-2020, en
+        # sommant les six sources qui se chevauchent (cf. l'en-tête de
+        # 05_vues_unifiees.sql). Elle est juste sur 2021-2027, fausse sur 14-20 —
+        # ce contrôle ne prétend donc rien sur cette période-là.
+        (eur_perim,), = fetch(cur, """
+            SELECT round(SUM(engage)::numeric, 2)
+            FROM v_engage_by_perimetre_fonds WHERE periode = '2021-2027'
+        """)
+        print(f"  v_by_fonds[2021-2027]                 (source)  : {float(eur_src) / 1e6:>10,.3f} M€")
+        print(f"  v_engage_by_perimetre_fonds[2021-2027] (mesuré) : {float(eur_perim) / 1e6:>10,.3f} M€")
+        if eur_src != eur_perim:
+            ecarts.append("v_engage_by_perimetre_fonds[2021-2027] ne couvre pas toute la source")
+            print("  ÉCART : une partition manque (interrégional ? national ?)")
+        else:
+            print("  OK   somme des périmètres == total de la source")
+
         print("\n4. Aucune période inattendue")
         for vue in ("v_pilotage_all", "v_engage_all"):
             periodes = [p for (p,) in fetch(cur, f"SELECT DISTINCT periode FROM {vue} ORDER BY 1")]
