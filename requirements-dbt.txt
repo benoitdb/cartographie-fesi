@@ -4,3 +4,6 @@
 dbt-core~=1.9
 dbt-duckdb~=1.9
 dbt-postgres~=1.9
+# Recoupement contre les vues PostgreSQL pendant la période de recouvrement
+# (verifier_vues_postgres.py). Pas nécessaire au job CI, qui ne cible que DuckDB.
+psycopg2-binary~=2.9
