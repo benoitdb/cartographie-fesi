@@ -28,6 +28,10 @@ from schema_source import (
     schema_de_periode,
 )
 
+from reference.programmes_interregionaux_2014_2020 import (
+    REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020,
+)
+
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 
 # Correspondance clé sémantique de `profiler_source` → clé interne du schéma.
@@ -340,6 +344,10 @@ def _deriver_bretagne_officiel(df):
 #   date_source      — facultative : date d'extraction déclarée, quand le nom de
 #                      fichier ne la porte pas (voir `millesime`)
 #   programme_to_region — table de rattachement par libellé de programme
+#   programme_interregional_to_region — facultative : table de rattachement des
+#                      programmes interrégionaux (massifs, bassins fluviaux) vers
+#                      leur liste de régions couvertes, faute de région unique
+#                      (issue #77). Absente = dict vide, comportement inchangé.
 #   fichier_sortie   — nom du JSON produit par `ingest.py` dans `data/processed/`.
 #                      Un fichier par période, pas une clé `periode` dans un fichier
 #                      commun : `data.json` pèse déjà 45 Mo pour 16 625 opérations,
@@ -363,6 +371,7 @@ SOURCES = {
         "date_source": "2023-08-30",  # feuille « Informations » du fichier
         "fichier_sortie": "data_2014-2020.json",
         "programme_to_region": PROGRAMME_TO_REGION_2014_2020,
+        "programme_interregional_to_region": REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020,
         "cles_profil": _CLES_PROFIL_2014_2020,
     },
     "2021-2027-conventionnees": {

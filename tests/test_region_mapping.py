@@ -14,6 +14,10 @@ from region_mapping import (
     reset_unresolved,
 )
 
+from reference.programmes_interregionaux_2014_2020 import (
+    REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020,
+)
+
 
 @pytest.fixture(autouse=True)
 def _repartir_de_zero():
@@ -163,6 +167,7 @@ def test_un_programme_inconnu_ne_devient_pas_regional_par_normalisation():
 # rattachés que par le libellé du programme (issue #12).
 
 INDEX_2014_2020 = indexer_programmes(PROGRAMME_TO_REGION_2014_2020)
+INDEX_INTERREGIONAL_2014_2020 = indexer_programmes(REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020)
 
 
 @pytest.mark.parametrize(
@@ -265,10 +270,27 @@ def test_sans_index_de_periode_un_programme_2014_2020_reste_national():
     assert national
 
 
-def test_un_programme_interregional_2014_2020_reste_au_volet_national():
-    """Choix de v1 (issue #12, étape C4) : les 5 programmes interrégionaux valent
-    `None` dans la table, faute de la liste des régions de chaque massif. Ils
-    sont comptés à part, pas répartis au jugé."""
+def test_un_programme_interregional_2014_2020_rattache_ses_regions_couvertes():
+    """Issue #77 : un programme interrégional connu (massif, bassin fluvial) n'a
+    pas de région unique, mais une liste de régions couvertes, sourcée à part
+    (reference.programmes_interregionaux_2014_2020) — jamais ventilée, seulement
+    utilisée pour sortir l'opération du Volet national."""
+    regions, interregional, national = harmonize_region(
+        None,
+        "Programme opérationnel Interrégional FEDER Pyrénées 2014-2020",
+        INDEX_2014_2020,
+        INDEX_INTERREGIONAL_2014_2020,
+    )
+
+    assert regions == ["Nouvelle-Aquitaine", "Occitanie"]
+    assert interregional
+    assert not national
+
+
+def test_sans_index_interregional_un_programme_interregional_2014_2020_reste_national():
+    """Le paramètre `programme_interregional_index` n'est pas cosmétique non plus :
+    sans lui, un programme interrégional retombe sur le comportement d'avant #77
+    (Volet national) plutôt que de lever une erreur."""
     regions, interregional, national = harmonize_region(
         None, "Programme opérationnel Interrégional FEDER Pyrénées 2014-2020", INDEX_2014_2020
     )

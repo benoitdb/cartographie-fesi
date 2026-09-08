@@ -120,6 +120,7 @@ BENEFICIAIRE = "Nom du bénéficiaire"
 
 ENSEMBLE_NATIONAL = "Ensemble national"
 VOLET_NATIONAL = "Volet national"
+INTERREGIONAL = "Interrégional"
 
 DROM_COM = ["Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte", "Saint-Martin"]
 
@@ -165,7 +166,7 @@ with st.sidebar:
     # d'une même session, et les fonds proposés ici n'existent pas en 2021-2027.
     perimetre = st.selectbox(
         "Afficher",
-        [ENSEMBLE_NATIONAL, VOLET_NATIONAL, *regions_periode],
+        [ENSEMBLE_NATIONAL, VOLET_NATIONAL, INTERREGIONAL, *regions_periode],
         key="perimetre_2014_2020",
     )
 selected_fonds = render_fonds_filter(options=fonds_periode, key="filtre_fonds_2014_2020")
@@ -244,6 +245,12 @@ elif perimetre == VOLET_NATIONAL:
     if not ops_pon_fse_perimetre.empty:
         parts.append(ops_pon_fse_perimetre)
     df_ops = pd.concat(parts, ignore_index=True)
+elif perimetre == INTERREGIONAL:
+    # Opérations non attribuables à une seule région : champ région brut multi-valué,
+    # ou l'un des cinq programmes interrégionaux (massifs, bassins fluviaux) — sortis
+    # du Volet national depuis l'issue #77. PON FSE ne route jamais ici (ses deux
+    # catégories vont soit à une région DROM, soit au Volet national).
+    df_ops = ops_fonds[ops_fonds["is_interregional"]]
 elif lit_source_regionale:
     # Le fichier régional ne couvre que ce périmètre par construction (issue #68) : pas
     # besoin du filtre regions_modernes/is_interregional/is_national de la branche Synergie
@@ -361,18 +368,22 @@ if perimetre == ENSEMBLE_NATIONAL:
     )
     montant_ue_total_corrige = resume["montant_ue_total"] + correction_hors_synergie
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric(f"{libelle_montant_ue} total", _fmt_millions(montant_ue_total_corrige))
     col2.metric("Nombre de projets", _fmt_entier(resume["count"]))
-    col3.metric("Projets en région", _fmt_entier(resume["count"] - national_summary["count"]))
+    col3.metric(
+        "Projets en région",
+        _fmt_entier(resume["count"] - national_summary["count"] - interregional_summary["count"]),
+    )
     col4.metric("Volet national", _fmt_entier(national_summary["count"]))
+    col5.metric("Interrégional", _fmt_entier(interregional_summary["count"]))
     if interregional_summary["count"]:
         st.caption(
-            f"Dont {interregional_summary['count']} opération(s) interrégionale(s) (plusieurs régions "
-            "à la fois), incluses dans le total ci-dessus mais non ventilées par région ni dans le "
-            "volet national. Les cinq programmes interrégionaux de la période (massifs, bassins "
-            "fluviaux) tombent aujourd'hui dans le volet national faute de table massif → régions "
-            "(issue #77)."
+            f"« Interrégional » regroupe {interregional_summary['count']} opération(s) non attribuables "
+            "à une seule région : les cinq programmes interrégionaux de la période (massifs, bassins "
+            "fluviaux — issue #77), plus toute opération dont le champ région brut en liste plusieurs "
+            "à la fois. Incluses dans le total ci-dessus mais absentes du Volet national et non "
+            "ventilées par région — voir le périmètre « Interrégional » du sélecteur pour le détail."
         )
 
     geojson = load_geojson()
@@ -530,9 +541,59 @@ elif perimetre == VOLET_NATIONAL:
     col2.metric("Nombre de projets", _fmt_entier(resume["count"]))
     col3.metric("Programmes", _fmt_entier(df_ops["Libellé Programme"].nunique()))
     st.caption(
-        "Opérations rattachées à aucune région en particulier : programmes nationaux, "
-        "assistance technique, et — faute de table massif → régions — les cinq programmes "
-        "interrégionaux de la période (issue #77)."
+        "Opérations rattachées à aucune région en particulier : programmes nationaux "
+        "(PO national FSE, PO national IEJ) et assistance technique interfonds (PNAT "
+        "Europ'Act). Les cinq programmes interrégionaux de la période (massifs, bassins "
+        "fluviaux) sont sortis de ce périmètre depuis l'issue #77 — voir « Interrégional » "
+        "dans le sélecteur."
+    )
+
+elif perimetre == INTERREGIONAL:
+    regions_par_programme = load_programme_detail_2014_2020().get("regions_interregional", {})
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric(f"{libelle_montant_ue} total", _fmt_millions(resume["montant_ue_total"]))
+    col2.metric("Nombre de projets", _fmt_entier(resume["count"]))
+    col3.metric("Programmes", _fmt_entier(df_ops["Libellé Programme"].nunique()))
+    st.caption(
+        "Opérations des programmes interrégionaux (massifs, bassins fluviaux) et de toute "
+        "opération dont le champ région brut liste plusieurs régions à la fois : non "
+        "attribuables à une seule région, sorties du Volet national depuis l'issue #77. "
+        "Le montant de chaque programme reste groupé — aucune donnée ne dit la part qui "
+        "revient à chaque région qu'il couvre, une répartition inventée serait trompeuse."
+    )
+
+    # Régions couvertes par programme : la table de référence pour les 5 massifs connus
+    # (montant groupé, jamais ventilé — cf. caption ci-dessus) ; à défaut, l'union des
+    # `regions_modernes` déjà posées par le pipeline sur les opérations elles-mêmes —
+    # cas d'une opération dont le champ région brut liste directement plusieurs régions,
+    # sous un programme qui n'est pas l'un des cinq massifs (issue #71/#77, même flag
+    # `is_interregional` pour deux causes différentes).
+    regions_par_operation = (
+        df_ops.groupby("Libellé Programme")["regions_modernes"]
+        .agg(lambda listes: sorted({r for regions in listes for r in (regions or [])}))
+    )
+
+    def _regions_couvertes(libelle):
+        return regions_par_programme.get(libelle) or regions_par_operation.get(libelle, [])
+
+    df_programmes = (
+        df_ops.groupby("Libellé Programme")
+        .agg(**{"Montant UE total": (MONTANT, "sum"), "Nb projets": (MONTANT, "count")})
+        .reset_index()
+        .sort_values("Montant UE total", ascending=False)
+    )
+    df_programmes["Régions couvertes"] = df_programmes["Libellé Programme"].map(
+        lambda libelle: " · ".join(_regions_couvertes(libelle))
+    )
+    st.dataframe(
+        df_programmes,
+        hide_index=True,
+        width='stretch',
+        column_config={
+            **text_widths("Libellé Programme", "Régions couvertes"),
+            "Montant UE total": montant_col_config,
+        },
     )
 
 else:

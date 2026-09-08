@@ -74,6 +74,12 @@ CCI_SANS_REGION = {
     "2014FR05SFOP001",  # PO National FSE Emploi et Inclusion
     "2014FR05M9OP001",  # PO National IEJ
     "2014FR16M2TA001",  # PNAT Europ'Act
+}
+
+# Programmes interrégionaux (issue #77) : pas de région unique non plus, mais une
+# sentinelle distincte des programmes strictement nationaux ci-dessus — leur enveloppe
+# doit rejoindre sa propre clé, pas "national" (voir CLE_NATIONAL/cle_region).
+CCI_INTERREGIONAUX = {
     "2014FR16RFOP001",  # POI Alpes
     "2014FR16RFOP002",  # POI Loire
     "2014FR16RFOP003",  # POI Massif Central
@@ -129,8 +135,15 @@ def test_programme_rattache_a_sa_region_moderne(cci, region):
 
 
 @pytest.mark.parametrize("cci", sorted(CCI_SANS_REGION))
-def test_programme_national_ou_interregional_sans_region(cci):
+def test_programme_national_sans_region(cci):
     assert programme(cci).region is None
+
+
+@pytest.mark.parametrize("cci", sorted(CCI_INTERREGIONAUX))
+def test_programme_interregional_rattache_a_la_sentinelle(cci):
+    # Issue #77 : sentinelle distincte de None, pour router l'enveloppe vers sa
+    # propre clé ("Interrégional") plutôt que "national" dans programme_totals_2014_2020.
+    assert programme(cci).region == "Interrégional"
 
 
 def test_programme_leve_sur_un_cci_inconnu():
@@ -269,11 +282,23 @@ def test_fonds_sans_enveloppe_absents_de_la_sortie():
         assert "FEDER-FSE" not in fonds_totaux
 
 
-def test_programmes_nationaux_et_interregionaux_agreges_sous_national():
+def test_programmes_nationaux_agreges_sous_national():
     totaux, _ = calculer()
     assert CLE_NATIONAL in totaux
+    # Depuis l'issue #77, les 5 POI ne sont plus fondus dans "national" — seuls les
+    # programmes strictement nationaux (PO FSE/IEJ nationaux, PNAT Europ'Act) le sont.
+    assert "FEDER REACT-EU" not in totaux[CLE_NATIONAL]
+
+
+def test_programmes_interregionaux_agreges_sous_leur_propre_cle():
+    # Issue #77 : les 5 POI (massifs, bassins fluviaux) rejoignent la clé
+    # "Interrégional", pas "national" — sans quoi le Volet national afficherait une
+    # enveloppe programmée sans l'engagé qui va avec (sorti côté region_mapping).
+    totaux, _ = calculer()
+    assert "Interrégional" in totaux
     # Les 5 POI n'ont que du FEDER ; seul le POI Loire a une maquette REACT-EU.
-    assert totaux[CLE_NATIONAL]["FEDER REACT-EU"] == 7_822_019
+    assert totaux["Interrégional"]["FEDER"] == 34_000_000 + 33_000_000 + 40_000_000 + 24_872_998 + 33_000_000
+    assert totaux["Interrégional"]["FEDER REACT-EU"] == 7_822_019
 
 
 def test_aucun_montant_negatif():
@@ -285,8 +310,10 @@ def test_aucun_montant_negatif():
             assert montant > 0, f"{region}/{fonds} = {montant}"
 
 
-def test_toutes_les_regions_du_perimetre_metropolitain_et_drom_sont_couvertes():
+def test_toutes_les_regions_du_perimetre_couvertes_plus_interregional():
     totaux, _ = calculer()
     attendues = {p.region for p in PROGRAMMES if p.region}
     assert set(totaux) == attendues | {CLE_NATIONAL}
-    assert len(attendues) == 18
+    # 18 régions métropolitaines/DROM + la sentinelle "Interrégional" des 5 POI (#77).
+    assert len(attendues) == 19
+    assert "Interrégional" in attendues
