@@ -14,8 +14,7 @@
   "national": {
     "FSE": 3653131266,
     "IEJ": 660033176,
-    "FEDER": 205702590,
-    "FEDER REACT-EU": 7822019
+    "FEDER": 40829592
   },
   "Grand Est": {
     "FSE": 157581313,
@@ -105,5 +104,9 @@
     "FEDER": 148872908,
     "FSE": 82641320,
     "FEDER REACT-EU": 119115539
+  },
+  "Interrégional": {
+    "FEDER": 164872998,
+    "FEDER REACT-EU": 7822019
   }
 }

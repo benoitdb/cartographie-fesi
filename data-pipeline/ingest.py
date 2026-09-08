@@ -68,12 +68,14 @@ def clean_nans(obj):
     return obj
 
 
-def harmoniser_regions(df, cols, programme_index):
+def harmoniser_regions(df, cols, programme_index, programme_interregional_index=None):
     """Pose les colonnes `regions_modernes` / `is_interregional` / `is_national`.
 
     L'index programme → région est celui de la **période** : en 2014-2020 la
     colonne région n'est remplie qu'à 16,4 %, et c'est le libellé du programme
-    qui rattache les 83,6 % restantes (issue #12).
+    qui rattache les 83,6 % restantes (issue #12). `programme_interregional_index`
+    ajoute le rattachement des programmes interrégionaux (massifs, bassins
+    fluviaux) à leur liste de régions couvertes, absent en 2021-2027 (issue #77).
     """
     reset_unresolved()
 
@@ -82,6 +84,7 @@ def harmoniser_regions(df, cols, programme_index):
             row[cols['region']],
             row[cols['libelle_prog']],
             programme_index,
+            programme_interregional_index,
         )
         return pd.Series({
             'regions_modernes': regions_modernes,
@@ -185,7 +188,12 @@ def main(source_id=SOURCE_PAR_DEFAUT):
     # une fois par opération. Passée explicitement même pour 2021-2027, où c'est
     # déjà le défaut — l'implicite rattacherait toute la période 14-20 au Volet
     # national sans lever d'erreur.
-    df = harmoniser_regions(df, cols, indexer_programmes(conf['programme_to_region']))
+    df = harmoniser_regions(
+        df,
+        cols,
+        indexer_programmes(conf['programme_to_region']),
+        indexer_programmes(conf.get('programme_interregional_to_region', {})),
+    )
 
     df_parquet = prepare_for_parquet(df)
 

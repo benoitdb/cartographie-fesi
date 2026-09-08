@@ -172,9 +172,12 @@ PROGRAMME_TO_REGION = {
 # Les programmes **nationaux** (FEAD, PNAT Europ'Act) et **interrégionaux**
 # (Massif Central, Loire, Massif des Alpes, Rhône-Saône, Pyrénées) valent `None`
 # explicitement : pas de région unique par construction, ce n'est pas un trou de
-# mapping. Les 5 interrégionaux tombent donc au Volet national en v1 (1 123 op.,
-# 137,0 M€), faute de la liste des régions de chaque massif — donnée de référence
-# à sourcer, pas correction de code : issue #77.
+# mapping — le contrat de cette table reste "une région, ou aucune". Les 5
+# interrégionaux sont résolus séparément, vers la liste des régions que couvre
+# chaque massif plutôt qu'une région unique, par
+# reference.programmes_interregionaux_2014_2020.REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020
+# (issue #77, source ec.europa.eu par programme). `harmonize_region` les rattache
+# via `programme_interregional_index`, pas via cette table-ci.
 PROGRAMME_TO_REGION_2014_2020 = {
     'Programme opérationnel FEDER-FSE Centre-Val de Loire 2014-2020': 'Centre-Val de Loire',
     'Programme opérationnel FEDER Réunion Conseil Régional 2014-2020': 'La Réunion',
@@ -283,29 +286,38 @@ def _resolve_named_fragment(code, name):
     return name, False
 
 
-def harmonize_region(raw_region, libelle_programme, programme_index=None):
+def harmonize_region(raw_region, libelle_programme, programme_index=None, programme_interregional_index=None):
     """
     Normalise une valeur région brute en liste de régions modernes.
 
     Args:
         raw_region (str or None): Valeur brute du champ "Région de l'opération"
         libelle_programme (str): Libellé du programme (pour fallback si région vide)
-        programme_index (dict or None): Index programme → région de la période, tel
-            que retourné par `indexer_programmes`. Défaut : 2021-2027.
+        programme_index (dict or None): Index programme → région unique de la période,
+            tel que retourné par `indexer_programmes`. Défaut : 2021-2027.
+        programme_interregional_index (dict or None): Index programme → liste de
+            régions couvertes, pour les programmes interrégionaux (massifs, bassins
+            fluviaux) qui n'ont, par construction, aucune région unique. Absent par
+            défaut (2021-2027 n'en a pas) ; porté en 2014-2020 par le descripteur de
+            source (issue #77).
 
     En 2014-2020, ce n'est pas un simple repli : la colonne région n'y est remplie
     qu'à 16,4 % (4 087 opérations sur 24 908), et le libellé du programme est la
-    voie de rattachement principale (issue #12). D'où le paramètre — la table de
-    la période est portée par le descripteur de source (`sources.SOURCES`).
+    voie de rattachement principale (issue #12). D'où les paramètres — les tables
+    de la période sont portées par le descripteur de source (`sources.SOURCES`).
 
-    L'index est passé **construit** plutôt que la table brute : `harmonize_region`
-    est appelée une fois par opération, et normaliser les 30 libellés de la table
+    Les index sont passés **construits** plutôt que les tables brutes : `harmonize_region`
+    est appelée une fois par opération, et normaliser les libellés des tables
     à chaque appel coûterait 24 908 fois le même travail.
 
     Returns:
         tuple: (regions_modernes: list[str], is_interregional: bool, is_national: bool)
             - regions_modernes: liste triée de noms de régions harmonisées
-            - is_interregional: True si >1 région unique après déduplication
+            - is_interregional: True si l'opération couvre plusieurs régions à la
+              fois — soit parce que son champ région brut en liste plusieurs, soit
+              parce qu'elle relève d'un programme interrégional connu (massif,
+              bassin fluvial) : les deux cas sont la même situation de fond, une
+              opération non attribuable à une seule région
             - is_national: True si l'opération n'est rattachée à aucune région (Volet national)
     """
 
@@ -316,12 +328,17 @@ def harmonize_region(raw_region, libelle_programme, programme_index=None):
         region = region_du_programme(libelle_programme, programme_index)
         if region is not None:
             return ([region], False, False)
-        # Sinon : Volet national, ou programme national **ou interrégional** sans
-        # région unique. En 2014-2020, les 5 programmes interrégionaux (Massif
-        # Central, Loire, Massif des Alpes, Rhône-Saône, Pyrénées) tombent donc
-        # ici : la donnée ne dit pas quelles régions couvre chaque massif, et
-        # cette liste de référence reste à sourcer. Choix de v1 assumé, tracé en
-        # issue #77 — les inventer serait pire que les compter à part.
+        # Sinon, programme interrégional connu (issue #77) : pas de région unique,
+        # mais une liste de régions couvertes, sourcée séparément (voir
+        # reference.programmes_interregionaux_2014_2020) — sortie du Volet national
+        # vers le même statut qu'une opération dont le champ région brut liste
+        # plusieurs régions, sans jamais ventiler son montant entre elles.
+        if programme_interregional_index and libelle_programme is not None:
+            regions_massif = programme_interregional_index.get(normalise_libelle(libelle_programme))
+            if regions_massif:
+                return (sorted(regions_massif), True, False)
+        # Sinon : Volet national, programme strictement national (FEAD, PNAT
+        # Europ'Act, PO nationaux FSE/IEJ), ou programme inconnu des deux tables.
         return ([], False, True)
 
     # Cas 2 : région présente → parser et normaliser

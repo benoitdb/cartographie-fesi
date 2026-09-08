@@ -46,11 +46,14 @@ stable — et les données engagées le portent (colonne `NumCCI`).
 from collections import namedtuple
 
 # Un programme opérationnel. `region` est la région **moderne** (post-2016) de
-# rattachement, ou None pour les programmes nationaux et interrégionaux — même
-# convention que region_mapping.PROGRAMME_TO_REGION_2014_2020. Ce rattachement ne peut
-# pas se contrôler ici — cette table-là est indexée par libellé Synergie, pas par CCI :
-# il est éprouvé dans tests/test_programmes_2014_2020.py contre un relevé indépendant,
-# saisi à la main, comme l'exige déjà le schéma de source (voir CLAUDE.md).
+# rattachement, la chaîne sentinelle "Interrégional" pour les 5 POI (massifs, bassins
+# fluviaux — pas de région unique par construction, mais une enveloppe qui doit être
+# comptée à part du Volet national, issue #77 : voir programme_totals_2014_2020.cle_region),
+# ou None pour les seuls programmes strictement nationaux (FEAD, PNAT Europ'Act, PO
+# nationaux FSE/IEJ). Ce rattachement ne peut pas se contrôler ici — cette table-là est
+# indexée par libellé Synergie, pas par CCI : il est éprouvé dans
+# tests/test_programmes_2014_2020.py contre un relevé indépendant, saisi à la main,
+# comme l'exige déjà le schéma de source (voir CLAUDE.md).
 Programme = namedtuple("Programme", "cci nom region")
 
 # Une ligne de la table 1.6 : un programme, un fonds, le total sur la période et sa
@@ -93,11 +96,11 @@ PROGRAMMES = [
     Programme("2014FR16M2OP011", "PO FEDER-FSE Guyane CR", "Guyane"),
     Programme("2014FR16M2OP012", "PO FEDER-FSE Mayotte", "Mayotte"),
     Programme("2014FR16M2TA001", "PO National d'Assistance Technique Interfonds Europ'Act", None),
-    Programme("2014FR16RFOP001", "POI Alpes", None),
-    Programme("2014FR16RFOP002", "POI Loire", None),
-    Programme("2014FR16RFOP003", "POI Massif Central", None),
-    Programme("2014FR16RFOP004", "POI Pyrénées", None),
-    Programme("2014FR16RFOP005", "POI Rhône Saône", None),
+    Programme("2014FR16RFOP001", "POI Alpes", "Interrégional"),
+    Programme("2014FR16RFOP002", "POI Loire", "Interrégional"),
+    Programme("2014FR16RFOP003", "POI Massif Central", "Interrégional"),
+    Programme("2014FR16RFOP004", "POI Pyrénées", "Interrégional"),
+    Programme("2014FR16RFOP005", "POI Rhône Saône", "Interrégional"),
     Programme("2014FR16RFOP006", "PO FEDER Alsace", "Grand Est"),
     Programme("2014FR16RFOP007", "PO FEDER Réunion CR", "La Réunion"),
 ]

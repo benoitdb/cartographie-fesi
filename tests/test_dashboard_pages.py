@@ -248,6 +248,19 @@ def test_pilotage_affiche_sur_volet_national_avec_pon_fse(donnees_fixture):
     assert not programmes & {"PO réunion", "PO Guadeloupe", "PO Martinique", "PO Guyane", "PO Mayotte"}
 
 
+def test_perimetre_interregional_affiche_les_programmes_et_leurs_regions(donnees_fixture):
+    """Issue #77 : les 5 programmes interrégionaux (massifs, bassins fluviaux) sont
+    sortis du Volet national vers ce périmètre dédié — leur montant reste groupé par
+    programme, jamais ventilé, mais la table doit dire quelles régions chacun couvre."""
+    at = _rendre_perimetre_2014_2020("Interrégional")
+    for df in at.dataframe:
+        if "Régions couvertes" in df.value.columns:
+            assert (df.value["Régions couvertes"] != "").all()
+            break
+    else:
+        raise AssertionError("Aucune table « Régions couvertes » sur le périmètre Interrégional")
+
+
 @pytest.mark.parametrize(
     ("perimetre", "libelle_po"),
     [

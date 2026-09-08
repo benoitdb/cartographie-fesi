@@ -6,9 +6,8 @@
     "Normandie": {
       "FEDER REACT-EU": 115720121
     },
-    "national": {
-      "FEDER REACT-EU": 7822019,
-      "FSE": 800060179
+    "Interrégional": {
+      "FEDER REACT-EU": 7822019
     },
     "Nouvelle-Aquitaine": {
       "FEDER REACT-EU": 184856815,
@@ -68,6 +67,9 @@
     "Martinique": {
       "FEDER REACT-EU": 159103812,
       "FSE": 38830420
+    },
+    "national": {
+      "FSE": 800060179
     }
   },
   "contrepartie_fse_iej": {
@@ -91,9 +93,8 @@
     "Normandie": {
       "FEDER REACT-EU": 133078139
     },
-    "national": {
-      "FEDER REACT-EU": 8995322,
-      "FSE": 894847747
+    "Interrégional": {
+      "FEDER REACT-EU": 8995322
     },
     "Nouvelle-Aquitaine": {
       "FEDER REACT-EU": 192966603,
@@ -153,6 +154,9 @@
     "Martinique": {
       "FEDER REACT-EU": 31544730,
       "FSE": 18964883
+    },
+    "national": {
+      "FSE": 894847747
     }
   },
   "libelles_programmes": {
@@ -196,5 +200,36 @@
     "2014FR16RFOP005": "POI Rhône Saône",
     "2014FR16RFOP006": "PO FEDER Alsace",
     "2014FR16RFOP007": "PO FEDER Réunion CR"
+  },
+  "regions_interregional": {
+    "Programme opérationnel Interrégional FEDER du Massif des Alpes 2014-2020": [
+      "Auvergne-Rhône-Alpes",
+      "Provence-Alpes-Côte d'Azur"
+    ],
+    "Programme opérationnel Interrégional FEDER Loire 2014-2020": [
+      "Centre-Val de Loire",
+      "Normandie",
+      "Bourgogne-Franche-Comté",
+      "Pays de la Loire",
+      "Nouvelle-Aquitaine",
+      "Auvergne-Rhône-Alpes",
+      "Occitanie"
+    ],
+    "Programme opérationnel interrégionnal Massif Central FEDER 2014-2020": [
+      "Bourgogne-Franche-Comté",
+      "Occitanie",
+      "Nouvelle-Aquitaine",
+      "Auvergne-Rhône-Alpes"
+    ],
+    "Programme opérationnel Interrégional FEDER Pyrénées 2014-2020": [
+      "Nouvelle-Aquitaine",
+      "Occitanie"
+    ],
+    "Programme opérationnel Interrégional FEDER Rhône-Saône 2014-2020": [
+      "Auvergne-Rhône-Alpes",
+      "Provence-Alpes-Côte d'Azur",
+      "Occitanie",
+      "Bourgogne-Franche-Comté"
+    ]
   }
 }
