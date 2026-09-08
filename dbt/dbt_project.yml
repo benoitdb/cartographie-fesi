@@ -41,6 +41,6 @@ vars:
   # Source : dashboard/utils/periodes.FUSIONS_ENVELOPPES_SANS_LIBELLE
   fusions_enveloppes_sans_libelle:
     "FEDER REACT-EU": "FEDER"
-  # Source : pages/5_Période_2014-2020.SOURCE_HORS_SYNERGIE — RECOPIÉE, faute de pouvoir importer un module Streamlit (cf. docstring).
+  # Source : dashboard/utils/periodes.REGIONS_SUBSTITUEES_2014_2020 (PR #139)
   regions_substituees_2014_2020: ["Bretagne", "Normandie", "Nouvelle-Aquitaine"]
   # <<< RÈGLES GÉNÉRÉES — fin

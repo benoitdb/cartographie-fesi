@@ -315,12 +315,11 @@ def generer_vars_regles(sortie):
     désormais lu depuis `utils.periodes` et `utils.cofinancement`, et déplié en
     SQL par Jinja.
 
-    DUPLICATION QUI RESTE, et c'est un résultat du spike : la liste des trois
-    régions substituées n'a pas de source de vérité importable. Elle vit dans
-    `SOURCE_HORS_SYNERGIE`, un dictionnaire de `pages/5_Période_2014-2020.py`,
-    donc dans un module Streamlit qu'on ne peut pas importer ici. Pour que dbt
-    la consomme, il faudrait d'abord la remonter dans `utils/periodes.py` — un
-    déplacement de trois lignes, mais qui doit être fait côté dashboard.
+    Les QUATRE règles de la période viennent désormais du Python, sans recopie.
+    La dernière — la liste des régions substituées — vivait dans un dictionnaire
+    de `pages/5_Période_2014-2020.py`, donc dans un module Streamlit qu'un script
+    ne peut pas importer ; la PR #139 l'a remontée dans `utils/periodes.py`
+    précisément pour ça.
     """
     routage = {
         programme: (perimetre or "national")
@@ -338,16 +337,18 @@ def generer_vars_regles(sortie):
         "  fusions_enveloppes_sans_libelle:",
         *[f'    {json.dumps(k, ensure_ascii=False)}: {json.dumps(v, ensure_ascii=False)}'
           for k, v in periodes.FUSIONS_ENVELOPPES_SANS_LIBELLE.items()],
-        "  # Source : pages/5_Période_2014-2020.SOURCE_HORS_SYNERGIE — RECOPIÉE,"
-        " faute de pouvoir importer un module Streamlit (cf. docstring).",
-        '  regions_substituees_2014_2020: ["Bretagne", "Normandie", "Nouvelle-Aquitaine"]',
+        "  # Source : dashboard/utils/periodes.REGIONS_SUBSTITUEES_2014_2020 (PR #139)",
+        "  regions_substituees_2014_2020: "
+        f"{json.dumps(sorted(periodes.REGIONS_SUBSTITUEES_2014_2020), ensure_ascii=False)}",
         MARQUEUR_FIN,
     ]
     texte = sortie.read_text(encoding="utf-8")
     debut, fin = texte.index(MARQUEUR_DEBUT), texte.index(MARQUEUR_FIN) + len(MARQUEUR_FIN)
     sortie.write_text(texte[:debut] + "\n".join(lignes) + texte[fin:], encoding="utf-8")
     print(f"  {sortie.name} : {len(routage)} programmes PON FSE, "
-          f"{len(FONDS_HORS_PLAFOND)} fonds hors plafond")
+          f"{len(FONDS_HORS_PLAFOND)} fonds hors plafond, "
+          f"{len(periodes.REGIONS_SUBSTITUEES_2014_2020)} régions substituées "
+          "— toutes importées, aucune recopie")
 
 
 if __name__ == "__main__":
