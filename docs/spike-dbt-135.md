@@ -191,14 +191,46 @@ PostgreSQL (« non-integer constant in GROUP BY ») et accepté par DuckDB.
 `dbt build` complet, 29 nœuds : **8,0 s de mur, 236 Mo de RSS crête**, base
 DuckDB de 16 Mo. Aucune régression sur les 246 Mo gagnés par #132.
 
-## Ce qui reste à faire pour une mise en production
+## Les quatre points arbitrés (2026-09-08)
 
-1. **Remonter `SOURCE_HORS_SYNERGIE` dans `utils/periodes.py`** pour éliminer la
-   dernière règle recopiée.
-2. **Brancher le harnais d'équivalence en CI**, sur la cible DuckDB — il n'a pas
-   besoin de PostgreSQL, donc il lève l'obstacle qui bloque #125 aujourd'hui.
-   Le harnais actuel couvre les 6 marts de base ; l'étendre aux 14 autres.
-3. **Décider du sort des vues `metabase/init/`** : les remplacer par les tables
-   dbt, ou les garder le temps d'une période de recouvrement.
-4. **`region_mapping.py` reste hors périmètre** — l'harmonisation des régions
-   s'exécute en amont du Parquet et n'a toujours pas été mesurée.
+**1. La dernière règle recopiée — remontée dans `utils/periodes.py`.** ✅ Fait.
+`SOURCE_HORS_SYNERGIE` vivait dans `pages/5_Période_2014-2020.py`, un module
+Streamlit qu'un script ne peut pas importer. Elle devient
+`periodes.REGIONS_SUBSTITUEES_2014_2020`, épinglée par trois tests
+([PR #139](https://github.com/benoitdb/cartographie-fesi/pull/139)). `generer.py`
+l'importe : **les quatre règles métier de la période viennent désormais toutes de
+leur source Python, aucune recopie.**
+
+**2. Le harnais en CI — sur les 6 marts de base.** ✅ Fait. Job `equivalence-dbt`,
+séparé des tests. Ce qui le rend possible là où `metabase/verify_*.py` ne l'est
+pas (#125) : la cible DuckDB ne demande aucune infrastructure, et les Parquet
+sont committés depuis #119/#132 — le clone nu a tout.
+
+Le job fait plus que rejouer le harnais : il **régénère** staging, seeds et
+règles, puis exige `git diff --exit-code` sur `dbt/`. Modifier une règle Python
+sans relancer le codegen fait rougir la CI, **sans base de données**. C'est la
+piste 1 de #125, obtenue comme effet de bord du codegen.
+
+Couverture assumée : les 14 autres marts n'ont pas d'oracle Python — leur vérité
+est la vue SQL, absente du clone nu — et les couvrir supposerait de figer des
+valeurs de référence ou de réimplémenter la règle côté test, ce qui recréerait la
+duplication qu'on vient de supprimer.
+
+**3. Les vues `metabase/init/` — période de recouvrement.** ✅ Fait. Les vues
+restent la vérité pour Metabase, dbt écrit dans son schéma, et
+`dbt/verifier_vues_postgres.py` vérifie à chaque régénération que les deux disent
+la même chose — **19 comparaisons, toutes au vert**. Les vues ne seront
+supprimées qu'une fois ce filet resté vert sur plusieurs millésimes.
+
+La dix-neuvième comparaison est un contrôle d'**écart** et non d'égalité : elle
+vérifie que la divergence de `engage_by_perimetre_fonds` est exactement
+l'interrégional FEDER et FSE+ ([#138](https://github.com/benoitdb/cartographie-fesi/issues/138)),
+ni plus ni autre chose. Elle redeviendra un contrôle d'égalité quand #138 sera
+corrigée.
+
+**4. `region_mapping.py` — second spike dédié.**
+[Issue #140](https://github.com/benoitdb/cartographie-fesi/issues/140) ouverte,
+une demi-journée, même méthode que celui-ci. Point à poser avant de coder :
+contrairement aux marts, **l'harmonisation n'est pas dupliquée aujourd'hui** —
+le portage ne supprimerait donc aucune duplication, et le bénéfice serait la
+couverture, pas la déduplication.
