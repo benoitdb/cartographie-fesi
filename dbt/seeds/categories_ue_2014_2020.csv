@@ -1,0 +1,19 @@
+region,categorie_ue,plafond_min,plafond_max
+Auvergne-Rhône-Alpes,,0.5,0.6
+Bourgogne-Franche-Comté,,0.5,0.6
+Bretagne,plus développée,0.5,0.5
+Centre-Val de Loire,plus développée,0.5,0.5
+Corse,en transition,0.6,0.6
+Grand Est,,0.5,0.6
+Guadeloupe,moins développée,0.85,0.85
+Guyane,moins développée,0.85,0.85
+Hauts-de-France,en transition,0.6,0.6
+La Réunion,moins développée,0.85,0.85
+Martinique,moins développée,0.85,0.85
+Mayotte,moins développée,0.85,0.85
+Normandie,,0.5,0.6
+Nouvelle-Aquitaine,,0.5,0.6
+Occitanie,,0.5,0.6
+Pays de la Loire,plus développée,0.5,0.5
+Provence-Alpes-Côte d'Azur,plus développée,0.5,0.5
+Île-de-France,plus développée,0.5,0.5

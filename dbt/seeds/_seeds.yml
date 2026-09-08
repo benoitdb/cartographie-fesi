@@ -25,3 +25,11 @@ seeds:
         categorie_ue: varchar
         # Un taux, pas un montant : 4 décimales suffisent (0,85 / 0,7 / 0,5686…).
         plafond_cofinancement: "decimal(8,6)"
+
+  - name: categories_ue_2014_2020
+    config:
+      column_types:
+        region: varchar
+        categorie_ue: varchar
+        plafond_min: "decimal(8,6)"
+        plafond_max: "decimal(8,6)"

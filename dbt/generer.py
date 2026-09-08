@@ -43,7 +43,12 @@ sys.path.insert(0, str(REPO / "dashboard"))
 
 import schema_source  # noqa: E402
 
-from utils.cofinancement import plafond_categorie  # noqa: E402
+from utils import periodes  # noqa: E402
+from utils.cofinancement import (  # noqa: E402
+    FONDS_HORS_PLAFOND,
+    plafond_categorie,
+    plafond_intervalle_2014_2020,
+)
 
 # Même table que `metabase/load_data.INTERNAL_KEY_TO_COLUMN`. Recopiée ici faute
 # de pouvoir l'importer : `load_data.py` vit sur la branche `feat/metabase-121`,
@@ -147,7 +152,18 @@ def generer_staging(source_id, cle_schema, periode, parquet, sortie):
         if reel is None:
             manquantes.append(libelle_attendu)
             continue
-        paires.append((f'"{reel}"', colonne_sql))
+        # TRY_CAST et non un accès direct : le Parquet n'est PAS un contrat
+        # typé. La même colonne logique change de type physique d'une source à
+        # l'autre — « Union co-financing rate (%) » de Nouvelle-Aquitaine est
+        # une chaîne ('0.4', '0.150000078336386') là où Normandie et Bretagne
+        # publient des flottants. PostgreSQL ne le voit jamais :
+        # `load_data.parse_numeric` / `parse_date` normalisent en Python avant
+        # l'insertion, et renvoient None sur échec. TRY_CAST est l'équivalent
+        # exact côté DuckDB — la valeur illisible devient NULL au lieu de faire
+        # échouer le modèle.
+        type_sql = TYPE_SQL_PAR_COLONNE.get(colonne_sql)
+        expression = f'TRY_CAST("{reel}" AS {type_sql})' if type_sql else f'"{reel}"'
+        paires.append((expression, colonne_sql))
 
     if manquantes:
         raise SystemExit(f"{source_id}: colonnes attendues absentes du Parquet : {manquantes}")
@@ -182,16 +198,50 @@ def generer_staging(source_id, cle_schema, periode, parquet, sortie):
 
 
 def generer_seed_programme_totals(sortie):
-    with open(DATA / "programme_totals.json", encoding="utf-8") as f:
-        data = json.load(f)
+    """Les DEUX périodes dans un seul seed, comme la table `programme_totals`.
+
+    Les deux JSON ont déjà la même forme {region: {fonds: montant}} — celui de
+    2014-2020 porte l'Accord de partenariat et les maquettes REACT-EU déjà
+    fusionnées, et la correction IEJ (contrepartie FSE retranchée) est faite en
+    amont par `programme_totals_2014_2020.py`. Rien à refaire ici.
+    """
+    fichiers = (
+        ("2021-2027", "programme_totals.json"),
+        ("2014-2020", "programme_totals_2014_2020.json"),
+    )
     with open(sortie, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["periode", "region", "fonds", "montant_ue"])
         n = 0
-        for region, par_fonds in data.items():
-            for fonds, montant in par_fonds.items():
-                w.writerow(["2021-2027", region, fonds, montant])
-                n += 1
+        for periode, fichier in fichiers:
+            with open(DATA / fichier, encoding="utf-8") as src:
+                data = json.load(src)
+            for region, par_fonds in data.items():
+                for fonds, montant in par_fonds.items():
+                    w.writerow([periode, region, fonds, montant])
+                    n += 1
+    print(f"  {sortie.relative_to(DBT_DIR)} ({n} lignes, 2 périodes)")
+
+
+def generer_seed_categories_ue_2014_2020(sortie):
+    """Plafonds 2014-2020 par région moderne, résolus en (min, max) EN PYTHON.
+
+    Un intervalle et non un nombre : six régions modernes sur treize réunissent
+    d'anciennes régions de catégories différentes, et le fichier d'opérations ne
+    porte pas l'ancienne région dont relève chaque ligne. Même arbitrage que le
+    plafond 2021-2027 — la règle vit dans `utils.cofinancement`, pas en SQL.
+    """
+    with open(DATA / "categories_ue_2014_2020.json", encoding="utf-8") as f:
+        data = json.load(f)
+    with open(sortie, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["region", "categorie_ue", "plafond_min", "plafond_max"])
+        n = 0
+        for region, infos in data.items():
+            intervalle = plafond_intervalle_2014_2020(infos)
+            minimum, maximum = intervalle if intervalle else ("", "")
+            w.writerow([region, infos.get("categorie_ue") or "", minimum, maximum])
+            n += 1
     print(f"  {sortie.relative_to(DBT_DIR)} ({n} lignes)")
 
 
@@ -252,6 +302,54 @@ def nom_modele(source_id):
     return "stg_operations_" + source_id.replace("-", "_")
 
 
+MARQUEUR_DEBUT = "  # >>> RÈGLES GÉNÉRÉES — début (dbt/generer.py, ne pas éditer)"
+MARQUEUR_FIN = "  # <<< RÈGLES GÉNÉRÉES — fin"
+
+
+def generer_vars_regles(sortie):
+    """Réécrit le bloc de règles de `dbt_project.yml` depuis le Python.
+
+    C'est le second volet de la réponse à l'issue #125 : les règles métier
+    cessent d'exister en double. Ce qui était recopié à la main dans le SQL des
+    vues — routage du PON FSE, fonds hors plafond, fusion des enveloppes — est
+    désormais lu depuis `utils.periodes` et `utils.cofinancement`, et déplié en
+    SQL par Jinja.
+
+    DUPLICATION QUI RESTE, et c'est un résultat du spike : la liste des trois
+    régions substituées n'a pas de source de vérité importable. Elle vit dans
+    `SOURCE_HORS_SYNERGIE`, un dictionnaire de `pages/5_Période_2014-2020.py`,
+    donc dans un module Streamlit qu'on ne peut pas importer ici. Pour que dbt
+    la consomme, il faudrait d'abord la remonter dans `utils/periodes.py` — un
+    déplacement de trois lignes, mais qui doit être fait côté dashboard.
+    """
+    routage = {
+        programme: (perimetre or "national")
+        for programme, perimetre in periodes.REGIONS_PON_FSE_2014_2020.items()
+    }
+    lignes = [
+        MARQUEUR_DEBUT,
+        "  # Source : dashboard/utils/periodes.REGIONS_PON_FSE_2014_2020",
+        "  routage_pon_fse_2014_2020:",
+        *[f'    {json.dumps(k, ensure_ascii=False)}: {json.dumps(v, ensure_ascii=False)}'
+          for k, v in routage.items()],
+        "  # Source : dashboard/utils/cofinancement.FONDS_HORS_PLAFOND",
+        f"  fonds_hors_plafond: {json.dumps(sorted(FONDS_HORS_PLAFOND), ensure_ascii=False)}",
+        "  # Source : dashboard/utils/periodes.FUSIONS_ENVELOPPES_SANS_LIBELLE",
+        "  fusions_enveloppes_sans_libelle:",
+        *[f'    {json.dumps(k, ensure_ascii=False)}: {json.dumps(v, ensure_ascii=False)}'
+          for k, v in periodes.FUSIONS_ENVELOPPES_SANS_LIBELLE.items()],
+        "  # Source : pages/5_Période_2014-2020.SOURCE_HORS_SYNERGIE — RECOPIÉE,"
+        " faute de pouvoir importer un module Streamlit (cf. docstring).",
+        '  regions_substituees_2014_2020: ["Bretagne", "Normandie", "Nouvelle-Aquitaine"]',
+        MARQUEUR_FIN,
+    ]
+    texte = sortie.read_text(encoding="utf-8")
+    debut, fin = texte.index(MARQUEUR_DEBUT), texte.index(MARQUEUR_FIN) + len(MARQUEUR_FIN)
+    sortie.write_text(texte[:debut] + "\n".join(lignes) + texte[fin:], encoding="utf-8")
+    print(f"  {sortie.name} : {len(routage)} programmes PON FSE, "
+          f"{len(FONDS_HORS_PLAFOND)} fonds hors plafond")
+
+
 if __name__ == "__main__":
     print("Modèles de staging :")
     for source_id, cle_schema, periode, fichier in SOURCES_DU_SPIKE:
@@ -265,3 +363,8 @@ if __name__ == "__main__":
     print("Seeds :")
     generer_seed_programme_totals(DBT_DIR / "seeds" / "programme_totals.csv")
     generer_seed_region_metadata(DBT_DIR / "seeds" / "region_metadata.csv")
+    generer_seed_categories_ue_2014_2020(
+        DBT_DIR / "seeds" / "categories_ue_2014_2020.csv"
+    )
+    print("Règles métier :")
+    generer_vars_regles(DBT_DIR / "dbt_project.yml")

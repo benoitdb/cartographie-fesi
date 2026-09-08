@@ -26,17 +26,21 @@ vars:
   # Lancer dbt DEPUIS `dbt/` : DuckDB résout ce chemin contre le cwd du process.
   chemin_data: "../data/processed"
 
-  # LES DEUX RÈGLES DE LA PÉRIODE 2014-2020, en données et non en SQL écrit en
-  # dur (sonde du spike, issue #135 étape 6 — répond à #125).
-  #
-  # Source de vérité Python : le `if/elif` de pages/5_Période_2014-2020.py pour
-  # la substitution, `periodes.REGIONS_PON_FSE_2014_2020` pour le routage. Dans
-  # une mise en œuvre réelle, `generer.py` les écrirait ici au lieu qu'elles
-  # soient saisies — c'est le même codegen que pour le staging.
-  regions_substituees_2014_2020: ["Bretagne", "Normandie", "Nouvelle-Aquitaine"]
+  # >>> RÈGLES GÉNÉRÉES — début (dbt/generer.py, ne pas éditer)
+  # Source : dashboard/utils/periodes.REGIONS_PON_FSE_2014_2020
   routage_pon_fse_2014_2020:
+    "Programme Opérationnel National FSE": "national"
+    "Programme Opérationnel IEJ": "national"
     "PO réunion": "La Réunion"
     "PO Guadeloupe": "Guadeloupe"
     "PO Martinique": "Martinique"
     "PO Guyane": "Guyane"
     "PO Mayotte": "Mayotte"
+  # Source : dashboard/utils/cofinancement.FONDS_HORS_PLAFOND
+  fonds_hors_plafond: ["FEAD", "FEDER REACT-EU", "IEJ"]
+  # Source : dashboard/utils/periodes.FUSIONS_ENVELOPPES_SANS_LIBELLE
+  fusions_enveloppes_sans_libelle:
+    "FEDER REACT-EU": "FEDER"
+  # Source : pages/5_Période_2014-2020.SOURCE_HORS_SYNERGIE — RECOPIÉE, faute de pouvoir importer un module Streamlit (cf. docstring).
+  regions_substituees_2014_2020: ["Bretagne", "Normandie", "Nouvelle-Aquitaine"]
+  # <<< RÈGLES GÉNÉRÉES — fin
