@@ -111,9 +111,12 @@ renvoie vers `dashboard/requirements.txt` pour éviter la duplication.
 
 ## Commandes
 
-Trois environnements, chacun avec son `requirements.txt` : `dashboard/venv/`
-pour l'application, le pipeline (pandas, openpyxl, rapidfuzz), et `venv/` à la
-racine pour les tests (`requirements-dev.txt`).
+Quatre environnements, chacun avec son `requirements.txt` : `dashboard/venv/`
+pour l'application, le pipeline (pandas, pyarrow, openpyxl, rapidfuzz), `venv/` à
+la racine pour les tests (`requirements-dev.txt`), et `dbt/venv/` pour la couche
+dbt (`requirements-dbt.txt`). **dbt ne doit jamais entrer dans
+`dashboard/requirements.txt`** : Streamlit Cloud ne régénère aucune donnée, il
+lit des Parquet committés.
 
 - **Lancer le dashboard** (depuis `dashboard/`, les imports `utils.*` en
   dépendent) :
@@ -167,6 +170,43 @@ racine pour les tests (`requirements-dev.txt`).
   permanentes. **Ne pas ajouter d'`ignore` sans ouvrir l'issue qui va avec** —
   et la retirer fait partie de la correction.
 
+- **Couche dbt** (issue #135) — 20 marts qui portent les 19 vues SQL de
+  `metabase/init/`, sur deux cibles : DuckDB (embarqué, zéro infra) et PostgreSQL
+  (la stack Metabase). Lancer dbt **depuis `dbt/`** : DuckDB résout la variable
+  `chemin_data` contre le répertoire courant du process.
+  ```
+  dbt/venv/bin/python dbt/generer.py    # AVANT tout dbt build — voir ci-dessous
+  cd dbt && venv/bin/dbt build --profiles-dir . --target duckdb
+  cd dbt && POSTGRES_USER=fesi POSTGRES_PASSWORD=fesi_local \
+      venv/bin/dbt build --profiles-dir . --target postgres
+  ```
+  **`generer.py` n'est pas optionnel** : le SQL de staging, les seeds et les
+  variables de règles de `dbt_project.yml` sont **générés** depuis le Python
+  (`schema_source`, `periodes`, `cofinancement`). C'est ce qui empêche les règles
+  métier d'exister en double (issue #125) — dbt ne sait pas importer du Python,
+  ses macros sont du Jinja. Modifier une règle Python sans relancer le codegen
+  fait rougir la CI, qui exige `git diff --exit-code` sur `dbt/` après
+  régénération.
+
+- **Vérifier la couche dbt** — deux harnais qui se recouvrent volontairement peu :
+  ```
+  dbt/venv/bin/python dbt/verifier_equivalence.py     # vs agregats.py, sur DuckDB
+  dbt/venv/bin/python dbt/verifier_vues_postgres.py   # vs les 19 vues SQL
+  ```
+  Le premier tourne **en CI** (job `equivalence-dbt`) : la cible DuckDB ne
+  demande aucune infrastructure et les Parquet sont committés, donc un clone nu
+  suffit. C'est ce qui débloque le garde-fou que l'issue #125 décrivait comme
+  impossible à mettre en CI. Le second a besoin d'un PostgreSQL chargé **et des
+  vues, qui vivent sur la branche `feat/metabase-121`, pas sur `main`** : c'est
+  le filet de la période de recouvrement, à relancer à chaque nouveau millésime
+  tant que les deux implémentations coexistent.
+
+  **Une divergence est attendue, et vérifiée comme telle** :
+  `engage_by_perimetre_fonds` porte les trois partitions d'`agregats.py` là où
+  `v_engage_by_perimetre_fonds` en perd une (interrégional, 1,625 M€ —
+  issue #138). Le script contrôle que l'écart est exactement celui-là, ni plus ni
+  autre chose.
+
 ## Quoi (repo map)
 
 - `dashboard/` — application Streamlit. `Accueil.py` = point d'entrée,
@@ -192,6 +232,9 @@ racine pour les tests (`requirements-dev.txt`).
   mémoire Streamlit à chaque page pour n'en afficher qu'une. Tous les JSON
   sont committés (open data, nécessaire au déploiement Streamlit Cloud — voir
   les commentaires du `.gitignore`). Le XLSX source reste gitignoré
+- `dbt/` — la couche dbt (issue #135). `models/staging/` est **généré**, ne pas
+  l'éditer à la main ; `models/marts/` est écrit à la main ; `generer.py` fait le
+  pont avec le Python. `dbt/venv/`, `dbt/target/` et `dbt/logs/` sont gitignorés.
 - `docs/sources/` — notes de travail sur les documents de référence, non versionné
 
 ## Pièges non devinables
