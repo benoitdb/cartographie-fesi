@@ -1,0 +1,27 @@
+# Projet dbt du spike (issue #135). Isolé dans `dbt/` : rien ici n'est importé
+# par le dashboard ni par le pipeline, et `requirements-dbt.txt` est séparé de
+# `dashboard/requirements.txt` — dbt ne doit jamais partir sur Streamlit Cloud.
+name: fesi
+version: "0.1.0"
+profile: fesi
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  fesi:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  fesi:
+    +quote_columns: false
+
+vars:
+  # Chemin des Parquet, relatif au répertoire depuis lequel dbt est lancé.
+  # Lancer dbt DEPUIS `dbt/` : DuckDB résout ce chemin contre le cwd du process.
+  chemin_data: "../data/processed"

@@ -1,0 +1,6 @@
+# Dépendances du spike dbt (issue #135) — VOLONTAIREMENT séparées de
+# dashboard/requirements.txt : dbt ne doit jamais partir sur Streamlit Cloud,
+# qui ne régénère aucune donnée (les Parquet sont committés, cf. CLAUDE.md).
+dbt-core~=1.9
+dbt-duckdb~=1.9
+dbt-postgres~=1.9

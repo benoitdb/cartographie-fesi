@@ -1,0 +1,26 @@
+# Deux cibles pour LA MÊME base de modèles — c'est la question du spike
+# (#133 point 3 : « matérialisé une fois, servi deux fois »).
+#
+#   duckdb   : lit directement les Parquet de data/processed/, zéro infra.
+#              C'est la cible côté Streamlit.
+#   postgres : la stack Metabase locale (metabase/docker-compose.yml, port 5437).
+#              C'est la cible côté Metabase.
+#
+# Le taux de SQL qu'il faut forker entre les deux est une des mesures du spike.
+fesi:
+  target: duckdb
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "target/fesi.duckdb"
+      threads: 4
+
+    postgres:
+      type: postgres
+      host: localhost
+      port: 5437
+      user: "{{ env_var('POSTGRES_USER', 'fesi') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', 'fesi_local') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'fesi') }}"
+      schema: dbt_spike
+      threads: 4

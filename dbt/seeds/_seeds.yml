@@ -1,0 +1,27 @@
+# Types explicites, pas d'inférence — et c'est un vrai enseignement du spike,
+# pas une formalité de configuration.
+#
+# Sans `column_types`, DuckDB a sniffé `montant_ue` en INTEGER puis échoué sur
+# la première ligne à 4 589 233 748 (FSE+ national). Surtout : l'inférence aurait
+# donné un DOUBLE là où PostgreSQL porte du NUMERIC. Les deux cibles auraient
+# alors arrondi différemment les mêmes montants, ce qui casse le seul critère de
+# validation qui vaille ici — l'égalité au centime avec les vues existantes.
+#
+# DECIMAL(18, 2) est l'équivalent DuckDB du NUMERIC de `01_schema.sql` : exact,
+# et suffisant pour des montants en euros (le plus gros est ~4,6 Md€).
+seeds:
+  - name: programme_totals
+    config:
+      column_types:
+        periode: varchar
+        region: varchar
+        fonds: varchar
+        montant_ue: "decimal(18,2)"
+
+  - name: region_metadata
+    config:
+      column_types:
+        region: varchar
+        categorie_ue: varchar
+        # Un taux, pas un montant : 4 décimales suffisent (0,85 / 0,7 / 0,5686…).
+        plafond_cofinancement: "decimal(8,6)"
