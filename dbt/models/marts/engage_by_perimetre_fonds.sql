@@ -13,13 +13,13 @@ GROUP BY periode, region, fonds
 UNION ALL
 
 SELECT periode, 'national' AS perimetre, fonds, SUM(montant_ue) AS engage
-FROM {{ ref('stg_operations_2021_2027') }}
+FROM {{ ref('stg_operations_2021_2027_conventionnees') }}
 WHERE is_national AND fonds IS NOT NULL
 GROUP BY periode, fonds
 
 UNION ALL
 
 SELECT periode, 'interregional' AS perimetre, fonds, SUM(montant_ue) AS engage
-FROM {{ ref('stg_operations_2021_2027') }}
+FROM {{ ref('stg_operations_2021_2027_conventionnees') }}
 WHERE is_interregional AND fonds IS NOT NULL
 GROUP BY periode, fonds

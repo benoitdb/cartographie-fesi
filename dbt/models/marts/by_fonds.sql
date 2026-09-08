@@ -3,6 +3,6 @@
 SELECT
     source_id, periode, fonds,
     {{ resume() }}
-FROM {{ ref('stg_operations_2021_2027') }}
+FROM {{ ref('stg_operations_2021_2027_conventionnees') }}
 WHERE fonds IS NOT NULL
 GROUP BY source_id, periode, fonds

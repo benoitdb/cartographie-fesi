@@ -34,7 +34,7 @@ SELECT
          AND o.montant_ue / o.depenses_eligibles > r.plafond_cofinancement * 1.000001
         THEN TRUE ELSE FALSE
     END AS depasse_plafond
-FROM {{ ref('stg_operations_2021_2027') }} o
+FROM {{ ref('stg_operations_2021_2027_conventionnees') }} o
 JOIN {{ ref('region_metadata') }} r ON r.region = o.region
 WHERE NOT o.is_interregional AND NOT o.is_national
   AND o.fonds NOT IN ('FEDER REACT-EU', 'IEJ', 'FEAD')
