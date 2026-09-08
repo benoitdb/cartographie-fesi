@@ -16,6 +16,21 @@
 -- qui se chevauchent). 2021-2027 n'a qu'une source, donc pas d'ambiguïté ici —
 -- la fusion multi-sources par période reste un sujet de Phase 3.
 
+-- LES TROIS PARTITIONS D'`agregats.py` SONT EXCLUSIVES (mono-région,
+-- interrégional, national) : une vue qui se veut « l'engagé par périmètre » doit
+-- les porter toutes les trois, sinon sa somme n'est pas le total de la période.
+-- Cette vue n'en portait que deux et perdait l'interrégional — 13 opérations,
+-- 1,625 M€ sur 2021-2027, soit 0,02 % : assez peu pour passer inaperçu à l'oeil,
+-- assez pour faire mentir un KPI (issue #138).
+--
+-- C'est le MÊME défaut que `v_engage_all` a connu et corrigé en phase #129 ; la
+-- correction n'avait pas été reportée ici, faute d'un contrôle de complétude sur
+-- cette vue-ci. `verify_vues_unifiees.py` en a désormais un (point 3 bis).
+--
+-- Sans effet sur `v_pilotage`, qui joint `programme_totals` : le périmètre
+-- `interregional` n'y a aucune ligne d'enveloppe, le LEFT JOIN l'écarte. La
+-- correction rétablit donc la justesse de cette vue lue seule, sans déplacer
+-- aucun taux de consommation.
 CREATE VIEW v_engage_by_perimetre_fonds AS
 SELECT periode, region AS perimetre, fonds, SUM(montant_ue_total) AS engage
 FROM v_by_region_fonds
@@ -24,6 +39,11 @@ UNION ALL
 SELECT periode, 'national' AS perimetre, fonds, SUM(montant_ue) AS engage
 FROM operations
 WHERE is_national AND fonds IS NOT NULL
+GROUP BY periode, fonds
+UNION ALL
+SELECT periode, 'interregional' AS perimetre, fonds, SUM(montant_ue) AS engage
+FROM operations
+WHERE is_interregional AND fonds IS NOT NULL
 GROUP BY periode, fonds;
 
 CREATE VIEW v_pilotage AS
