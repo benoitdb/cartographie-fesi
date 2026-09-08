@@ -492,3 +492,51 @@ def test_regions_pon_fse_route_les_sept_programmes():
     from utils.periodes import REGIONS_PON_FSE_2014_2020
 
     assert REGIONS_PON_FSE_2014_2020 == REGIONS_ATTENDUES_PON_FSE
+
+
+# Les trois régions qui se substituent à Synergie (issue #95). Épinglées ici parce
+# que la table a désormais **plusieurs consommateurs hors du dashboard** : les vues
+# SQL de `metabase/init/` la réécrivent (issue #125) et le codegen dbt l'importe
+# (issue #135). Une quatrième région qui publierait son fichier doit être ajoutée
+# partout ; ce test fait échouer la suite si on ne l'ajoute qu'ici, et sert de
+# rappel de la liste des endroits à mettre à jour.
+REGIONS_SUBSTITUEES_ATTENDUES = {
+    "Normandie": "2014-2020-normandie",
+    "Nouvelle-Aquitaine": "2014-2020-nouvelle-aquitaine",
+    "Bretagne": "2014-2020-bretagne-officiel",
+}
+
+
+def test_regions_substituees_pointent_sur_leur_source():
+    from utils.periodes import REGIONS_SUBSTITUEES_2014_2020
+
+    assert REGIONS_SUBSTITUEES_2014_2020 == REGIONS_SUBSTITUEES_ATTENDUES
+
+
+def test_regions_substituees_sont_des_cles_de_sources_connues():
+    """Chaque valeur doit être une clé réelle de `sources.SOURCES`.
+
+    Sinon la page charge un fichier qui n'existe pas et se rabat silencieusement
+    sur le sous-comptage Synergie — exactement le défaut que #95 a corrigé.
+    """
+    sys.path.insert(0, str(RACINE / "data-pipeline"))
+    from sources import SOURCES
+
+    from utils.periodes import REGIONS_SUBSTITUEES_2014_2020
+
+    for region, source_id in REGIONS_SUBSTITUEES_2014_2020.items():
+        assert source_id in SOURCES, f"{region} pointe sur une source inconnue : {source_id}"
+
+
+def test_la_page_2014_2020_ne_redefinit_pas_la_table():
+    """La page doit IMPORTER la règle, pas en garder une copie.
+
+    Elle l'a longtemps définie en propre (`SOURCE_HORS_SYNERGIE`), ce qui la
+    rendait inaccessible à tout script — un module Streamlit ne s'importe pas.
+    Ce test empêche le retour en arrière.
+    """
+    page = (RACINE / "dashboard" / "pages" / "5_Période_2014-2020.py").read_text(
+        encoding="utf-8"
+    )
+    assert "REGIONS_SUBSTITUEES_2014_2020" in page
+    assert '"Normandie": SOURCE_NORMANDIE_2014_2020' not in page

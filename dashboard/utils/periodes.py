@@ -62,6 +62,26 @@ SOURCE_NOUVELLE_AQUITAINE_2014_2020 = "2014-2020-nouvelle-aquitaine"
 SOURCE_BRETAGNE_2014_2020 = "2014-2020-bretagne-officiel"
 SOURCE_PON_FSE_2014_2020 = "2014-2020-pon-fse"
 
+# Les trois régions qui SE SUBSTITUENT à Synergie sur leur périmètre, chacune
+# ayant son propre fichier régional complet (issue #95) : Normandie n'apparaît
+# même pas dans `aggregates.by_region` de Synergie, Nouvelle-Aquitaine n'y figure
+# qu'à la marge (25 opérations), et Bretagne (3 opérations) en est sortie à son
+# tour depuis l'export officiel data.bretagne.bzh. Le PON FSE reste hors de cette
+# table : ses opérations couvrent sept programmes distincts à ventiler, pas un
+# seul périmètre régional (#95, point 3, cf. REGIONS_PON_FSE_2014_2020).
+#
+# Ici et non dans la page qui l'utilise : c'est une RÈGLE MÉTIER de la période,
+# pas un détail d'écran, et d'autres consommateurs que Streamlit en ont besoin —
+# les vues SQL de `metabase/init/` la réécrivent aujourd'hui à la main (issue
+# #125), et le codegen dbt (#135) ne pouvait pas l'importer tant qu'elle vivait
+# dans un module Streamlit. Un module `utils` s'importe depuis un script ; une
+# page, non.
+REGIONS_SUBSTITUEES_2014_2020 = {
+    "Normandie": SOURCE_NORMANDIE_2014_2020,
+    "Nouvelle-Aquitaine": SOURCE_NOUVELLE_AQUITAINE_2014_2020,
+    "Bretagne": SOURCE_BRETAGNE_2014_2020,
+}
+
 # clé sémantique -> libellé **canonique** du dashboard, celui de 2021-2027 — non
 # parce qu'il serait meilleur, mais parce que c'est celui que le code existant lit
 # déjà. Toutes les sources s'y ramènent.
