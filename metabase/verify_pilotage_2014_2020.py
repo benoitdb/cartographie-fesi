@@ -24,6 +24,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+import pandas as pd
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR.parent / "data" / "processed"
 DASHBOARD_DIR = SCRIPT_DIR.parent / "dashboard"
@@ -108,10 +110,15 @@ def charger(fichier):
 
 def charger_source(source_id):
     """(opérations, libellés bruts) d'une source, ou sortie en erreur si son
-    JSON manque : mieux vaut ne rien vérifier du tout qu'annoncer une
+    Parquet manque : mieux vaut ne rien vérifier du tout qu'annoncer une
     concordance établie sur un périmètre amputé."""
     descriptor = sources_module.SOURCES[source_id]
     fichier = descriptor["fichier_sortie"]
+    parquet = Path(fichier).with_suffix(".parquet")
+    parquet_path = DATA_DIR / parquet
+    if parquet_path.exists():
+        df = pd.read_parquet(parquet_path)
+        return df.to_dict("records"), libelles_bruts(source_id)
     data = charger(fichier)
     if data is None:
         sys.exit(f"{fichier} absent : la fusion de {source_id} ne peut pas être vérifiée.")
@@ -197,7 +204,7 @@ def engage_python():
     `fonds IS NOT NULL` que `v_engage_2014_2020`."""
     engage = defaultdict(float)
     for op in operations_par_perimetre():
-        if op["fonds"] is None:
+        if op["fonds"] is None or (isinstance(op["fonds"], float) and pd.isna(op["fonds"])):
             continue
         engage[(op["perimetre"], op["fonds"])] += op["montant_ue"] or 0
     return dict(engage)
