@@ -241,6 +241,13 @@ def appliquer_libelles_programmes(df, libelles_programmes):
 MONTANT_UE = "Montant UE"
 DEPENSES = "Total des dépenses éligibles"
 TAUX_COFINANCEMENT = "Taux de cofinancement"
+TAUX_COFINANCEMENT_DECLARE = "Taux de cofinancement déclaré"
+TAUX_COFINANCEMENT_DIVERGENT = "Taux de cofinancement divergent"
+
+# Écart entre le taux déclaré par une source régionale 2014-2020 et le taux
+# recalculé (montant / dépenses) à partir duquel l'écart est signalé plutôt
+# qu'ignoré (arbitrage Phase 4, #127).
+SEUIL_ECART_TAUX_DECLARE = 0.01
 
 # Le libellé affiché du montant, lui, ne se normalise pas : cf. piège 1 de la
 # docstring.
@@ -351,6 +358,14 @@ MENTION_PLAFONDS_PERIODE = (
     "§3 relève lui-même le plafond des axes mettant en œuvre l'Initiative pour l'emploi des "
     "jeunes) et **FEAD**, qui n'est pas un Fonds ESI mais un transfert hors enveloppe "
     "structurelle (art. 94), régi par le règlement 223/2014."
+)
+
+MENTION_TAUX_DECLARE_DIVERGENT = (
+    "Le taux affiché est **recalculé** (montant UE / dépenses éligibles), pour rester "
+    "comparable aux autres sources de la période — Synergie et le PON FSE ne portent aucun "
+    "taux déclaré. Sur {n} opération(s) ({montant}), le taux déclaré par le fichier source "
+    "diverge de plus d'un point du taux recalculé : signalé comme un point de qualité de "
+    "source à vérifier, pas comme un dépassement."
 )
 
 # Pourquoi un taux au-dessus du plafond n'est pas, en soi, une irrégularité. À afficher avec
@@ -630,13 +645,24 @@ def normaliser_operations(df, source):
     `PERIODE_2014_2020` vaut la même chaîne que `SOURCE_SYNERGIE_2014_2020` : le fichier
     Synergie reste utilisable indifféremment sous l'un ou l'autre nom.
 
-    Deux transformations, et rien d'autre — aucune valeur n'est inventée :
+    Trois transformations, et rien d'autre — aucune valeur n'est inventée :
 
     - les colonnes équivalentes sont **renommées** (`RENOMMAGES`) ;
-    - le taux de cofinancement, présent dans le fichier 2021-2027 et dans les fichiers
-      Normandie/Nouvelle-Aquitaine mais **absent** du fichier Synergie, est **dérivé** des
-      deux montants quand il manque. Il s'agit d'un simple quotient de deux colonnes
-      présentes, pas d'une donnée reconstituée.
+    - le taux de cofinancement est **toujours recalculé** (montant / dépenses),
+      sauf pour 2021-2027 qui ne porte que le taux déclaré par le fichier (pas de
+      colonne dépenses à comparer sur cette période, hors périmètre de #127) ;
+    - pour les trois sources 2014-2020 qui déclarent aussi un taux dans leur
+      fichier (Bretagne, Normandie, Nouvelle-Aquitaine), ce taux déclaré est
+      conservé à part (`TAUX_COFINANCEMENT_DECLARE`) et comparé au taux
+      recalculé : un écart de plus d'un point (`SEUIL_ECART_TAUX_DECLARE`) est
+      signalé (`TAUX_COFINANCEMENT_DIVERGENT`), sans jamais faire foi à la place
+      du taux recalculé — arbitrage #127 : les deux mesures de la même
+      opération ne concordaient pas systématiquement (8 opérations, 23,8 M€),
+      et aucune des deux sources n'est plus légitime que l'autre a priori. Le
+      taux recalculé reste la référence unique affichée et comparée aux
+      plafonds réglementaires (homogène sur les six sources de la période, y
+      compris Synergie et PON FSE qui n'ont pas de taux déclaré du tout) ; le
+      déclaré n'est qu'un signal de qualité de source.
 
     Les colonnes qui n'ont pas d'équivalent (objectif stratégique, objectif
     spécifique, type d'intervention) ne sont **pas** créées : c'est `CAPACITES`
@@ -649,6 +675,19 @@ def normaliser_operations(df, source):
         montant = pd.to_numeric(df.get(MONTANT_UE), errors="coerce")
         depenses = pd.to_numeric(df.get(DEPENSES), errors="coerce")
         df = df.assign(**{TAUX_COFINANCEMENT: montant / depenses.replace(0, float("nan"))})
-    else:
+    elif source == SOURCE_2021_2027:
         df = df.assign(**{TAUX_COFINANCEMENT: pd.to_numeric(df[TAUX_COFINANCEMENT], errors="coerce")})
+    else:
+        declare = pd.to_numeric(df[TAUX_COFINANCEMENT], errors="coerce")
+        montant = pd.to_numeric(df.get(MONTANT_UE), errors="coerce")
+        depenses = pd.to_numeric(df.get(DEPENSES), errors="coerce")
+        recalcule = montant / depenses.replace(0, float("nan"))
+        df = df.assign(**{
+            TAUX_COFINANCEMENT: recalcule,
+            TAUX_COFINANCEMENT_DECLARE: declare,
+            TAUX_COFINANCEMENT_DIVERGENT: (
+                declare.notna() & recalcule.notna()
+                & ((declare - recalcule).abs() > SEUIL_ECART_TAUX_DECLARE)
+            ),
+        })
     return df

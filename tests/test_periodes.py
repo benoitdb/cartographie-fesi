@@ -33,12 +33,15 @@ from utils.periodes import (  # noqa: E402
     EXPLICATIONS_ABSENCES,
     PERIODE_2014_2020,
     PERIODE_2021_2027,
+    SEUIL_ECART_TAUX_DECLARE,
     SOURCE_2021_2027,
     SOURCE_BRETAGNE_2014_2020,
     SOURCE_NORMANDIE_2014_2020,
     SOURCE_NOUVELLE_AQUITAINE_2014_2020,
     SOURCE_PON_FSE_2014_2020,
     SOURCE_SYNERGIE_2014_2020,
+    TAUX_COFINANCEMENT_DECLARE,
+    TAUX_COFINANCEMENT_DIVERGENT,
     absences_expliquees,
     appliquer_libelles_programmes,
     capacites,
@@ -328,7 +331,8 @@ def test_normandie_prend_les_libelles_canoniques():
     assert normalisee["Fonds"] == "FEDER"
     assert normalisee["Montant UE"] == 170948.18
     assert normalisee["Total des dépenses éligibles"] == 355154.47
-    assert normalisee["Taux de cofinancement"] == 0.48
+    assert normalisee["Taux de cofinancement"] == pytest.approx(170948.18 / 355154.47)
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == pytest.approx(0.48)
     assert normalisee["Nom du bénéficiaire"] == "COMUE Normandie Université"
     assert normalisee["Numéro Opération"] == "15E00020"
     assert normalisee["Code postal du bénéficiaire"] == "14000"
@@ -427,6 +431,103 @@ def test_taux_existant_invalide_devient_none():
     op = {"Montant UE": 100.0, "Total des dépenses éligibles": 0.0, "Taux de cofinancement": "#DIV/0"}
     normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NOUVELLE_AQUITAINE_2014_2020).iloc[0]
     assert pd.isna(normalisee["Taux de cofinancement"])
+
+
+# --- Taux déclaré divergent (#127) : recalculer, comparer, signaler -----------
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_source_regionale_recalcule_le_taux_au_lieu_de_garder_le_declare(source):
+    """Pour les sources régionales 14-20, le taux affiché est toujours recalculé
+    depuis les deux montants — pas celui du fichier. Les deux mesurent la même
+    chose, mais ne concordent pas systématiquement (#127, 8 opérations, 23,8 M€).
+    Le taux recalculé est homogène sur les six sources de la période."""
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.55}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert normalisee["Taux de cofinancement"] == pytest.approx(0.4)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_source_regionale_conserve_le_taux_declare_a_part(source):
+    """Le taux du fichier n'est pas perdu : il rejoint une colonne dédiée qui sert
+    de signal de qualité de source, jamais de référence pour les plafonds."""
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.55}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == pytest.approx(0.55)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_taux_divergent_signale_quand_ecart_depasse_le_seuil(source):
+    """Un écart > SEUIL_ECART_TAUX_DECLARE entre déclaré et recalculé vaut True."""
+    ecart = SEUIL_ECART_TAUX_DECLARE + 0.001
+    recalcule = 0.4
+    declare = recalcule + ecart
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": declare}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is True
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_taux_non_divergent_quand_ecart_sous_le_seuil(source):
+    """Un écart <= SEUIL_ECART_TAUX_DECLARE vaut False : les deux mesures concordent."""
+    ecart = SEUIL_ECART_TAUX_DECLARE * 0.5
+    recalcule = 0.4
+    declare = recalcule + ecart
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": declare}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is False
+
+
+def test_taux_divergent_false_quand_declare_invalide():
+    """Nouvelle-Aquitaine avec `#DIV/0` : le déclaré est NaN, pas de comparaison possible,
+    divergent est False — pas un signal d'écart, juste une absence."""
+    op = {"Montant UE": 100.0, "Total des dépenses éligibles": 0.0, "Taux de cofinancement": "#DIV/0"}
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NOUVELLE_AQUITAINE_2014_2020).iloc[0]
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is False
+    assert pd.isna(normalisee[TAUX_COFINANCEMENT_DECLARE])
+
+
+def test_synergie_n_a_pas_de_taux_declare_ni_divergent():
+    """Synergie ne porte pas de taux dans le fichier : rien à comparer, ces colonnes
+    n'existent pas — les ajouter à vide polluerait les groupby en aval."""
+    op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": 1000.0}
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
+    assert TAUX_COFINANCEMENT_DECLARE not in normalisee.index
+    assert TAUX_COFINANCEMENT_DIVERGENT not in normalisee.index
+
+
+def test_2021_2027_n_a_pas_de_taux_declare_ni_divergent():
+    """Hors périmètre de #127 : le taux du fichier est la seule mesure disponible."""
+    op = {"Montant UE": 500.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.42}
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2021_2027).iloc[0]
+    assert TAUX_COFINANCEMENT_DECLARE not in normalisee.index
+    assert TAUX_COFINANCEMENT_DIVERGENT not in normalisee.index
+
+
+def test_normaliser_source_regionale_ne_modifie_pas_le_dataframe_recu():
+    """Même invariant que test_normaliser_ne_modifie_pas_les_operations_recues,
+    étendu au chemin #127 qui ajoute des colonnes."""
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.55}
+    df = pd.DataFrame([op])
+    avant = df.copy()
+    normaliser_operations(df, SOURCE_NORMANDIE_2014_2020)
+    pd.testing.assert_frame_equal(df, avant)
 
 
 def test_capacites_source_periode_synergie_equivaut_a_sa_source():
