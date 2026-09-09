@@ -35,6 +35,7 @@ distingue donc plus deux catégories de sortie, tout écart chiffré est un éch
     tolérance relative que la comparaison SQL en NUMERIC (#126).
 """
 
+import itertools
 import json
 import sys
 from collections import defaultdict
@@ -52,17 +53,22 @@ import load_data  # noqa: E402  (parse_date, pour reproduire le chargement à l'
 import setup_metabase as setup  # noqa: E402  (noms de dashboards, ids de paramètres, défauts)
 from verify_pilotage_2014_2020 import (  # noqa: E402
     charger,
+    charger_source,
     close_enough,
     engage_python,
     enveloppes_python,
+    est_absent,
     operations_par_perimetre,
 )
 
 from utils import cofinancement  # noqa: E402
 from utils.data_loader import (  # noqa: E402
     CATEGORIES_UE_2014_2020_PATH,
-    DATA_PATH,
+    DATA_JSON_PATH,
+    DATA_PARQUET_PATH,
+    PROGRAMME_DETAIL_PATH,
     PROGRAMME_TOTALS_PATH,
+    REGION_METADATA_PATH,
 )
 from utils.periodes import (  # noqa: E402
     SEUIL_ECART_TAUX_DECLARE,
@@ -72,6 +78,7 @@ from utils.pilotage import reste_a_engager, taux_consommation  # noqa: E402
 from utils.stats import TOLERANCE_RELATIVE_PLAFOND  # noqa: E402
 
 MB_URL = setup.MB_URL
+SOURCE_SYNERGIE_2014_2020 = setup.SOURCE_SYNERGIE_2014_2020
 
 # Libellés de colonnes 2021-2027, tels que le dashboard Streamlit les lit
 # (`data.json` n'est pas normalisé, c'est la période de référence du projet).
@@ -179,14 +186,46 @@ P1420 = "2014-2020"
 # ------------------------------------------------------- Références côté Streamlit
 
 
+def operations_depuis_parquet(chemin):
+    """Les opérations 2021-2027 en dictionnaires, lues là où elles vivent
+    désormais.
+
+    Depuis le passage au Parquet (#130), `data.json` ne porte plus que
+    `metadata` et `aggregates` : les opérations sont dans `data.parquet`. Ce
+    fichier lisait encore `data["operations"]` et levait un `KeyError` — il
+    n'est pas en CI (#148), donc rien ne l'avait signalé.
+
+    Les NaN sont ramenés à `None` avant de rendre les enregistrements. Sans
+    cela, un champ absent arriverait en NaN flottant, qui est **truthy** : un
+    garde `if not op.get(FONDS)` ne l'écarterait pas, et l'agrégat se
+    construirait sous une clé NaN, quand `op[MONTANT] or 0` propagerait le NaN
+    dans la somme. C'est le piège de #147, et il est suivi pour le reste du
+    projet dans son issue dédiée.
+    """
+    df = pd.read_parquet(chemin)
+    return df.astype(object).where(df.notna(), None).to_dict("records")
+
+
 def charger_references():
-    with open(DATA_PATH, encoding="utf-8") as f:
+    with open(DATA_JSON_PATH, encoding="utf-8") as f:
         data = json.load(f)
+    data["operations"] = operations_depuis_parquet(DATA_PARQUET_PATH)
     with open(PROGRAMME_TOTALS_PATH, encoding="utf-8") as f:
         programme_totals = json.load(f)
     with open(CATEGORIES_UE_2014_2020_PATH, encoding="utf-8") as f:
         categories = json.load(f)
     return data, programme_totals, categories
+
+
+def charger_references_phase_c():
+    """Métadonnées régionales (population) et détail des programmes (allocation
+    RUP) — les deux références que la phase C ajoute, et qu'aucune section
+    antérieure ne chargeait."""
+    with open(REGION_METADATA_PATH, encoding="utf-8") as f:
+        region_metadata = json.load(f)
+    with open(PROGRAMME_DETAIL_PATH, encoding="utf-8") as f:
+        programme_detail = json.load(f)
+    return region_metadata, programme_detail
 
 
 def pilotage_python(programme_par_fonds, engage_par_fonds):
@@ -553,7 +592,7 @@ def cofinancement_python(operations, categories):
     for op in operations:
         infos = categories.get(op["perimetre"])
         fonds = op["fonds"]
-        if infos is None or fonds is None or cofinancement.est_hors_plafond(fonds):
+        if infos is None or est_absent(fonds) or cofinancement.est_hors_plafond(fonds):
             continue
         montant, depenses = op["montant_ue"], op["depenses_eligibles"]
         if montant is None or depenses is None:
@@ -664,7 +703,12 @@ def check_periode_2014_2020(session, terr, pil, analyses, categories):
     # (26 dossiers Normandie, 24,6 M€).
     totaux = defaultdict(lambda: {"montant": 0.0, "count": 0})
     for op in operations:
-        if op["fonds"] is None:
+        # `est_absent` et non `is None` : depuis le Parquet, un fonds non
+        # renseigné arrive en NaN (26 dossiers Normandie, 24,6 M€). Un `is None`
+        # les laissait passer côté Python quand `fonds IS NOT NULL` les écarte
+        # côté SQL — d'où un écart de périmètre qui n'était pas un écart de
+        # calcul.
+        if est_absent(op["fonds"]):
             continue
         cible = totaux[op["perimetre"]]
         cible["montant"] += op["montant_ue"] or 0
@@ -790,6 +834,223 @@ def check_qualite_sources(session, qual, agg):
     return erreurs, n
 
 
+
+def check_structure_phase_c(session, struct, agg, region_metadata, programme_detail, programme_totals):
+    """Les quatre cartes de Structure & répartition livrées en phase C (#129).
+
+    Toutes sont interrogées **avec une valeur de filtre**, jamais seulement à
+    vide. Ce n'est pas un excès de zèle : un field filter Metabase se substitue
+    en une clause qualifiée du nom réel de la table, de sorte qu'une table
+    aliasée dans le SQL de la carte casse — mais **uniquement quand un filtre
+    porte une valeur**. À vide, la clause devient triviale et la carte répond
+    normalement. Les deux cartes jointes de cette phase (montant par habitant,
+    RUP) sont nées avec ce défaut et l'ont gardé à travers un premier contrôle
+    de relecture qui ne filtrait pas.
+    """
+    erreurs, n = [], 0
+    P2127 = setup.PERIODE_PAR_DEFAUT
+
+    # --- Treemap : niveau 1 sans filtre de périmètre, puis région par région ---
+    lignes = interroger(session, struct, "Structure — Hiérarchie thématique", {P_PERIODE: P2127})
+    par_niveau1 = defaultdict(float)
+    for ligne in lignes:
+        par_niveau1[ligne["niveau1"]] += ligne["montant_ue"] or 0
+    for objectif, reference in agg["by_objectif_strategique"].items():
+        n += 1
+        obtenu = par_niveau1.get(objectif, 0)
+        if not close_enough(reference["montant_ue_total"], obtenu):
+            erreurs.append(
+                f"Treemap 2021-2027 / {objectif} : Metabase {obtenu:,.2f} "
+                f"vs Streamlit {reference['montant_ue_total']:,.2f}"
+            )
+
+    # Le treemap agrège les trois partitions (régions, national, interrégional) ;
+    # `by_region_objectif` ne porte que la première. La comparaison par région
+    # est donc la seule maille où les deux références coïncident exactement —
+    # et c'est elle qui exerce le filtre Périmètre.
+    for region in ("Bretagne", "Occitanie", "La Réunion"):
+        lignes = interroger(
+            session, struct, "Structure — Hiérarchie thématique",
+            {P_PERIODE: P2127, P_PERIMETRE: region},
+        )
+        obtenu = defaultdict(float)
+        for ligne in lignes:
+            obtenu[ligne["niveau1"]] += ligne["montant_ue"] or 0
+        attendu = {
+            v["objectif_strategique"]: v["montant_ue_total"]
+            for k, v in agg["by_region_objectif"].items()
+            if v["region"] == region
+        }
+        # `v_repartition_all` remplace un objectif absent par 'Non renseigné'
+        # (arbitrage #129 : rendre l'asymétrie visible plutôt que filtrer), là
+        # où `by_region_objectif` omet simplement ces opérations. Les objectifs
+        # NOMMÉS se comparent donc un à un, et le résidu est contrôlé juste
+        # après — sur le total, qui lui doit tomber juste des deux côtés. Écarter
+        # 'Non renseigné' des deux comparaisons le rendrait invérifiable.
+        non_renseigne = obtenu.pop("Non renseigné", 0)
+        erreurs += comparer_series(
+            [{"niveau1": k, "montant_ue": v} for k, v in obtenu.items()],
+            attendu, "niveau1", "montant_ue", f"Treemap 2021-2027 ({region})",
+        )
+        n += len(attendu) + 1
+        total_region = sum(
+            v["montant_ue_total"]
+            for v in agg["by_region_fonds"].values()
+            if v["region"] == region
+        )
+        total_mb = sum(obtenu.values()) + non_renseigne
+        if not close_enough(total_region, total_mb):
+            erreurs.append(
+                f"Treemap 2021-2027 ({region}) / total (dont {non_renseigne:,.2f} "
+                f"non renseigné) : Metabase {total_mb:,.2f} vs Streamlit {total_region:,.2f}"
+            )
+
+    # --- Portefeuille : nombre d'opérations et montant moyen par périmètre ---
+    for region in ("Bretagne", "Occitanie", "Normandie"):
+        lignes = interroger(
+            session, struct, "Structure — Portefeuille par périmètre",
+            {P_PERIODE: P2127, P_PERIMETRE: region},
+        )
+        reference = agg["by_region"][region]
+        n += 2
+        if len(lignes) != 1:
+            erreurs.append(f"Portefeuille ({region}) : {len(lignes)} ligne(s) au lieu d'une seule")
+            continue
+        ligne = lignes[0]
+        if ligne["n_operations"] != reference["count"]:
+            erreurs.append(
+                f"Portefeuille ({region}) / nombre d'opérations : Metabase "
+                f"{ligne['n_operations']} vs Streamlit {reference['count']}"
+            )
+        # `montant_ue_moyen` de `data.json` est la moyenne des opérations de la
+        # région ; la carte la recalcule en SUM/SUM sur la vue. Les deux doivent
+        # tomber au même endroit — sinon la carte moyenne des moyennes.
+        if not close_enough(reference["montant_ue_moyen"], float(ligne["montant_moyen"])):
+            erreurs.append(
+                f"Portefeuille ({region}) / montant moyen : Metabase "
+                f"{float(ligne['montant_moyen']):,.2f} vs Streamlit {reference['montant_ue_moyen']:,.2f}"
+            )
+
+    # --- Montant par habitant : la division, et l'absence des périmètres sans population ---
+    for region in ("Bretagne", "Occitanie"):
+        population = region_metadata[region]["population"]
+        lignes = interroger(
+            session, struct, "Structure — Montant UE par habitant",
+            {P_PERIODE: P2127, P_PERIMETRE: region},
+        )
+        attendu = {
+            v["fonds"]: v["montant_ue_total"] / population
+            for v in agg["by_region_fonds"].values()
+            if v["region"] == region
+        }
+        erreurs += comparer_series(
+            lignes, attendu, "fonds",
+            "montant_par_habitant", f"Montant par habitant ({region})",
+        )
+        n += len(attendu)
+
+    # Le volet national et l'interrégional n'ont pas de population : la jointure
+    # doit les écarter, pas les afficher à zéro (ce qui se lirait comme une
+    # sous-dotation). Contrôle explicite plutôt que confiance dans l'INNER JOIN.
+    lignes = interroger(session, struct, "Structure — Montant UE par habitant", {P_PERIODE: P2127})
+    n += 1
+    intrus = sorted({ligne["perimetre"] for ligne in lignes} & {"national", "interregional"})
+    if intrus:
+        erreurs.append(f"Montant par habitant : {intrus} ne devrait pas figurer (pas de population)")
+
+    # --- RUP : l'allocation est CONTENUE dans le programmé, jamais en plus ---
+    rup = programme_detail["rup"]
+    lignes = interroger(session, struct, "Structure — Allocation additionnelle ultrapériphérique (RUP)")
+    obtenu = {(ligne["perimetre"], ligne["fonds"]): ligne for ligne in lignes}
+    attendu_n = sum(len(v) for v in rup.values())
+    n += 1
+    if len(obtenu) != attendu_n:
+        erreurs.append(f"RUP : {len(obtenu)} ligne(s) en Metabase vs {attendu_n} dans programme_detail.json")
+    for perimetre, par_fonds in rup.items():
+        for fonds, montant_rup in par_fonds.items():
+            n += 2
+            ligne = obtenu.get((perimetre, fonds))
+            if ligne is None:
+                erreurs.append(f"RUP ({perimetre}/{fonds}) : ligne absente de Metabase")
+                continue
+            if not close_enough(montant_rup, float(ligne["allocation_rup"])):
+                erreurs.append(
+                    f"RUP ({perimetre}/{fonds}) / allocation : Metabase "
+                    f"{float(ligne['allocation_rup']):,.2f} vs Streamlit {montant_rup:,.2f}"
+                )
+            total = programme_totals[perimetre][fonds]
+            if not close_enough(total, float(ligne["total_programme"])):
+                erreurs.append(
+                    f"RUP ({perimetre}/{fonds}) / total programmé : Metabase "
+                    f"{float(ligne['total_programme']):,.2f} vs programme_totals {total:,.2f}"
+                )
+            # La colonne « base » est une soustraction : si elle devenait un
+            # second poste additionnable, la RUP serait comptée deux fois.
+            n += 1
+            somme = float(ligne["dotation_categorie_de_base"]) + float(ligne["allocation_rup"])
+            if not close_enough(somme, float(ligne["total_programme"])):
+                erreurs.append(
+                    f"RUP ({perimetre}/{fonds}) : base + RUP = {somme:,.2f} "
+                    f"!= total {float(ligne['total_programme']):,.2f}"
+                )
+
+    return erreurs, n
+
+
+def check_trajectoire_2014_2020(session, pil):
+    """La trajectoire 2014-2020 livrée en phase C, bornée à Synergie.
+
+    Référence : les opérations de la seule source de la période qui date sa
+    programmation, chargées par le même code que la phase 3. Le contrôle porte
+    sur le **dernier point du cumul**, qui doit valoir la somme des montants
+    datés — un cumul par fenêtre qui repartirait de zéro à chaque fonds, ou qui
+    cumulerait dans le désordre, s'y verrait immédiatement.
+    """
+    erreurs, n = [], 0
+    # `charger_source` rend les enregistrements BRUTS de la source, avec les
+    # libellés de son propre fichier — pas les noms normalisés des vues SQL.
+    # Viser `date_programmation`/`montant_ue` ici ne lève aucune erreur : les
+    # clés manquent, le total tombe à zéro, et l'écart se lit comme une faute
+    # de la carte plutôt que du contrôle.
+    DATE_PROG = "Date de programmation"
+    MONTANT_SYNERGIE = "Montant UE programmé"
+    operations, _ = charger_source(SOURCE_SYNERGIE_2014_2020)
+    manquantes = {DATE_PROG, MONTANT_SYNERGIE, FONDS} - set(operations[0])
+    if manquantes:
+        sys.exit(f"Synergie 2014-2020 : colonnes {sorted(manquantes)} absentes — libellés changés ?")
+
+    def total(filtre_fonds=None):
+        return sum(
+            0 if est_absent(op[MONTANT_SYNERGIE]) else op[MONTANT_SYNERGIE]
+            for op in operations
+            if not est_absent(op[DATE_PROG])
+            and (filtre_fonds is None or op[FONDS] == filtre_fonds)
+        )
+
+    for fonds in (None, "FEDER", "FSE"):
+        valeurs = {P_FONDS: fonds} if fonds else None
+        lignes = interroger(session, pil, "Pilotage — Engagement cumulé 2014-2020 (Synergie seul)", valeurs)
+        n += 1
+        contexte = f"Trajectoire 2014-2020 ({fonds or 'tous fonds'})"
+        if not lignes:
+            erreurs.append(f"{contexte} : aucune ligne")
+            continue
+        obtenu = float(lignes[-1]["montant_cumule"])
+        attendu = total(fonds)
+        if not close_enough(attendu, obtenu):
+            erreurs.append(f"{contexte} / dernier cumul : Metabase {obtenu:,.2f} vs Streamlit {attendu:,.2f}")
+
+    # Le cumul doit être monotone : c'est ce qui distingue une courbe cumulée
+    # d'une série de montants mensuels tracée sous le même nom.
+    lignes = interroger(session, pil, "Pilotage — Engagement cumulé 2014-2020 (Synergie seul)")
+    n += 1
+    valeurs = [float(ligne["montant_cumule"]) for ligne in lignes]
+    if any(b < a for a, b in itertools.pairwise(valeurs)):
+        erreurs.append("Trajectoire 2014-2020 : le cumul décroît — la fenêtre n'est pas ordonnée")
+
+    return erreurs, n
+
+
 def main():
     import requests
 
@@ -830,6 +1091,12 @@ def main():
             check_periode_2014_2020(session, terr, pil, analyses, categories))
     section("Qualité des sources",
             check_qualite_sources(session, qual, agg))
+    region_metadata, programme_detail = charger_references_phase_c()
+    section("Structure & répartition (phase C)",
+            check_structure_phase_c(session, struct, agg, region_metadata,
+                                    programme_detail, programme_totals))
+    section("Trajectoire 2014-2020 (phase C)",
+            check_trajectoire_2014_2020(session, pil))
 
     print(f"\n{n} valeurs comparées au total sur les cinq dashboards par usage.")
     if erreurs:

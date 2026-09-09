@@ -108,6 +108,37 @@ def charger(fichier):
         return json.load(f)
 
 
+def est_absent(val):
+    """Vrai si `val` est une valeur manquante, quelle que soit sa représentation.
+
+    Le JSON portait `None`, le Parquet porte un **NaN flottant** : un test
+    `val is None` laisse passer le second, et un garde `if not val` ne l'écarte
+    pas davantage puisqu'un NaN est *truthy*. La valeur manquante se retrouve
+    alors en clé d'agrégat, ou propage un NaN dans une somme — sans qu'aucune
+    assertion portant sur l'identité à `None` ne s'en aperçoive.
+
+    La valeur manquante n'a pas UNE représentation mais plusieurs selon la
+    colonne : `NaN` flottant pour un nombre ou un texte, mais **`NaT` pour une
+    date** — qui n'est pas un `float`. Une première version de ce garde ne
+    testait que `isinstance(val, float)` et laissait donc passer les dates
+    manquantes ; elle gonflait un cumul de 211 727 € sur quatre lignes, soit
+    0,002 % — assez peu pour ressembler à un arrondi. D'où `pd.isna`, qui les
+    connaît toutes, plutôt qu'une énumération de types.
+
+    Le défaut a été rencontré quatre fois (fusion 14-20, dashboards,
+    cofinancement, trajectoire) avant d'être nommé ici ; son balayage complet
+    est suivi dans son issue.
+    """
+    if val is None:
+        return True
+    try:
+        # `bool()` sur un tableau lève : une colonne entière n'est pas une
+        # valeur manquante, et ce garde ne répond que sur des scalaires.
+        return bool(pd.isna(val))
+    except (TypeError, ValueError):
+        return val == ""
+
+
 def charger_source(source_id):
     """(opérations, libellés bruts) d'une source, ou sortie en erreur si son
     Parquet manque : mieux vaut ne rien vérifier du tout qu'annoncer une
@@ -204,7 +235,7 @@ def engage_python():
     `fonds IS NOT NULL` que `v_engage_2014_2020`."""
     engage = defaultdict(float)
     for op in operations_par_perimetre():
-        if op["fonds"] is None or (isinstance(op["fonds"], float) and pd.isna(op["fonds"])):
+        if est_absent(op["fonds"]):
             continue
         engage[(op["perimetre"], op["fonds"])] += op["montant_ue"] or 0
     return dict(engage)

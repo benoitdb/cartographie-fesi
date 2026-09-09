@@ -46,6 +46,10 @@ from utils.themes import FONDS_COLORS  # noqa: E402
 
 MB_URL = "http://localhost:3000"
 SOURCE_2021_2027 = "2021-2027-conventionnees"
+# Seule source 2014-2020 à porter `date_programmation` (100 % renseignée ;
+# 0 % sur les cinq autres). C'est ce qui borne la trajectoire de la période —
+# voir la carte `pilotage_trajectoire_2014_2020`.
+SOURCE_SYNERGIE_2014_2020 = "2014-2020-synergie"
 GEOJSON_METROPOLE_URL = (
     "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/"
     "frontend/public/geo/regions-metropole.geojson"
@@ -176,7 +180,15 @@ def table_fields(session, db_id):
     return {t["name"]: {f["name"]: f["id"] for f in t["fields"]} for t in md["tables"]}
 
 
-VUES_UNIFIEES = ("v_engage_all", "v_pilotage_all")
+# Toute vue servant de field filter doit être synchronisée : sans id de champ,
+# le filtre est inconstructible. `v_repartition_all` (phase B) et
+# `allocations_rup` s'y ajoutent avec la phase C.
+VUES_UNIFIEES = (
+    "v_engage_all",
+    "v_pilotage_all",
+    "v_repartition_all",
+    "allocations_rup",
+)
 
 
 def sync_views(session, db_id, attendues=VUES_UNIFIEES):
@@ -217,6 +229,19 @@ def dimension_tag(name, display_name, field_id, tag_id):
     Non requis, et écrit `WHERE {{tag}}` sans crochets optionnels : sans valeur,
     Metabase substitue une clause toujours vraie. « Aucun filtre » vaut donc
     « tout le périmètre », qui est exactement la sémantique de la vue nationale.
+
+    **La table visée par un field filter ne doit JAMAIS être aliasée dans la
+    requête.** Metabase substitue une clause qualifiée du nom réel de la table
+    (`"public"."v_engage_all"."perimetre" IN (…)`) ; un `FROM v_engage_all e`
+    rend cette référence invalide et PostgreSQL répond
+    « invalid reference to FROM-clause entry ». Les tables *jointes* peuvent
+    garder leur alias — seule celle du filtre est contrainte.
+
+    Le piège est que **la faute ne se voit pas sans valeur** : le filtre vide se
+    réduit à une clause triviale, la requête passe, la carte affiche ses lignes.
+    Elle ne casse qu'au premier clic de l'utilisateur. Tout contrôle de relecture
+    doit donc exercer les filtres AVEC une valeur — même famille de défaut
+    silencieux que le `display` non validé et le `parameter_mapping` orphelin.
     """
     return {
         name: {
@@ -379,6 +404,11 @@ CARD_TAGS = {
     "pilotage_taux_perimetre": ("periode", "fonds"),
     "pilotage_detail": ("periode", "perimetre", "fonds"),
     "pilotage_trajectoire": ("fonds",),
+    "pilotage_trajectoire_2014_2020": ("fonds",),
+    "structure_treemap": ("periode", "perimetre", "fonds"),
+    "structure_portefeuille": ("periode", "perimetre", "fonds"),
+    "structure_par_habitant": ("periode", "perimetre", "fonds"),
+    "structure_rup": ("perimetre", "fonds"),
     "controle_cofinancement": ("perimetre",),
     "sources_chargement": ("periode",),
 }
@@ -411,14 +441,21 @@ def build_usage_cards(session, db_id, tables):
     pilotage = tables["v_pilotage_all"]
     ops = tables["operations"]
     cofi = tables["v_cofinancement_2014_2020_summary"]
+    repartition = tables["v_repartition_all"]
+    rup = tables["allocations_rup"]
     tag_id = "b1000000-0000-0000-0000-0000000000%02d"
+    # Les décades 10 à 98 du radical ci-dessus sont prises par les phases A/B.
+    # La phase C prend son propre radical plutôt que de se glisser dans les
+    # trous : deux tags qui partagent un id se recouvrent en silence.
+    tag_id_c = "b1000000-0000-0000-0000-0000000001%02d"
 
-    def filtres(champs, table, depart=0):
+    def filtres(champs, table, depart=0, radical=None):
         """Les trois field filters standards, sur les champs d'une même table."""
         libelles = {"periode": "Période", "perimetre": "Périmètre", "fonds": "Fonds"}
+        radical = radical or tag_id
         tags = {}
         for i, nom in enumerate(champs):
-            tags.update(dimension_tag(nom, libelles[nom], table[nom], tag_id % (depart + i)))
+            tags.update(dimension_tag(nom, libelles[nom], table[nom], radical % (depart + i)))
         return tags
 
     cards = {}
@@ -731,6 +768,218 @@ def build_usage_cards(session, db_id, tables):
         },
     )
 
+    # ------------------------------------------------- Phase C : Structure & Pilotage
+
+    cards["structure_treemap"] = upsert_card(
+        session,
+        "Structure — Hiérarchie thématique",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # `v_repartition_all` (phase B) porte déjà la dimension propre
+                    # à chaque période : objectif stratégique -> objectif spécifique
+                    # en 2021-2027, `domaine_intervention` en 2014-2020. La carte
+                    # n'a donc pas à connaître la période, elle lit `niveau1`/
+                    # `niveau2` — c'est la vue qui sait ce qu'ils désignent.
+                    #
+                    # Le treemap de Metabase v0.63.16 n'a que DEUX niveaux
+                    # (`treemap.grouping` + `treemap.sub_grouping`), là où
+                    # `utils.treemap.build_hierarchy_treemap` en empile trois
+                    # (fonds -> niveau1 -> niveau2). Le fonds reste donc un
+                    # filtre, et non un niveau : c'est celui des trois qui a déjà
+                    # son propre onglet et son propre paramètre. Le renoncement
+                    # est dit à l'écran, pas seulement ici.
+                    "query": (
+                        "SELECT niveau1, niveau2, SUM(engage) AS montant_ue "
+                        "FROM v_repartition_all "
+                        "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "GROUP BY niveau1, niveau2 ORDER BY 3 DESC"
+                    ),
+                    "template-tags": filtres(
+                        ("periode", "perimetre", "fonds"), repartition, 0, tag_id_c
+                    ),
+                },
+                "database": db_id,
+            },
+            "display": "treemap",
+            "visualization_settings": {
+                "treemap.grouping": "niveau1",
+                "treemap.sub_grouping": "niveau2",
+                "treemap.value": "montant_ue",
+            },
+        },
+    )
+
+    cards["structure_portefeuille"] = upsert_card(
+        session,
+        "Structure — Portefeuille par périmètre",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Jumeau de `utils.stats.build_portfolio_scatter` : nombre
+                    # d'opérations en x, montant moyen en y, montant total en
+                    # taille de bulle — ce qui sépare un périmètre à quelques
+                    # grosses opérations d'un périmètre à beaucoup de petites.
+                    #
+                    # Le montant moyen est recalculé APRÈS agrégation
+                    # (SUM/SUM) et jamais moyenné : une moyenne de moyennes par
+                    # fonds donnerait un nombre qui n'est la moyenne de rien.
+                    # `NULLIF` plutôt qu'un CASE : un périmètre à zéro opération
+                    # n'existe pas dans la vue, mais la division resterait une
+                    # faute qui n'attend que la première ligne vide.
+                    "query": (
+                        "SELECT perimetre, SUM(n_operations) AS n_operations, "
+                        "SUM(engage) / NULLIF(SUM(n_operations), 0) AS montant_moyen, "
+                        "SUM(engage) AS montant_ue "
+                        "FROM v_engage_all "
+                        "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "GROUP BY perimetre ORDER BY 4 DESC"
+                    ),
+                    "template-tags": filtres(
+                        ("periode", "perimetre", "fonds"), engage, 10, tag_id_c
+                    ),
+                },
+                "database": db_id,
+            },
+            "display": "scatter",
+            "visualization_settings": {
+                "graph.dimensions": ["perimetre"],
+                "graph.metrics": ["montant_moyen"],
+                "scatter.bubble": "montant_ue",
+                "graph.x_axis.title_text": "Nombre d'opérations",
+                "graph.y_axis.title_text": "Montant UE moyen par opération (€)",
+            },
+        },
+    )
+
+    cards["structure_par_habitant"] = upsert_card(
+        session,
+        "Structure — Montant UE par habitant",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # `public.region_metadata`, qualifié : la cible PostgreSQL de
+                    # dbt (#135) expose un `dbt_spike.region_metadata` homonyme,
+                    # à trois colonnes seulement — et c'est LUI que Metabase a
+                    # synchronisé. Un nom nu se résoudrait au `search_path`, donc
+                    # à une table qui n'a pas `population`.
+                    #
+                    # INNER JOIN volontaire : `national` et `interregional` n'ont
+                    # pas de population, et un montant par habitant n'y veut rien
+                    # dire. Ils sortent du classement plutôt que d'y figurer à
+                    # zéro — 18 périmètres sur 19 en 2014-2020, 19 sur 21 en
+                    # 2021-2027.
+                    "query": (
+                        "SELECT v_engage_all.perimetre, v_engage_all.fonds, "
+                        "SUM(v_engage_all.engage) / m.population AS montant_par_habitant, "
+                        "SUM(v_engage_all.engage) AS montant_ue, m.population "
+                        "FROM v_engage_all "
+                        "JOIN public.region_metadata m ON m.region = v_engage_all.perimetre "
+                        "WHERE m.population IS NOT NULL "
+                        "AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "GROUP BY v_engage_all.perimetre, v_engage_all.fonds, m.population "
+                        "ORDER BY 3 DESC"
+                    ),
+                    "template-tags": filtres(
+                        ("periode", "perimetre", "fonds"), engage, 20, tag_id_c
+                    ),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {
+                "graph.dimensions": ["perimetre", "fonds"],
+                "graph.metrics": ["montant_par_habitant"],
+                "stackable.stack_type": "stacked",
+                "series_settings": SERIES_FONDS,
+            },
+        },
+    )
+
+    cards["structure_rup"] = upsert_card(
+        session,
+        "Structure — Allocation additionnelle ultrapériphérique (RUP)",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Pas de filtre de période : l'allocation RUP de l'art. 349
+                    # TFUE n'est chargée que pour 2021-2027 (11 lignes, 7
+                    # périmètres). Une carte filtrable sur une période qu'elle ne
+                    # porte pas se viderait sans rien expliquer.
+                    #
+                    # `allocations_rup` est CONTENUE dans `programme_totals`, pas
+                    # en plus : la colonne « dotation de base » est donc une
+                    # SOUSTRACTION, jamais un second poste à additionner. C'est
+                    # exactement la présentation de l'expander Streamlit
+                    # (1_Vue_Régionale.py), et l'erreur que la table nue invite à
+                    # commettre.
+                    "query": (
+                        "SELECT allocations_rup.perimetre, allocations_rup.fonds, "
+                        "t.montant_ue - allocations_rup.montant_ue "
+                        "  AS dotation_categorie_de_base, "
+                        "allocations_rup.montant_ue AS allocation_rup, "
+                        "t.montant_ue AS total_programme "
+                        "FROM allocations_rup "
+                        "JOIN public.programme_totals t "
+                        "  ON t.region = allocations_rup.perimetre "
+                        " AND t.fonds = allocations_rup.fonds "
+                        " AND t.periode = allocations_rup.periode "
+                        "WHERE {{perimetre}} AND {{fonds}} "
+                        "ORDER BY allocations_rup.perimetre, allocations_rup.fonds"
+                    ),
+                    "template-tags": filtres(("perimetre", "fonds"), rup, 30, tag_id_c),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {},
+        },
+    )
+
+    cards["pilotage_trajectoire_2014_2020"] = upsert_card(
+        session,
+        "Pilotage — Engagement cumulé 2014-2020 (Synergie seul)",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # La trajectoire 2014-2020 que la phase A annonçait, livrée
+                    # sur le seul périmètre que la donnée autorise.
+                    #
+                    # `date_programmation` n'existe que sur Synergie : 100 % des
+                    # lignes y sont datées, 0 % sur les cinq autres sources de la
+                    # période. Bretagne, Normandie et Nouvelle-Aquitaine ne la
+                    # portent pas, et l'arbitrage #95 refuse de lui substituer
+                    # `date_debut`, qui date autre chose — la courbe changerait
+                    # de sens sans changer de nom. Synergie pèse 59 % du montant
+                    # 2014-2020 : le titre et l'encart le disent, plutôt que de
+                    # laisser croire à un total de période.
+                    #
+                    # Aucun risque de double-comptage ici malgré la lecture
+                    # directe d'`operations` : le filtre sur une source UNIQUE
+                    # est précisément ce que les règles de substitution et
+                    # d'addition de #68/#95 arbitrent entre plusieurs.
+                    "query": (
+                        "SELECT mois, SUM(montant_mois) OVER (ORDER BY mois) AS montant_cumule "
+                        "FROM (SELECT date_trunc('month', date_programmation) AS mois, "
+                        "SUM(montant_ue) AS montant_mois FROM operations "
+                        f"WHERE source_id = '{SOURCE_SYNERGIE_2014_2020}' "
+                        "AND date_programmation IS NOT NULL "
+                        "AND {{fonds}} GROUP BY 1) t ORDER BY mois"
+                    ),
+                    "template-tags": filtres(("fonds",), ops, 40, tag_id_c),
+                },
+                "database": db_id,
+            },
+            "display": "line",
+            "visualization_settings": {},
+        },
+    )
+
     return cards
 
 
@@ -928,14 +1177,81 @@ def ensure_usage_dashboards(session, collection_id, cards):
                  8, 0, 24, 2),
             ]),
             ("Hiérarchie", [
-                ("text", A_VENIR + "Treemap fonds → objectif stratégique → objectif "
-                 "spécifique, et répartition par domaine d'intervention (2014-2020). "
-                 "**Phase C.**", 0, 0, 24, 3),
+                ("heading", "Où va l'argent, par thématique", 0, 0, 24, 1),
+                ("card", "structure_treemap", 1, 0, 24, 10),
+                ("text",
+                 "**Deux niveaux, pas trois.** Le treemap de Metabase n'accepte "
+                 "qu'un groupement et un sous-groupement, là où la version "
+                 "Streamlit empile fonds → objectif stratégique → objectif "
+                 "spécifique. Le **fonds** reste donc un filtre plutôt qu'un "
+                 "niveau : c'est celui des trois qui a déjà son onglet et son "
+                 "paramètre.\n\n"
+                 "**Ce que montre chaque période n'est pas la même chose.** En "
+                 "2021-2027, les deux niveaux sont l'objectif stratégique puis "
+                 "l'objectif spécifique. En 2014-2020, la source ne porte aucune "
+                 "de ces deux dimensions (#82) : le premier niveau est le "
+                 "**domaine d'intervention** et il n'y a pas de second — le "
+                 "treemap y est plat, ce n'est pas un défaut d'affichage.",
+                 11, 0, 24, 4),
+                ("text",
+                 "⚠️ **Le treemap 2014-2020 est difficilement lisible, et c'est "
+                 "un problème de données, pas de visualisation.** Deux causes, "
+                 "toutes deux visibles à l'écran plutôt que masquées :\n\n"
+                 "- **93 % du montant de la période est en `Non renseigné`** : le "
+                 "domaine d'intervention n'est porté que par trois des six "
+                 "sources. Filtrer ces opérations rendrait le treemap muet sur "
+                 "l'essentiel de la période sans que rien ne l'explique.\n"
+                 "- **Les libellés ne sont pas harmonisés** : 138 valeurs "
+                 "distinctes, où un même domaine apparaît sous plusieurs "
+                 "orthographes (`117.0`, `117 Amélioration…`, `117 - "
+                 "Amélioration…`, et une version tronquée). Le treemap en fait "
+                 "donc plusieurs pavés là où il n'y a qu'un domaine.\n\n"
+                 "L'harmonisation est un chantier de pipeline, pas de "
+                 "visualisation : elle est suivie dans son issue dédiée, en "
+                 "amont du Parquet.",
+                 15, 0, 24, 5),
             ]),
             ("Programmes", [
-                ("text", A_VENIR + "Portefeuille de programmes : nuage de points "
-                 "montant/nombre d'opérations, montant par habitant, classement. "
-                 "**Phase C.**", 0, 0, 24, 3),
+                ("heading", "Forme du portefeuille", 0, 0, 24, 1),
+                ("card", "structure_portefeuille", 1, 0, 24, 8),
+                ("text",
+                 "Chaque bulle est un périmètre : le **nombre d'opérations** en "
+                 "abscisse, le **montant UE moyen par opération** en ordonnée, le "
+                 "**montant total** en taille. Deux périmètres au même total s'y "
+                 "distinguent — beaucoup de petites opérations en bas à droite, "
+                 "quelques grosses en haut à gauche.\n\n"
+                 "Le montant moyen est recalculé sur les totaux du périmètre, "
+                 "jamais moyenné à partir des moyennes par fonds : une moyenne "
+                 "de moyennes ne serait la moyenne de rien.",
+                 9, 0, 24, 3),
+                ("heading", "Montant UE par habitant", 12, 0, 24, 1),
+                ("card", "structure_par_habitant", 13, 0, 24, 9),
+                ("text",
+                 "**Le volet national et l'interrégional sont absents de ce "
+                 "classement, volontairement** : ils n'ont pas de population, et "
+                 "un montant par habitant n'y a pas de sens. Les y faire figurer "
+                 "à zéro laisserait croire à une sous-dotation.\n\n"
+                 "Montant par habitant et taux de consommation ne mesurent pas la "
+                 "même chose : l'un rapporte l'enveloppe à la population, l'autre "
+                 "l'engagé à ce qui était programmé. Le second est dans l'onglet "
+                 "*Comparaison régionale* du dashboard **Pilotage**.",
+                 22, 0, 24, 4),
+                ("heading", "Allocation additionnelle ultrapériphérique (RUP)", 26, 0, 24, 1),
+                ("card", "structure_rup", 27, 0, 24, 6),
+                ("text",
+                 "Allocation spécifique de l'**art. 349 TFUE** pour les régions "
+                 "ultrapériphériques, **2021-2027 uniquement** — quelle que soit "
+                 "la Période choisie, cette table ne porte pas 2014-2020.\n\n"
+                 "⚠️ **Ces montants ne s'ajoutent pas au programmé** : "
+                 "l'allocation RUP est **contenue** dans le total programmé du "
+                 "périmètre. C'est pourquoi la dotation de catégorie de base est "
+                 "affichée comme une soustraction — additionner les deux "
+                 "premières colonnes redonne la troisième, et compter la RUP en "
+                 "plus la compterait deux fois.\n\n"
+                 "La ligne `national` n'est pas une erreur : la part FSE+ de "
+                 "l'allocation est portée par une ligne nationale de l'Accord de "
+                 "partenariat, pas ventilée par région.",
+                 33, 0, 24, 5),
             ]),
         ],
         cards,
@@ -958,14 +1274,38 @@ def ensure_usage_dashboards(session, collection_id, cards):
                  15, 0, 24, 2),
             ]),
             ("Trajectoire", [
-                ("card", "pilotage_trajectoire", 0, 0, 24, 8),
+                ("heading", "2021-2027 — engagement cumulé", 0, 0, 24, 1),
+                ("card", "pilotage_trajectoire", 1, 0, 24, 8),
+                ("heading", "2014-2020 — engagement cumulé (Synergie seul)", 9, 0, 24, 1),
+                ("card", "pilotage_trajectoire_2014_2020", 10, 0, 24, 8),
                 ("text",
-                 "**Cette courbe ignore le filtre Période** : elle est scopée à "
-                 "2021-2027 en dur, et son titre le dit. Une trajectoire 2014-2020 "
-                 "demanderait des dates par opération sur le périmètre fusionné des "
-                 "six sources — cumuler directement sur `operations` rejouerait le "
-                 "double-comptage de #68/#95. Phase C.",
-                 8, 0, 24, 3),
+                 "**Les deux courbes ignorent le filtre Période** : chacune est "
+                 "scopée à la sienne, et son titre le dit. Le filtre Fonds, lui, "
+                 "les pilote toutes les deux.\n\n"
+                 "**Elles ne datent pas la même chose, et ce n'est pas rattrapable "
+                 "avec les sources actuelles.** La courbe 2021-2027 cumule sur la "
+                 "**date de début d'opération**, seule date que porte le fichier "
+                 "conventionné. La courbe 2014-2020 cumule sur la **date de "
+                 "programmation**, qui est la bonne date pour une trajectoire "
+                 "d'engagement. Comparer leurs pentes entre périodes n'a donc pas "
+                 "de sens — ce que ce projet ne cherche de toute façon pas à "
+                 "faire, les logiques de programmation ayant changé et REACT-EU "
+                 "ayant déformé la fin de la période 2014-2020.",
+                 18, 0, 24, 5),
+                ("text",
+                 "⚠️ **La courbe 2014-2020 ne couvre que Synergie, soit 59 % du "
+                 "montant de la période.** `date_programmation` y est renseignée "
+                 "à 100 %, et à 0 % sur les cinq autres sources : les fichiers "
+                 "régionaux de Bretagne, Normandie et Nouvelle-Aquitaine et le "
+                 "fichier PON FSE ne la portent pas.\n\n"
+                 "Leur `date_debut` est, elle, renseignée partout — mais lui "
+                 "substituer la date de début reviendrait à dater autre chose que "
+                 "la programmation sous le même nom (arbitrage #95). Le périmètre "
+                 "partiel est donc annoncé plutôt que comblé par une date "
+                 "approchante. L'étude de cette substitution, et de la manière de "
+                 "la signaler à l'écran si elle était retenue, fait l'objet de son "
+                 "issue dédiée.",
+                 23, 0, 24, 5),
             ]),
             ("Comparaison régionale", [
                 ("text", NOTE_PERIMETRE + "\n\nLe classement ci-dessous ignore "
