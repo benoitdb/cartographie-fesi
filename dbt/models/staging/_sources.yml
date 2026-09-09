@@ -1,0 +1,13 @@
+# La table `operations` de la stack Metabase (metabase/init/01_schema.sql),
+# chargée par `metabase/load_data.py`. Déclarée en `source` et non en `seed` :
+# elle est produite hors de dbt, c'est le point d'entrée de la cible PostgreSQL.
+#
+# Elle n'a pas d'équivalent côté DuckDB, où le staging lit directement les
+# Parquet — cf. le fork documenté dans generer.py.
+version: 2
+
+sources:
+  - name: fesi
+    schema: public
+    tables:
+      - name: operations

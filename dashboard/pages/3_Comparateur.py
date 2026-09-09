@@ -1,4 +1,3 @@
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -18,20 +17,19 @@ RESERVE_METHODO_COURTE = (
 
 
 def get_region_ops(data, region, selected_fonds):
-    return [
-        op
-        for op in data["operations"]
-        if op.get("regions_modernes") == [region]
-        and not op.get("is_interregional")
-        and not op.get("is_national")
-        and op.get("Fonds") in selected_fonds
+    all_ops = data["operations"]
+    return all_ops[
+        (all_ops["regions_modernes"].apply(lambda r: r == [region]))
+        & ~all_ops["is_interregional"]
+        & ~all_ops["is_national"]
+        & all_ops["Fonds"].isin(selected_fonds)
     ]
 
 
 def render_region_column(region, region_ops, by_region, region_metadata, programme_totals, selected_fonds, filtre_actif):
     st.subheader(region)
 
-    if not region_ops:
+    if region_ops.empty:
         st.info("Aucune opération pour cette région avec les fonds sélectionnés.")
         return
 
@@ -49,8 +47,7 @@ def render_region_column(region, region_ops, by_region, region_metadata, program
     # Répartition par fonds — barres horizontales compactes, une couleur par fonds (même
     # palette que le reste du dashboard), pas de courbe cumulée ni de treemap ici : le
     # comparateur reste volontairement condensé pour tenir en demi-largeur (issue #32).
-    df_region = pd.DataFrame(region_ops)
-    df_fonds = df_region.groupby("Fonds")["Montant UE"].sum().reset_index().sort_values("Montant UE")
+    df_fonds = region_ops.groupby("Fonds")["Montant UE"].sum().reset_index().sort_values("Montant UE")
     fig_fonds = px.bar(
         df_fonds,
         x="Montant UE",

@@ -1,0 +1,46 @@
+# Projet dbt du spike (issue #135). Isolé dans `dbt/` : rien ici n'est importé
+# par le dashboard ni par le pipeline, et `requirements-dbt.txt` est séparé de
+# `dashboard/requirements.txt` — dbt ne doit jamais partir sur Streamlit Cloud.
+name: fesi
+version: "0.1.0"
+profile: fesi
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  fesi:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  fesi:
+    +quote_columns: false
+
+vars:
+  # Chemin des Parquet, relatif au répertoire depuis lequel dbt est lancé.
+  # Lancer dbt DEPUIS `dbt/` : DuckDB résout ce chemin contre le cwd du process.
+  chemin_data: "../data/processed"
+
+  # >>> RÈGLES GÉNÉRÉES — début (dbt/generer.py, ne pas éditer)
+  # Source : dashboard/utils/periodes.REGIONS_PON_FSE_2014_2020
+  routage_pon_fse_2014_2020:
+    "Programme Opérationnel National FSE": "national"
+    "Programme Opérationnel IEJ": "national"
+    "PO réunion": "La Réunion"
+    "PO Guadeloupe": "Guadeloupe"
+    "PO Martinique": "Martinique"
+    "PO Guyane": "Guyane"
+    "PO Mayotte": "Mayotte"
+  # Source : dashboard/utils/cofinancement.FONDS_HORS_PLAFOND
+  fonds_hors_plafond: ["FEAD", "FEDER REACT-EU", "IEJ"]
+  # Source : dashboard/utils/periodes.FUSIONS_ENVELOPPES_SANS_LIBELLE
+  fusions_enveloppes_sans_libelle:
+    "FEDER REACT-EU": "FEDER"
+  # Source : dashboard/utils/periodes.REGIONS_SUBSTITUEES_2014_2020 (PR #139)
+  regions_substituees_2014_2020: ["Bretagne", "Normandie", "Nouvelle-Aquitaine"]
+  # <<< RÈGLES GÉNÉRÉES — fin

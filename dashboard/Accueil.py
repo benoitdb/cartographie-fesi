@@ -63,10 +63,10 @@ st.title("Cartographie des projets FESI - Vue Nationale")
 regions_metro = {f["properties"]["nom"] for f in geojson["features"]}
 
 if filtre_actif:
-    ops_selected = [op for op in data["operations"] if op.get("Fonds") in selected_fonds]
+    ops_selected = data["operations"][data["operations"]["Fonds"].isin(selected_fonds)]
     by_region = compute_by_region(ops_selected)
-    national_summary = summarize_ops([op for op in ops_selected if op.get("is_national")])
-    interregional_summary = summarize_ops([op for op in ops_selected if op.get("is_interregional")])
+    national_summary = summarize_ops(ops_selected[ops_selected["is_national"]])
+    interregional_summary = summarize_ops(ops_selected[ops_selected["is_interregional"]])
 else:
     # Fonds par défaut (tous sélectionnés) : agrégats pré-calculés du pipeline, comportement inchangé
     by_region = data["aggregates"]["by_region"]
@@ -178,7 +178,7 @@ with col_dromcom:
                 else:
                     st.caption("Aucun projet")
 
-df_national_ops = pd.DataFrame([op for op in data["operations"] if op.get("Fonds") in selected_fonds])
+df_national_ops = data["operations"][data["operations"]["Fonds"].isin(selected_fonds)].copy()
 df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
 df_national_ops[LEVEL2] = df_national_ops[LEVEL2].fillna("Non spécifié")
 
@@ -285,9 +285,10 @@ with tab_ensemble:
     # Volet national
     st.subheader("Volet national")
 
-    national_ops = [op for op in data["operations"] if op.get("is_national") and op.get("Fonds") in selected_fonds]
+    all_ops = data["operations"]
+    national_ops = all_ops[all_ops["is_national"] & all_ops["Fonds"].isin(selected_fonds)]
 
-    if not national_ops:
+    if national_ops.empty:
         st.info("Aucune opération du Volet national pour les fonds sélectionnés.")
     else:
         national = summarize_ops(national_ops)
@@ -398,16 +399,14 @@ with tab_pilotage:
         )
 
         region_metadata = load_region_metadata()
-        ops_par_habitant = [
-            op
-            for op in data["operations"]
-            if op.get("Fonds") in selected_fonds
-            and isinstance(op.get("regions_modernes"), list)
-            and len(op["regions_modernes"]) == 1
-            and not op.get("is_interregional")
-            and not op.get("is_national")
-        ]
-        df_ops_par_habitant = pd.DataFrame(ops_par_habitant)
+        all_ops_hab = data["operations"]
+        mono_region = all_ops_hab["regions_modernes"].apply(lambda r: isinstance(r, list) and len(r) == 1)
+        df_ops_par_habitant = all_ops_hab[
+            all_ops_hab["Fonds"].isin(selected_fonds)
+            & mono_region
+            & ~all_ops_hab["is_interregional"]
+            & ~all_ops_hab["is_national"]
+        ].copy()
         df_ops_par_habitant["region"] = df_ops_par_habitant["regions_modernes"].apply(lambda r: r[0])
 
         df_par_habitant = (

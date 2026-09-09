@@ -18,10 +18,10 @@ Deux choses à protéger ici, et elles échouent toutes les deux en silence :
    #127 : les deux mesures ne concordaient pas systématiquement).
 """
 
-import json
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -39,6 +39,7 @@ from utils.periodes import (  # noqa: E402
     PERIMETRE_FUSION,
     PERIODE_2014_2020,
     PERIODE_2021_2027,
+    SEUIL_ECART_TAUX_DECLARE,
     SOURCE_2021_2027,
     SOURCE_BRETAGNE_2014_2020,
     SOURCE_NORMANDIE_2014_2020,
@@ -76,9 +77,11 @@ def _libelles(source):
 
 
 def _cles_fixture(nom):
-    """Clés réellement présentes sur une opération du fichier committé."""
-    operations = json.loads((FIXTURE / nom).read_text(encoding="utf-8"))["operations"]
-    return set(operations[0])
+    """Colonnes réellement présentes dans le fichier Parquet committé."""
+    import pyarrow.parquet as pq
+
+    parquet_nom = nom.replace(".json", ".parquet")
+    return set(pq.read_schema(FIXTURE / parquet_nom).names)
 
 
 @pytest.mark.parametrize("source", sorted(COLONNES_PAR_SOURCE))
@@ -140,7 +143,7 @@ def test_les_operations_2014_2020_prennent_les_libelles_canoniques():
         "Libellé programme": "PO FEDER-FSE Bretagne 2014-2020",
         "Fonds": "FEDER",
     }
-    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
 
     assert normalisee["Montant UE"] == 1000.0
     assert normalisee["Total des dépenses éligibles"] == 2000.0
@@ -154,7 +157,7 @@ def test_les_operations_2014_2020_prennent_les_libelles_canoniques():
 
 def test_le_taux_de_cofinancement_est_derive_des_deux_montants():
     op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": 1000.0}
-    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
     assert normalisee["Taux de cofinancement"] == pytest.approx(0.85)
 
 
@@ -167,15 +170,15 @@ def test_le_taux_est_absent_plutot_que_nul_quand_il_est_indeterminable(depenses)
     """None, jamais 0 : un taux de 0 % se lit comme une opération sans financement
     UE, ce qui est un fait ; ici on n'a simplement pas de quoi le calculer."""
     op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": depenses}
-    (normalisee,) = normaliser_operations([op], PERIODE_2014_2020)
-    assert normalisee["Taux de cofinancement"] is None
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
+    assert pd.isna(normalisee["Taux de cofinancement"])
 
 
 def test_le_taux_existant_de_2021_2027_n_est_pas_recalcule():
     """En 2021-2027 le taux est une colonne de la source. Le recalculer écraserait
     la valeur publiée par une valeur dérivée, silencieusement différente."""
     op = {"Montant UE": 500.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.42}
-    (normalisee,) = normaliser_operations([op], PERIODE_2021_2027)
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2021_2027).iloc[0]
     assert normalisee["Taux de cofinancement"] == 0.42
 
 
@@ -193,15 +196,14 @@ def test_le_taux_existant_de_2021_2027_n_est_pas_recalcule():
     ids=["2014-2020", "2021-2027"],
 )
 def test_normaliser_ne_modifie_pas_les_operations_recues(periode, op):
-    """Les opérations viennent d'un `st.cache_data` partagé entre pages : les
+    """Les opérations viennent d'un `st.cache_resource` partagé entre pages : les
     muter contaminerait le cache pour toute la session."""
-    avant = dict(op)
-    normalisees = normaliser_operations([op], periode)
+    df = pd.DataFrame([op])
+    avant = df.copy()
+    result = normaliser_operations(df, periode)
 
-    assert op == avant
-    # Et la copie, elle, porte bien le taux dérivé : sans quoi le test passerait
-    # aussi sur une fonction qui ne fait plus rien.
-    assert normalisees[0]["Taux de cofinancement"] == pytest.approx(0.5)
+    pd.testing.assert_frame_equal(df, avant)
+    assert result.iloc[0]["Taux de cofinancement"] == pytest.approx(0.5)
 
 
 def test_2021_2027_a_toutes_les_capacites():
@@ -336,14 +338,14 @@ def test_normandie_prend_les_libelles_canoniques():
         "CP / zip code": "14000",
         "Libellé programme": "Programme opérationnel Basse-Normandie 2014-2020",
     }
-    (normalisee,) = normaliser_operations([op], SOURCE_NORMANDIE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NORMANDIE_2014_2020).iloc[0]
 
     assert normalisee["Fonds"] == "FEDER"
     assert normalisee["Montant UE"] == 170948.18
     assert normalisee["Total des dépenses éligibles"] == 355154.47
     assert normalisee["Taux de cofinancement"] == pytest.approx(170948.18 / 355154.47)
-    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == 0.48
-    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is False  # écart ~0,001, sous le seuil d'un point
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == pytest.approx(0.48)
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is False
     assert normalisee["Nom du bénéficiaire"] == "COMUE Normandie Université"
     assert normalisee["Numéro Opération"] == "15E00020"
     assert normalisee["Code postal du bénéficiaire"] == "14000"
@@ -363,11 +365,11 @@ def test_taux_declare_divergent_signale_sans_ecraser_le_recalcule():
         "n° Dossier": "TEST-001",
         "Libellé programme": "Programme test",
     }
-    (normalisee,) = normaliser_operations([op], SOURCE_NORMANDIE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NORMANDIE_2014_2020).iloc[0]
 
     assert normalisee["Taux de cofinancement"] == pytest.approx(0.5)
     assert normalisee[TAUX_COFINANCEMENT_DECLARE] == 0.60
-    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is True
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is True
 
 
 def test_nouvelle_aquitaine_prend_les_libelles_canoniques():
@@ -384,14 +386,14 @@ def test_nouvelle_aquitaine_prend_les_libelles_canoniques():
         "Operation number": 14310,
         "Colonne à masquer lors de la diffusion": "2014FR16M0OP001",
     }
-    (normalisee,) = normaliser_operations([op], SOURCE_NOUVELLE_AQUITAINE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NOUVELLE_AQUITAINE_2014_2020).iloc[0]
 
     assert normalisee["Fonds"] == "FEDER"
     assert normalisee["Montant UE"] == 220000.0
     assert normalisee["Total des dépenses éligibles"] == 550000.0
     assert normalisee["Taux de cofinancement"] == pytest.approx(0.4)  # recalculé, égal au déclaré ici
     assert normalisee[TAUX_COFINANCEMENT_DECLARE] == 0.4
-    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is False
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is False
     assert normalisee["Nom du bénéficiaire"] == "CIREF"
     assert normalisee["Libellé Programme"] == "2014FR16M0OP001"
     assert "Funds" not in normalisee
@@ -399,27 +401,27 @@ def test_nouvelle_aquitaine_prend_les_libelles_canoniques():
 
 def test_appliquer_libelles_programmes_traduit_le_code_cci():
     """Nouvelle-Aquitaine ne nomme ses programmes que par ce code (issue #95, étape 1)."""
-    operations = [{"Libellé Programme": "2014FR16M0OP001"}, {"Libellé Programme": "2014FR16M0OP001"}]
+    df = pd.DataFrame([{"Libellé Programme": "2014FR16M0OP001"}, {"Libellé Programme": "2014FR16M0OP001"}])
     libelles = {"2014FR16M0OP001": "PO FEDER-FSE Nouvelle Aquitaine"}
 
-    traduites = appliquer_libelles_programmes(operations, libelles)
+    traduites = appliquer_libelles_programmes(df, libelles)
 
-    assert all(op["Libellé Programme"] == "PO FEDER-FSE Nouvelle Aquitaine" for op in traduites)
+    assert (traduites["Libellé Programme"] == "PO FEDER-FSE Nouvelle Aquitaine").all()
 
 
 def test_appliquer_libelles_programmes_garde_un_code_inconnu_tel_quel():
     """Un code absent de la table ne doit pas faire disparaître l'opération ni la
     rattacher à un mauvais programme — il reste visible tel quel, à corriger le jour où
     la table est complétée."""
-    (traduite,) = appliquer_libelles_programmes([{"Libellé Programme": "CODE-INCONNU"}], {})
+    traduite = appliquer_libelles_programmes(pd.DataFrame([{"Libellé Programme": "CODE-INCONNU"}]), {}).iloc[0]
     assert traduite["Libellé Programme"] == "CODE-INCONNU"
 
 
 def test_appliquer_libelles_programmes_ne_modifie_pas_les_operations_recues():
-    op = {"Libellé Programme": "2014FR16M0OP001"}
-    avant = dict(op)
-    appliquer_libelles_programmes([op], {"2014FR16M0OP001": "PO Nouvelle-Aquitaine"})
-    assert op == avant
+    df = pd.DataFrame([{"Libellé Programme": "2014FR16M0OP001"}])
+    avant = df.copy()
+    appliquer_libelles_programmes(df, {"2014FR16M0OP001": "PO Nouvelle-Aquitaine"})
+    pd.testing.assert_frame_equal(df, avant)
 
 
 def test_capacites_source_synergie_a_tout():
@@ -463,10 +465,107 @@ def test_taux_existant_invalide_devient_none():
     correctif. Le taux recalculé est de toute façon None ici (dépenses nulles) : les deux
     colonnes concordent sur l'absence de valeur, pas de divergence signalée."""
     op = {"Montant UE": 100.0, "Total des dépenses éligibles": 0.0, "Taux de cofinancement": "#DIV/0"}
-    (normalisee,) = normaliser_operations([op], SOURCE_NOUVELLE_AQUITAINE_2014_2020)
-    assert normalisee["Taux de cofinancement"] is None
-    assert normalisee[TAUX_COFINANCEMENT_DECLARE] is None
-    assert normalisee[TAUX_COFINANCEMENT_DIVERGENT] is False
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NOUVELLE_AQUITAINE_2014_2020).iloc[0]
+    assert pd.isna(normalisee["Taux de cofinancement"])
+    assert pd.isna(normalisee[TAUX_COFINANCEMENT_DECLARE])
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is False
+
+
+# --- Taux déclaré divergent (#127) : recalculer, comparer, signaler -----------
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_source_regionale_recalcule_le_taux_au_lieu_de_garder_le_declare(source):
+    """Pour les sources régionales 14-20, le taux affiché est toujours recalculé
+    depuis les deux montants — pas celui du fichier. Les deux mesurent la même
+    chose, mais ne concordent pas systématiquement (#127, 8 opérations, 23,8 M€).
+    Le taux recalculé est homogène sur les six sources de la période."""
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.55}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert normalisee["Taux de cofinancement"] == pytest.approx(0.4)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_source_regionale_conserve_le_taux_declare_a_part(source):
+    """Le taux du fichier n'est pas perdu : il rejoint une colonne dédiée qui sert
+    de signal de qualité de source, jamais de référence pour les plafonds."""
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.55}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert normalisee[TAUX_COFINANCEMENT_DECLARE] == pytest.approx(0.55)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_taux_divergent_signale_quand_ecart_depasse_le_seuil(source):
+    """Un écart > SEUIL_ECART_TAUX_DECLARE entre déclaré et recalculé vaut True."""
+    ecart = SEUIL_ECART_TAUX_DECLARE + 0.001
+    recalcule = 0.4
+    declare = recalcule + ecart
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": declare}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is True
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SOURCE_NORMANDIE_2014_2020, SOURCE_NOUVELLE_AQUITAINE_2014_2020, SOURCE_BRETAGNE_2014_2020],
+    ids=["normandie", "nouvelle-aquitaine", "bretagne"],
+)
+def test_taux_non_divergent_quand_ecart_sous_le_seuil(source):
+    """Un écart <= SEUIL_ECART_TAUX_DECLARE vaut False : les deux mesures concordent."""
+    ecart = SEUIL_ECART_TAUX_DECLARE * 0.5
+    recalcule = 0.4
+    declare = recalcule + ecart
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": declare}
+    normalisee = normaliser_operations(pd.DataFrame([op]), source).iloc[0]
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is False
+
+
+def test_taux_divergent_false_quand_declare_invalide():
+    """Nouvelle-Aquitaine avec `#DIV/0` : le déclaré est NaN, pas de comparaison possible,
+    divergent est False — pas un signal d'écart, juste une absence."""
+    op = {"Montant UE": 100.0, "Total des dépenses éligibles": 0.0, "Taux de cofinancement": "#DIV/0"}
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_NOUVELLE_AQUITAINE_2014_2020).iloc[0]
+    assert bool(normalisee[TAUX_COFINANCEMENT_DIVERGENT]) is False
+    assert pd.isna(normalisee[TAUX_COFINANCEMENT_DECLARE])
+
+
+def test_synergie_n_a_pas_de_taux_declare_ni_divergent():
+    """Synergie ne porte pas de taux dans le fichier : rien à comparer, ces colonnes
+    n'existent pas — les ajouter à vide polluerait les groupby en aval."""
+    op = {"Montant UE programmé": 850.0, "Total des dépenses éligibles programmées": 1000.0}
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2014_2020).iloc[0]
+    assert TAUX_COFINANCEMENT_DECLARE not in normalisee.index
+    assert TAUX_COFINANCEMENT_DIVERGENT not in normalisee.index
+
+
+def test_2021_2027_n_a_pas_de_taux_declare_ni_divergent():
+    """Hors périmètre de #127 : le taux du fichier est la seule mesure disponible."""
+    op = {"Montant UE": 500.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.42}
+    normalisee = normaliser_operations(pd.DataFrame([op]), PERIODE_2021_2027).iloc[0]
+    assert TAUX_COFINANCEMENT_DECLARE not in normalisee.index
+    assert TAUX_COFINANCEMENT_DIVERGENT not in normalisee.index
+
+
+def test_normaliser_source_regionale_ne_modifie_pas_le_dataframe_recu():
+    """Même invariant que test_normaliser_ne_modifie_pas_les_operations_recues,
+    étendu au chemin #127 qui ajoute des colonnes."""
+    op = {"Montant UE": 400.0, "Total des dépenses éligibles": 1000.0, "Taux de cofinancement": 0.55}
+    df = pd.DataFrame([op])
+    avant = df.copy()
+    normaliser_operations(df, SOURCE_NORMANDIE_2014_2020)
+    pd.testing.assert_frame_equal(df, avant)
 
 
 def test_capacites_source_periode_synergie_equivaut_a_sa_source():
@@ -493,7 +592,7 @@ def test_pon_fse_prend_les_libelles_canoniques():
         "Date fin réalisation": "2016-12-31",
         "Fonds": "FSE",
     }
-    (normalisee,) = normaliser_operations([op], SOURCE_PON_FSE_2014_2020)
+    normalisee = normaliser_operations(pd.DataFrame([op]), SOURCE_PON_FSE_2014_2020).iloc[0]
 
     assert normalisee["Numéro Opération"] == "201603870"
     assert normalisee["Libellé Programme"] == "Programme Opérationnel National FSE"
@@ -547,32 +646,30 @@ def test_fusion_ensemble_national_substitue_et_additionne():
       gardé (`national`), l'interrégional est écarté (aucune vue n'a de case pour lui) ;
     - le PON FSE s'ajoute, routé par programme et non par la région portée par la ligne
       (PON001, région Guadeloupe portée par la ligne mais programme national → 'national')."""
-    ops_synergie = [
+    ops_synergie = pd.DataFrame([
         {"Fonds": "FEDER", "Montant UE": 100.0, "regions_modernes": ["Bretagne"], "is_national": False, "is_interregional": False},
         {"Fonds": "FEDER", "Montant UE": 200.0, "regions_modernes": ["Nouvelle-Aquitaine"], "is_national": False, "is_interregional": False},
         {"Fonds": "FEDER", "Montant UE": 300.0, "regions_modernes": ["Occitanie"], "is_national": False, "is_interregional": False},
         {"Fonds": "FSE", "Montant UE": 50.0, "regions_modernes": [], "is_national": True, "is_interregional": False},
         {"Fonds": "FSE", "Montant UE": 999.0, "regions_modernes": ["Bretagne", "Occitanie"], "is_national": False, "is_interregional": True},
-    ]
+    ])
     ops_hors_synergie_par_region = {
-        "Bretagne": [{"Fonds": "FEDER", "Montant UE": 150.0}],
+        "Bretagne": pd.DataFrame([{"Fonds": "FEDER", "Montant UE": 150.0}]),
     }
-    ops_pon_fse = [
+    ops_pon_fse = pd.DataFrame([
         {"Fonds": "FSE", "Montant UE": 10.0, "Libellé Programme": "PO Guadeloupe", "regions_modernes": ["Guadeloupe"]},
         {"Fonds": "FSE", "Montant UE": 20.0, "Libellé Programme": "Programme Opérationnel National FSE"},
-    ]
+    ])
 
     fusion = fusionner_ensemble_national_2014_2020(ops_synergie, ops_hors_synergie_par_region, ops_pon_fse)
-    montants_par_perimetre = {}
-    for op in fusion:
-        montants_par_perimetre.setdefault(op[PERIMETRE_FUSION], []).append(op["Montant UE"])
+    montants_par_perimetre = fusion.groupby(PERIMETRE_FUSION)["Montant UE"].apply(sorted).to_dict()
 
-    assert montants_par_perimetre["Bretagne"] == [150.0]  # fichier régional, pas la ligne Synergie (100.0)
-    assert montants_par_perimetre["Nouvelle-Aquitaine"] == [200.0]  # repli Synergie, aucun fichier chargé
+    assert montants_par_perimetre["Bretagne"] == [150.0]
+    assert montants_par_perimetre["Nouvelle-Aquitaine"] == [200.0]
     assert montants_par_perimetre["Occitanie"] == [300.0]
-    assert sorted(montants_par_perimetre["national"]) == [20.0, 50.0]  # Synergie national + PON FSE national
-    assert montants_par_perimetre["Guadeloupe"] == [10.0]  # PON FSE routé par programme
-    assert sum(len(v) for v in montants_par_perimetre.values()) == 6  # l'interrégional (999.0) n'est nulle part
+    assert montants_par_perimetre["national"] == [20.0, 50.0]
+    assert montants_par_perimetre["Guadeloupe"] == [10.0]
+    assert len(fusion) == 6
 
 
 def test_enveloppes_ensemble_national_fusionne_par_perimetre_avant_de_sommer():
@@ -587,13 +684,61 @@ def test_enveloppes_ensemble_national_fusionne_par_perimetre_avant_de_sommer():
         "national": {"FSE": 50.0},
     }
     fonds_engages = {
-        "La Réunion": {"FEDER", "FEDER REACT-EU"},  # porte des opérations REACT-EU : pas de fusion
-        "Occitanie": {"FEDER"},  # aucune opération REACT-EU : fusion dans FEDER
+        "La Réunion": {"FEDER", "FEDER REACT-EU"},
+        "Occitanie": {"FEDER"},
         "national": {"FSE"},
     }
     enveloppes, fonds_fusionnes = enveloppes_ensemble_national_2014_2020(fonds_engages, totaux)
 
-    assert enveloppes["FEDER REACT-EU"] == 20.0  # La Réunion seule, jamais fusionnée
-    assert enveloppes["FEDER"] == pytest.approx(100.0 + 200.0 + 30.0)  # Occitanie fusionnée avant la somme
+    assert enveloppes["FEDER REACT-EU"] == 20.0
+    assert enveloppes["FEDER"] == pytest.approx(100.0 + 200.0 + 30.0)
     assert enveloppes["FSE"] == 50.0
-    assert fonds_fusionnes == ["FEDER REACT-EU"]  # fusionné sur Occitanie, signalé malgré La Réunion
+    assert fonds_fusionnes == ["FEDER REACT-EU"]
+
+
+# Les trois régions qui se substituent à Synergie (issue #95). Épinglées ici parce
+# que la table a désormais **plusieurs consommateurs hors du dashboard** : les vues
+# SQL de `metabase/init/` la réécrivent (issue #125) et le codegen dbt l'importe
+# (issue #135). Une quatrième région qui publierait son fichier doit être ajoutée
+# partout ; ce test fait échouer la suite si on ne l'ajoute qu'ici, et sert de
+# rappel de la liste des endroits à mettre à jour.
+REGIONS_SUBSTITUEES_ATTENDUES = {
+    "Normandie": "2014-2020-normandie",
+    "Nouvelle-Aquitaine": "2014-2020-nouvelle-aquitaine",
+    "Bretagne": "2014-2020-bretagne-officiel",
+}
+
+
+def test_regions_substituees_pointent_sur_leur_source():
+    from utils.periodes import REGIONS_SUBSTITUEES_2014_2020
+
+    assert REGIONS_SUBSTITUEES_2014_2020 == REGIONS_SUBSTITUEES_ATTENDUES
+
+
+def test_regions_substituees_sont_des_cles_de_sources_connues():
+    """Chaque valeur doit être une clé réelle de `sources.SOURCES`.
+
+    Sinon la page charge un fichier qui n'existe pas et se rabat silencieusement
+    sur le sous-comptage Synergie — exactement le défaut que #95 a corrigé.
+    """
+    sys.path.insert(0, str(RACINE / "data-pipeline"))
+    from sources import SOURCES
+
+    from utils.periodes import REGIONS_SUBSTITUEES_2014_2020
+
+    for region, source_id in REGIONS_SUBSTITUEES_2014_2020.items():
+        assert source_id in SOURCES, f"{region} pointe sur une source inconnue : {source_id}"
+
+
+def test_la_page_2014_2020_ne_redefinit_pas_la_table():
+    """La page doit IMPORTER la règle, pas en garder une copie.
+
+    Elle l'a longtemps définie en propre (`SOURCE_HORS_SYNERGIE`), ce qui la
+    rendait inaccessible à tout script — un module Streamlit ne s'importe pas.
+    Ce test empêche le retour en arrière.
+    """
+    page = (RACINE / "dashboard" / "pages" / "5_Période_2014-2020.py").read_text(
+        encoding="utf-8"
+    )
+    assert "REGIONS_SUBSTITUEES_2014_2020" in page
+    assert '"Normandie": SOURCE_NORMANDIE_2014_2020' not in page

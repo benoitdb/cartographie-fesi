@@ -48,6 +48,8 @@ page vide en silence.
 
 from collections import defaultdict
 
+import pandas as pd
+
 PERIODE_2021_2027 = "2021-2027"
 PERIODE_2014_2020 = "2014-2020"
 
@@ -61,6 +63,26 @@ SOURCE_NORMANDIE_2014_2020 = "2014-2020-normandie"
 SOURCE_NOUVELLE_AQUITAINE_2014_2020 = "2014-2020-nouvelle-aquitaine"
 SOURCE_BRETAGNE_2014_2020 = "2014-2020-bretagne-officiel"
 SOURCE_PON_FSE_2014_2020 = "2014-2020-pon-fse"
+
+# Les trois régions qui SE SUBSTITUENT à Synergie sur leur périmètre, chacune
+# ayant son propre fichier régional complet (issue #95) : Normandie n'apparaît
+# même pas dans `aggregates.by_region` de Synergie, Nouvelle-Aquitaine n'y figure
+# qu'à la marge (25 opérations), et Bretagne (3 opérations) en est sortie à son
+# tour depuis l'export officiel data.bretagne.bzh. Le PON FSE reste hors de cette
+# table : ses opérations couvrent sept programmes distincts à ventiler, pas un
+# seul périmètre régional (#95, point 3, cf. REGIONS_PON_FSE_2014_2020).
+#
+# Ici et non dans la page qui l'utilise : c'est une RÈGLE MÉTIER de la période,
+# pas un détail d'écran, et d'autres consommateurs que Streamlit en ont besoin —
+# les vues SQL de `metabase/init/` la réécrivent aujourd'hui à la main (issue
+# #125), et le codegen dbt (#135) ne pouvait pas l'importer tant qu'elle vivait
+# dans un module Streamlit. Un module `utils` s'importe depuis un script ; une
+# page, non.
+REGIONS_SUBSTITUEES_2014_2020 = {
+    "Normandie": SOURCE_NORMANDIE_2014_2020,
+    "Nouvelle-Aquitaine": SOURCE_NOUVELLE_AQUITAINE_2014_2020,
+    "Bretagne": SOURCE_BRETAGNE_2014_2020,
+}
 
 # clé sémantique -> libellé **canonique** du dashboard, celui de 2021-2027 — non
 # parce qu'il serait meilleur, mais parce que c'est celui que le code existant lit
@@ -206,16 +228,17 @@ def capacites_source(source):
     return CAPACITES_SOURCE.get(source, {"trajectoire": True, "departement": True})
 
 
-def appliquer_libelles_programmes(operations, libelles_programmes):
+def appliquer_libelles_programmes(df, libelles_programmes):
     """Remplace un code CCI de programme par son libellé humain (issue #95, étape 1).
 
     Nouvelle-Aquitaine ne nomme ses programmes que par ce code — `libelles_programmes`
     vient de `programme_detail_2014_2020.json` (clé `libelles_programmes`). Une opération
     dont le code n'y figure pas garde son code tel quel plutôt que de disparaître."""
-    return [
-        {**op, "Libellé Programme": libelles_programmes.get(op["Libellé Programme"], op["Libellé Programme"])}
-        for op in operations
-    ]
+    return df.assign(
+        **{"Libellé Programme": df["Libellé Programme"].map(
+            lambda x: libelles_programmes.get(x, x)
+        )}
+    )
 
 MONTANT_UE = "Montant UE"
 DEPENSES = "Total des dépenses éligibles"
@@ -359,6 +382,14 @@ MENTION_PLAFONDS_PERIODE = (
     "§3 relève lui-même le plafond des axes mettant en œuvre l'Initiative pour l'emploi des "
     "jeunes) et **FEAD**, qui n'est pas un Fonds ESI mais un transfert hors enveloppe "
     "structurelle (art. 94), régi par le règlement 223/2014."
+)
+
+MENTION_TAUX_DECLARE_DIVERGENT = (
+    "Le taux affiché est **recalculé** (montant UE / dépenses éligibles), pour rester "
+    "comparable aux autres sources de la période — Synergie et le PON FSE ne portent aucun "
+    "taux déclaré. Sur {n} opération(s) ({montant}), le taux déclaré par le fichier source "
+    "diverge de plus d'un point du taux recalculé : signalé comme un point de qualité de "
+    "source à vérifier, pas comme un dépassement."
 )
 
 # Pourquoi un taux au-dessus du plafond n'est pas, en soi, une irrégularité. À afficher avec
@@ -578,56 +609,58 @@ def fusionner_enveloppes_sans_libelle(enveloppes, fonds_engages):
     return resultat, fusionnes
 
 
-# Régions dont le fichier propre SE SUBSTITUE à Synergie (#95) — mêmes trois que
-# `SOURCE_HORS_SYNERGIE` côté page, mais cette liste-ci ne dépend que du nom de
-# région, pas du chemin d'un fichier : utilisée par `fusionner_ensemble_national_2014_2020`
-# pour reconnaître les lignes Synergie à exclure, indépendamment de savoir si un
-# fichier régional a pu être chargé pour cette même région.
-REGIONS_SUBSTITUEES_2014_2020 = frozenset({"Bretagne", "Normandie", "Nouvelle-Aquitaine"})
-
 PERIMETRE_FUSION = "_perimetre_fusion"
 
 
 def fusionner_ensemble_national_2014_2020(ops_synergie, ops_hors_synergie_par_region, ops_pon_fse):
-    """Fusion des six sources 2014-2020 en une seule liste d'opérations, chacune taguée de
+    """Fusion des six sources 2014-2020 en un seul DataFrame, chaque opération taguée de
     son périmètre final (`PERIMETRE_FUSION` : une région, ou `'national'`) — jumeau Python de
     la vue SQL `v_perimetre_2014_2020` (`metabase/init/04_periode_2014_2020.sql`), pour le
     périmètre agrégé « Ensemble national » de cette page (arbitrage Phase 4, issue #121).
 
     Reproduit les deux mêmes règles que la fusion SQL :
       - **substitution** : Bretagne, Normandie et Nouvelle-Aquitaine lisent leur fichier
-        régional propre (`ops_hors_synergie_par_region`, déjà normalisé et filtré par fonds
-        par l'appelant) et ignorent leurs quelques lignes Synergie marginales — une région
-        dont le fichier n'a pas pu être chargé (gitignoré, CI) n'est PAS dans ce dict : ses
-        lignes Synergie restent alors incluses, en repli, plutôt que silencieusement perdues ;
-      - **addition** : le PON FSE (`ops_pon_fse`, déjà filtré par fonds) s'ajoute, routé par
-        `REGIONS_PON_FSE_2014_2020` (programme, pas la région portée par chaque ligne).
+        régional propre (`ops_hors_synergie_par_region`, dict {région: DataFrame}, déjà
+        normalisé et filtré par fonds par l'appelant) et ignorent leurs quelques lignes
+        Synergie marginales — une région dont le fichier n'a pas pu être chargé (gitignoré,
+        CI) n'est PAS dans ce dict : ses lignes Synergie restent alors incluses, en repli,
+        plutôt que silencieusement perdues ;
+      - **addition** : le PON FSE (`ops_pon_fse`, DataFrame déjà filtré par fonds) s'ajoute,
+        routé par `REGIONS_PON_FSE_2014_2020` (programme, pas la région portée par chaque
+        ligne).
 
     Les opérations **interrégionales** de Synergie n'y figurent pas — même choix que la vue
     SQL, pour rester concordant avec elle (Phase 4) : ni région ni volet national à proprement
     parler, leur total reste affiché séparément (page 5, section KPI) plutôt qu'assimilé à
     l'un ou l'autre.
     """
-    fusion = []
-    for op in ops_synergie:
-        if op.get("is_interregional"):
-            continue
-        if op.get("is_national"):
-            fusion.append({**op, PERIMETRE_FUSION: "national"})
-            continue
-        regions = op.get("regions_modernes") or []
-        if len(regions) == 1 and regions[0] not in ops_hors_synergie_par_region:
-            fusion.append({**op, PERIMETRE_FUSION: regions[0]})
+    regions_substituees = set(ops_hors_synergie_par_region)
+    synergie_filtre = ops_synergie[~ops_synergie["is_interregional"]].copy()
+    perimetre = pd.Series("", index=synergie_filtre.index)
+    perimetre[synergie_filtre["is_national"]] = "national"
+    mono = synergie_filtre["regions_modernes"].apply(
+        lambda r: isinstance(r, list) and len(r) == 1
+    )
+    mono_region = synergie_filtre["regions_modernes"].apply(
+        lambda r: r[0] if isinstance(r, list) and len(r) == 1 else ""
+    )
+    non_substitue = mono & ~mono_region.isin(regions_substituees) & ~synergie_filtre["is_national"]
+    perimetre[non_substitue] = mono_region[non_substitue]
+    synergie_filtre = synergie_filtre[perimetre != ""]
+    synergie_filtre = synergie_filtre.assign(**{PERIMETRE_FUSION: perimetre[perimetre != ""]})
 
-    for region, ops_region in ops_hors_synergie_par_region.items():
-        for op in ops_region:
-            fusion.append({**op, PERIMETRE_FUSION: region})
+    parts = [synergie_filtre]
+    for region, df_region in ops_hors_synergie_par_region.items():
+        if not df_region.empty:
+            parts.append(df_region.assign(**{PERIMETRE_FUSION: region}))
 
-    for op in ops_pon_fse:
-        perimetre = REGIONS_PON_FSE_2014_2020.get(op.get("Libellé Programme")) or "national"
-        fusion.append({**op, PERIMETRE_FUSION: perimetre})
+    if not ops_pon_fse.empty:
+        perimetre_pon = ops_pon_fse["Libellé Programme"].map(REGIONS_PON_FSE_2014_2020).fillna("national")
+        parts.append(ops_pon_fse.assign(**{PERIMETRE_FUSION: perimetre_pon}))
 
-    return fusion
+    if not parts:
+        return pd.DataFrame()
+    return pd.concat(parts, ignore_index=True)
 
 
 def enveloppes_ensemble_national_2014_2020(fonds_engages_par_perimetre, totaux_2014_2020):
@@ -720,7 +753,7 @@ def _taux(montant_ue, depenses):
     return montant_ue / depenses
 
 
-def normaliser_operations(operations, source):
+def normaliser_operations(df, source):
     """Opérations aux libellés canoniques du dashboard.
 
     `source` est une clé de `RENOMMAGES` (`SOURCE_2021_2027`, `SOURCE_SYNERGIE_2014_2020`,
@@ -753,32 +786,25 @@ def normaliser_operations(operations, source):
     qui dit à la page de ne pas les demander.
     """
     renommage = RENOMMAGES.get(source, {})
-    normalisees = []
-    for op in operations:
-        if renommage:
-            op = {renommage.get(cle, cle): valeur for cle, valeur in op.items()}
-        else:
-            op = dict(op)
-
-        if TAUX_COFINANCEMENT not in op:
-            # Synergie, PON FSE : pas de taux déclaré, rien à comparer.
-            op[TAUX_COFINANCEMENT] = _taux(op.get(MONTANT_UE), op.get(DEPENSES))
-        elif source == SOURCE_2021_2027:
-            # 2021-2027 : hors périmètre de #127, comportement inchangé — seul
-            # taux disponible, celui du fichier.
-            op[TAUX_COFINANCEMENT] = op[TAUX_COFINANCEMENT] if isinstance(op[TAUX_COFINANCEMENT], (int, float)) else None
-        else:
-            # Le taux de Nouvelle-Aquitaine est une formule Excel (montant / dépenses),
-            # qui porte parfois `#DIV/0` en toutes lettres pour une dépense nulle — une
-            # chaîne d'erreur de tableur, pas un taux.
-            declare = op[TAUX_COFINANCEMENT] if isinstance(op[TAUX_COFINANCEMENT], (int, float)) else None
-            recalcule = _taux(op.get(MONTANT_UE), op.get(DEPENSES))
-            op[TAUX_COFINANCEMENT] = recalcule
-            op[TAUX_COFINANCEMENT_DECLARE] = declare
-            op[TAUX_COFINANCEMENT_DIVERGENT] = (
-                declare is not None
-                and recalcule is not None
-                and abs(declare - recalcule) > SEUIL_ECART_TAUX_DECLARE
-            )
-        normalisees.append(op)
-    return normalisees
+    if renommage:
+        df = df.rename(columns=renommage)
+    if TAUX_COFINANCEMENT not in df.columns:
+        montant = pd.to_numeric(df.get(MONTANT_UE), errors="coerce")
+        depenses = pd.to_numeric(df.get(DEPENSES), errors="coerce")
+        df = df.assign(**{TAUX_COFINANCEMENT: montant / depenses.replace(0, float("nan"))})
+    elif source == SOURCE_2021_2027:
+        df = df.assign(**{TAUX_COFINANCEMENT: pd.to_numeric(df[TAUX_COFINANCEMENT], errors="coerce")})
+    else:
+        declare = pd.to_numeric(df[TAUX_COFINANCEMENT], errors="coerce")
+        montant = pd.to_numeric(df.get(MONTANT_UE), errors="coerce")
+        depenses = pd.to_numeric(df.get(DEPENSES), errors="coerce")
+        recalcule = montant / depenses.replace(0, float("nan"))
+        df = df.assign(**{
+            TAUX_COFINANCEMENT: recalcule,
+            TAUX_COFINANCEMENT_DECLARE: declare,
+            TAUX_COFINANCEMENT_DIVERGENT: (
+                declare.notna() & recalcule.notna()
+                & ((declare - recalcule).abs() > SEUIL_ECART_TAUX_DECLARE)
+            ),
+        })
+    return df

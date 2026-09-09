@@ -29,20 +29,20 @@ def _resoudre_code_postal(op, territoire, lookup):
     return None, "non localisable"
 
 
-def build_bubbles_localisation(region_ops, territoire, lookup, amount_col="Montant UE"):
+def build_bubbles_localisation(df, territoire, lookup, amount_col="Montant UE"):
     """Agrège les opérations d'un territoire DROM-COM par code postal résolu (une bulle par
     code postal, pas un point par opération — évite la surcharge visuelle et reste lisible sur
     un territoire de petite taille). Retourne (bubbles_df, couverture) où couverture est un
     dict {"opération": n, "bénéficiaire (approximé)": n, "non localisable": n}."""
-    resolus = [(*_resoudre_code_postal(op, territoire, lookup), op) for op in region_ops]
-
     couverture = {"opération": 0, "bénéficiaire (approximé)": 0, "non localisable": 0}
     lignes = []
-    for code_postal, source, op in resolus:
+    for _, row in df.iterrows():
+        code_postal, source = _resoudre_code_postal(row, territoire, lookup)
         couverture[source] += 1
         if code_postal is None:
             continue
-        lignes.append({"code_postal": code_postal, "source": source, amount_col: op.get(amount_col) or 0})
+        montant = row.get(amount_col)
+        lignes.append({"code_postal": code_postal, "source": source, amount_col: montant if pd.notna(montant) else 0})
 
     if not lignes:
         return pd.DataFrame(columns=["code_postal", "commune", "lat", "lon", "count", amount_col]), couverture

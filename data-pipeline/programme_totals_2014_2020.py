@@ -46,13 +46,20 @@ from reference.programmes_2014_2020 import (
     PROGRAMMES,
     programme,
 )
+from reference.programmes_interregionaux_2014_2020 import (
+    REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020,
+)
 from reference.react_eu_2014_2020 import MAPPING_FONDS_DONNEES, MAQUETTES
 
 OUTPUT_PATH = Path(__file__).parent.parent / "data" / "processed" / "programme_totals_2014_2020.json"
 DETAIL_OUTPUT_PATH = Path(__file__).parent.parent / "data" / "processed" / "programme_detail_2014_2020.json"
 
-# Clé de regroupement des programmes nationaux et interrégionaux, alignée sur le
-# périmètre "Volet national" du dashboard (opérations is_national=True).
+# Clé de regroupement des programmes strictement nationaux, alignée sur le périmètre
+# "Volet national" du dashboard (opérations is_national=True). Les 5 POI interrégionaux
+# n'y tombent plus depuis l'issue #77 : leur `region` vaut "Interrégional" dans
+# `PROGRAMMES`, qui route directement leur enveloppe vers cette clé-là via `cle_region`
+# ci-dessous — sans quoi le Volet national afficherait un taux de consommation faussé
+# (enveloppe inchangée, engagé amputé des opérations sorties vers l'interrégional).
 CLE_NATIONAL = "national"
 
 
@@ -120,6 +127,13 @@ def calculer():
         # ceux de l'Accord de partenariat, seule transcription de référence ici — ils
         # diffèrent parfois de ceux de Synergie, cf. docstring de `programmes_2014_2020`.
         "libelles_programmes": {p.cci: p.nom for p in PROGRAMMES},
+        # Régions couvertes par chaque programme interrégional (issue #77), pour que
+        # le dashboard puisse l'afficher en légende du périmètre "Interrégional" — la
+        # même table sert au routage des opérations engagées côté pipeline
+        # (region_mapping.harmonize_region), recopiée telle quelle ici pour que
+        # l'affichage la lise sans jamais importer de code data-pipeline (deux venv
+        # séparés, seul le JSON généré relie les deux).
+        "regions_interregional": REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020,
     }
     return {r: dict(v) for r, v in totaux.items()}, detail
 

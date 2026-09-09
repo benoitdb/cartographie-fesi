@@ -36,3 +36,54 @@ jobs:
 
       - name: Tests
         run: pytest -q
+
+  # Recoupe les marts dbt contre `agregats.calculer_agregats`, la règle qui
+  # alimente le dashboard. Job SÉPARÉ des tests : il a ses propres dépendances
+  # (dbt-core + dbt-duckdb, ~200 Mo) que la suite principale n'a aucune raison
+  # d'installer, et il doit pouvoir échouer sans masquer un échec de test.
+  #
+  # POURQUOI IL PEUT TOURNER EN CI, là où `metabase/verify_*.py` ne le peut pas
+  # (issue #125) : la cible DuckDB ne demande AUCUNE infrastructure — pas de
+  # PostgreSQL, pas de Docker. Elle lit les Parquet directement, et ceux-ci sont
+  # committés depuis le déploiement Streamlit Cloud (#119) puis la bascule
+  # Parquet (#132). Le clone nu a donc tout ce qu'il faut.
+  #
+  # Couverture : les 6 marts de base (partitions d'`agregats.py`) plus les
+  # contrôles de complétude et de planchage. Les marts 2014-2020 n'ont pas
+  # d'oracle Python équivalent — leur vérité est la vue SQL, absente du clone nu
+  # — et les couvrir supposerait soit de figer des valeurs de référence, soit de
+  # réimplémenter la règle côté test, ce qui recréerait une duplication.
+  # Arbitrage assumé (issue #135).
+  equivalence-dbt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Installer dbt et le pipeline
+        run: |
+          pip install -r requirements-dbt.txt
+          pip install -r data-pipeline/requirements.txt
+
+      # Le staging et les seeds sont GÉNÉRÉS depuis le Python (schema_source,
+      # periodes, cofinancement) : les régénérer ici vérifie au passage que le
+      # SQL committé est bien à jour — voir l'étape suivante.
+      - name: Générer le staging, les seeds et les règles
+        run: python dbt/generer.py
+
+      # Si la génération produit un diff, c'est que quelqu'un a modifié une règle
+      # Python sans relancer le codegen : le SQL committé et la règle ont divergé.
+      # C'est exactement le scénario que l'issue #125 décrit, attrapé sans base.
+      - name: Le SQL généré est-il à jour ?
+        run: git diff --exit-code -- dbt/
+
+      - name: Construire les modèles (DuckDB)
+        working-directory: dbt
+        run: dbt build --profiles-dir . --target duckdb
+
+      - name: Équivalence avec les agrégats Python
+        run: python dbt/verifier_equivalence.py
