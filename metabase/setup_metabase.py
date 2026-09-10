@@ -411,6 +411,18 @@ CARD_TAGS = {
     "structure_rup": ("perimetre", "fonds"),
     "controle_cofinancement": ("perimetre",),
     "sources_chargement": ("periode",),
+    # Phase D — Analyses & contrôle. Le tag `perimetre` de ces cartes pointe
+    # sur `operations.region` (pas `v_engage_all.perimetre`) : les périmètres
+    # 'national'/'interregional' (region NULL ou flag sans valeur) ne matchent
+    # pas, et la carte est vide — comportement voulu, voir le commentaire de
+    # build_usage_cards Phase D.
+    "analyse_stats_fonds": ("periode", "perimetre", "fonds"),
+    "analyse_histogramme": ("periode", "perimetre", "fonds"),
+    "analyse_boxplot_stats": ("periode", "perimetre", "fonds"),
+    "analyse_outliers": ("periode", "perimetre", "fonds"),
+    "analyse_top_beneficiaires": ("periode", "perimetre", "fonds"),
+    "analyse_lorenz": ("periode", "perimetre", "fonds"),
+    "analyse_coherence": ("periode", "perimetre", "fonds"),
 }
 
 SERIES_FONDS = {f: {"color": c} for f, c in FONDS_COLORS.items()}
@@ -449,13 +461,22 @@ def build_usage_cards(session, db_id, tables):
     # trous : deux tags qui partagent un id se recouvrent en silence.
     tag_id_c = "b1000000-0000-0000-0000-0000000001%02d"
 
-    def filtres(champs, table, depart=0, radical=None):
-        """Les trois field filters standards, sur les champs d'une même table."""
+    def filtres(champs, table, depart=0, radical=None, colonnes=None):
+        """Les trois field filters standards, sur les champs d'une même table.
+
+        colonnes (optionnel, dict) : renomme un champ de tag vers la colonne
+        réelle de la table. Ex. ``{"perimetre": "region"}`` crée un tag nommé
+        ``perimetre`` (câblé au paramètre dashboard ``fesi-perimetre``) mais
+        pointé sur ``table["region"]`` — nécessaire quand la table cible n'a
+        pas de colonne ``perimetre`` (cas d'``operations``, dont le périmètre
+        est porté par ``region``)."""
         libelles = {"periode": "Période", "perimetre": "Périmètre", "fonds": "Fonds"}
+        colonnes = colonnes or {}
         radical = radical or tag_id
         tags = {}
         for i, nom in enumerate(champs):
-            tags.update(dimension_tag(nom, libelles[nom], table[nom], radical % (depart + i)))
+            col = colonnes.get(nom, nom)
+            tags.update(dimension_tag(nom, libelles[nom], table[col], radical % (depart + i)))
         return tags
 
     cards = {}
@@ -980,6 +1001,329 @@ def build_usage_cards(session, db_id, tables):
         },
     )
 
+    # ------------------------------------------------- Phase D : Analyses & contrôle
+
+    # Radical dédié pour que les tag_id de la Phase D ne chevauchent pas ceux des
+    # Phases A/B (tag_id, décades 10-98) ni C (tag_id_c, décades 0-40).
+    tag_id_d = "b1000000-0000-0000-0000-0000000002%02d"
+
+    # Les cartes d'analyse travaillent sur `operations` (données par opération),
+    # pas sur les vues agrégées. Le filtre périmètre porte donc sur
+    # `operations.region` et non `v_engage_all.perimetre` : les périmètres
+    # 'national' et 'interregional' (region NULL ou flag sans valeur de région)
+    # ne matchent pas et la carte est vide — comportement voulu, une analyse de
+    # distribution sur 398 opérations du volet national ne serait pas instructive.
+    # Le texte d'accompagnement du dashboard le dit.
+
+    cards["analyse_stats_fonds"] = upsert_card(
+        session,
+        "Analyse — Statistiques descriptives par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT fonds, COUNT(*) AS nb_projets, "
+                        "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY montant_ue) AS mediane, "
+                        "STDDEV(montant_ue) AS ecart_type, "
+                        "CASE WHEN PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY montant_ue) > 0 "
+                        "THEN STDDEV(montant_ue) / PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY montant_ue) "
+                        "ELSE 0 END AS cv "
+                        "FROM operations "
+                        "WHERE montant_ue IS NOT NULL "
+                        "AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "GROUP BY fonds ORDER BY mediane DESC"
+                    ),
+                    "template-tags": filtres(("periode", "perimetre", "fonds"), ops, 0, tag_id_d, colonnes={"perimetre": "region"}),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {
+                "column_settings": {
+                    '["name","mediane"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","ecart_type"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","cv"]': {"number_style": "decimal", "decimals": 2},
+                },
+            },
+        },
+    )
+
+    cards["analyse_histogramme"] = upsert_card(
+        session,
+        "Analyse — Distribution des montants UE (log)",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Histogramme sur des tranches logarithmiques. Metabase n'a pas
+                    # de binning log natif : on calcule les tranches en SQL avec
+                    # width_bucket sur log10(montant_ue), puis on reconvertit les
+                    # bornes en euros pour l'affichage. 50 bins sur [0, 9] = ordres
+                    # de grandeur de 1 € à 1 Md€.
+                    "query": (
+                        "WITH bins AS ("
+                        "  SELECT width_bucket(log(montant_ue), 0, 9, 50) AS bin, fonds "
+                        "  FROM operations "
+                        "  WHERE montant_ue > 0 "
+                        "  AND {{periode}} AND {{perimetre}} AND {{fonds}}"
+                        ") "
+                        "SELECT bin, "
+                        "CONCAT(TO_CHAR(POWER(10, (bin - 1) * 9.0 / 50), 'FM999G999G999G999'), "
+                        "' - ', "
+                        "TO_CHAR(POWER(10, bin * 9.0 / 50), 'FM999G999G999G999'), ' €') "
+                        "AS tranche, "
+                        "fonds, COUNT(*) AS n_operations "
+                        "FROM bins GROUP BY bin, fonds ORDER BY bin, fonds"
+                    ),
+                    "template-tags": filtres(("periode", "perimetre", "fonds"), ops, 10, tag_id_d, colonnes={"perimetre": "region"}),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {
+                "graph.dimensions": ["tranche", "fonds"],
+                "graph.metrics": ["n_operations"],
+                "stackable.stack_type": "stacked",
+                "graph.x_axis.title_text": "Montant UE (€, échelle log)",
+                "graph.y_axis.title_text": "Nombre d'opérations",
+                "series_settings": SERIES_FONDS,
+            },
+        },
+    )
+
+    cards["analyse_boxplot_stats"] = upsert_card(
+        session,
+        "Analyse — Quartiles et dispersion par fonds",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Metabase n'a pas de boxplot natif. Cette table donne les
+                    # cinq nombres clés (min, Q1, médiane, Q3, max) et les bornes
+                    # des moustaches IQR — ce que le boxplot Streamlit montre
+                    # graphiquement. Le lecteur s'en sert comme référence pour
+                    # situer les opérations atypiques de la table voisine.
+                    "query": (
+                        "SELECT fonds, "
+                        "MIN(montant_ue) AS minimum, "
+                        "PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY montant_ue) AS q1, "
+                        "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY montant_ue) AS mediane, "
+                        "PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY montant_ue) AS q3, "
+                        "MAX(montant_ue) AS maximum, "
+                        "GREATEST(MIN(montant_ue), "
+                        "  PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY montant_ue) "
+                        "  - 1.5 * (PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY montant_ue) "
+                        "    - PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY montant_ue))) AS borne_basse, "
+                        "LEAST(MAX(montant_ue), "
+                        "  PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY montant_ue) "
+                        "  + 1.5 * (PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY montant_ue) "
+                        "    - PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY montant_ue))) AS borne_haute "
+                        "FROM operations "
+                        "WHERE montant_ue IS NOT NULL "
+                        "AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "GROUP BY fonds ORDER BY mediane DESC"
+                    ),
+                    "template-tags": filtres(("periode", "perimetre", "fonds"), ops, 20, tag_id_d, colonnes={"perimetre": "region"}),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {
+                "column_settings": {
+                    '["name","minimum"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","q1"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","mediane"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","q3"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","maximum"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","borne_basse"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","borne_haute"]': {"number_style": "decimal", "decimals": 0},
+                },
+            },
+        },
+    )
+
+    cards["analyse_outliers"] = upsert_card(
+        session,
+        "Analyse — Opérations à montant atypique (IQR par fonds)",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Méthode IQR par fonds, identique à `detect_outliers` côté
+                    # Python : Q1 - 1.5*IQR ou Q3 + 1.5*IQR, calculé séparément
+                    # par fonds. Sans groupement par fonds, les ordres de grandeur
+                    # très différents entre FEDER/FSE+/FTJ produisent des faux
+                    # positifs (constaté : 502 opérations FEDER à tort).
+                    "query": (
+                        "WITH quartiles AS ("
+                        "  SELECT fonds, "
+                        "    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY montant_ue) AS q1, "
+                        "    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY montant_ue) AS q3 "
+                        "  FROM operations "
+                        "  WHERE montant_ue IS NOT NULL "
+                        "  AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "  GROUP BY fonds"
+                        ") "
+                        "SELECT operations.intitule_projet, operations.nom_beneficiaire, "
+                        "operations.fonds, operations.montant_ue "
+                        "FROM operations "
+                        "JOIN quartiles q ON q.fonds = operations.fonds "
+                        "WHERE operations.montant_ue IS NOT NULL "
+                        "AND (operations.montant_ue < q.q1 - 1.5 * (q.q3 - q.q1) "
+                        "  OR operations.montant_ue > q.q3 + 1.5 * (q.q3 - q.q1)) "
+                        "AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "ORDER BY operations.montant_ue DESC "
+                        "LIMIT 50"
+                    ),
+                    "template-tags": filtres(("periode", "perimetre", "fonds"), ops, 30, tag_id_d, colonnes={"perimetre": "region"}),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {
+                "column_settings": {
+                    '["name","montant_ue"]': {"number_style": "decimal", "decimals": 0},
+                },
+            },
+        },
+    )
+
+    cards["analyse_top_beneficiaires"] = upsert_card(
+        session,
+        "Analyse — Top 15 bénéficiaires par montant UE",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Jumeau de `build_pareto_beneficiaires` : les 15 plus gros
+                    # bénéficiaires par montant cumulé. Le % cumulé est calculé
+                    # sur l'ensemble des bénéficiaires, pas seulement les 15
+                    # affichés — c'est la lecture Pareto.
+                    "query": (
+                        "WITH agg AS ("
+                        "  SELECT nom_beneficiaire, SUM(montant_ue) AS montant_ue_total "
+                        "  FROM operations "
+                        "  WHERE montant_ue IS NOT NULL AND nom_beneficiaire IS NOT NULL "
+                        "  AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "  GROUP BY nom_beneficiaire"
+                        "), "
+                        "ranked AS ("
+                        "  SELECT *, "
+                        "    SUM(montant_ue_total) OVER (ORDER BY montant_ue_total DESC) "
+                        "    / SUM(montant_ue_total) OVER () AS cumule_pct, "
+                        "    ROW_NUMBER() OVER (ORDER BY montant_ue_total DESC) AS rang "
+                        "  FROM agg"
+                        ") "
+                        "SELECT nom_beneficiaire, montant_ue_total, cumule_pct "
+                        "FROM ranked WHERE rang <= 15 ORDER BY rang"
+                    ),
+                    "template-tags": filtres(("periode", "perimetre", "fonds"), ops, 40, tag_id_d, colonnes={"perimetre": "region"}),
+                },
+                "database": db_id,
+            },
+            "display": "bar",
+            "visualization_settings": {
+                "graph.dimensions": ["nom_beneficiaire"],
+                "graph.metrics": ["montant_ue_total"],
+                "graph.x_axis.title_text": "Bénéficiaire",
+                "graph.y_axis.title_text": "Montant UE cumulé (€)",
+            },
+        },
+    )
+
+    cards["analyse_lorenz"] = upsert_card(
+        session,
+        "Analyse — Courbe de Lorenz (concentration par bénéficiaire)",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Courbe de Lorenz : % cumulé de bénéficiaires (du plus petit
+                    # au plus grand) vs % cumulé du montant UE. Plus la courbe
+                    # s'éloigne de la diagonale d'égalité parfaite, plus le montant
+                    # est concentré.
+                    #
+                    # Échantillonnée en 100 centiles plutôt qu'un point par
+                    # bénéficiaire : Metabase tronque à 2 000 lignes, et 7 000+
+                    # bénéficiaires dépassent cette limite — la courbe s'arrêtait
+                    # à ~26 % au lieu de monter à 100 %. Avec NTILE(100), la
+                    # courbe a exactement 100 points, suffisants pour la lecture.
+                    "query": (
+                        "WITH agg AS ("
+                        "  SELECT nom_beneficiaire, SUM(montant_ue) AS montant_total "
+                        "  FROM operations "
+                        "  WHERE montant_ue IS NOT NULL AND nom_beneficiaire IS NOT NULL "
+                        "  AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "  GROUP BY nom_beneficiaire"
+                        "), "
+                        "ranked AS ("
+                        "  SELECT montant_total, "
+                        "    NTILE(100) OVER (ORDER BY montant_total ASC) AS centile, "
+                        "    SUM(montant_total) OVER () AS somme_totale "
+                        "  FROM agg"
+                        "), "
+                        "par_centile AS ("
+                        "  SELECT centile, "
+                        "    SUM(montant_total) AS montant_centile, "
+                        "    MIN(somme_totale) AS somme_totale "
+                        "  FROM ranked GROUP BY centile"
+                        ") "
+                        "SELECT centile::float / 100 AS pct_beneficiaires, "
+                        "SUM(montant_centile) OVER (ORDER BY centile) / somme_totale "
+                        "AS pct_montant "
+                        "FROM par_centile ORDER BY centile"
+                    ),
+                    "template-tags": filtres(("periode", "perimetre", "fonds"), ops, 50, tag_id_d, colonnes={"perimetre": "region"}),
+                },
+                "database": db_id,
+            },
+            "display": "line",
+            "visualization_settings": {
+                "graph.dimensions": ["pct_beneficiaires"],
+                "graph.metrics": ["pct_montant"],
+                "graph.x_axis.title_text": "% cumulé des bénéficiaires",
+                "graph.y_axis.title_text": "% cumulé du montant UE",
+            },
+        },
+    )
+
+    cards["analyse_coherence"] = upsert_card(
+        session,
+        "Analyse — Cohérence des montants (UE > dépenses éligibles)",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    # Opérations où le montant UE dépasse le total des dépenses
+                    # éligibles — taux de cofinancement > 100 %, normalement
+                    # impossible. Contrôle de cohérence, pas de distribution.
+                    "query": (
+                        "SELECT intitule_projet, nom_beneficiaire, fonds, "
+                        "depenses_eligibles, montant_ue, "
+                        "CASE WHEN depenses_eligibles > 0 "
+                        "THEN montant_ue / depenses_eligibles ELSE NULL END AS taux "
+                        "FROM operations "
+                        "WHERE montant_ue IS NOT NULL AND depenses_eligibles IS NOT NULL "
+                        "AND montant_ue > depenses_eligibles "
+                        "AND {{periode}} AND {{perimetre}} AND {{fonds}} "
+                        "ORDER BY montant_ue DESC"
+                    ),
+                    "template-tags": filtres(("periode", "perimetre", "fonds"), ops, 60, tag_id_d, colonnes={"perimetre": "region"}),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {
+                "column_settings": {
+                    '["name","depenses_eligibles"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","montant_ue"]': {"number_style": "decimal", "decimals": 0},
+                    '["name","taux"]': {"number_style": "percent", "decimals": 1},
+                },
+            },
+        },
+    )
+
     return cards
 
 
@@ -1323,15 +1667,60 @@ def ensure_usage_dashboards(session, collection_id, cards):
         ("periode", "perimetre", "fonds"),
         [
             ("Distribution", [
-                ("text", A_VENIR + "Histogrammes des montants, boîtes à moustaches "
-                 "par fonds et par région, statistiques descriptives, opérations "
-                 "atypiques au sens de l'écart interquartile. **Phase D.**",
-                 0, 0, 24, 3),
+                ("heading", "Statistiques descriptives par fonds", 0, 0, 24, 1),
+                ("card", "analyse_stats_fonds", 1, 0, 24, 5),
+                ("text",
+                 "La **médiane** et l'**écart-type** mesurent la dispersion des "
+                 "montants au sein d'un fonds. Le **coefficient de variation** "
+                 "(écart-type / médiane) rend cette dispersion comparable entre "
+                 "fonds d'ordres de grandeur très différents (ex. FTJ vs FSE+).",
+                 6, 0, 24, 2),
+                ("heading", "Distribution des montants UE", 8, 0, 24, 1),
+                ("card", "analyse_histogramme", 9, 0, 24, 8),
+                ("text",
+                 "Histogramme en **échelle logarithmique** : les montants s'étalent "
+                 "sur plusieurs ordres de grandeur (de quelques milliers à plusieurs "
+                 "millions d'euros), ce qui rend une échelle linéaire illisible. "
+                 "Chaque barre empile les fonds sur une tranche de montant.",
+                 17, 0, 24, 2),
+                ("heading", "Quartiles et moustaches IQR par fonds", 19, 0, 24, 1),
+                ("card", "analyse_boxplot_stats", 20, 0, 24, 5),
+                ("text",
+                 "Metabase n'a pas de boîte à moustaches (boxplot) native : ce "
+                 "tableau porte les mêmes cinq nombres clés (minimum, Q1, médiane, "
+                 "Q3, maximum) et les bornes des moustaches IQR. Les opérations "
+                 "hors de l'intervalle [borne basse, borne haute] sont listées dans "
+                 "la table *Opérations atypiques* ci-dessous.",
+                 25, 0, 24, 3),
+                ("heading", "Opérations à montant atypique", 28, 0, 24, 1),
+                ("card", "analyse_outliers", 29, 0, 24, 8),
+                ("text",
+                 "Opérations dont le montant sort de [Q1 − 1,5×IQR, Q3 + 1,5×IQR], "
+                 "**calculé séparément par fonds** — sans quoi les ordres de grandeur "
+                 "très différents entre FEDER et FSE+ produisent des faux positifs "
+                 "(constaté sur 2021-2027 : 502 opérations FEDER signalées à tort par "
+                 "une borne unique). Un montant atypique est un point à examiner, pas "
+                 "une anomalie : un projet structurant légitime peut être un outlier.",
+                 37, 0, 24, 3),
             ]),
             ("Concentration", [
-                ("text", A_VENIR + "Courbe de Pareto et courbe de Lorenz sur les "
-                 "montants par bénéficiaire et par opération. **Phase D.**",
-                 0, 0, 24, 3),
+                ("heading", "Top 15 bénéficiaires par montant UE", 0, 0, 24, 1),
+                ("card", "analyse_top_beneficiaires", 1, 0, 24, 8),
+                ("text",
+                 "Bénéficiaires cumulant le plus de montant UE, tous projets confondus "
+                 "dans le périmètre affiché — vue d'ensemble des acteurs les plus "
+                 "représentés dans le portefeuille.",
+                 9, 0, 24, 2),
+                ("heading", "Courbe de Lorenz", 11, 0, 24, 1),
+                ("card", "analyse_lorenz", 12, 0, 24, 8),
+                ("text",
+                 "% cumulé de bénéficiaires (du plus petit au plus grand montant) "
+                 "vs % cumulé du montant UE : plus la courbe s'éloigne de la "
+                 "diagonale d'égalité parfaite, plus le montant est concentré sur "
+                 "peu de bénéficiaires. En complément du classement ci-dessus, "
+                 "cette courbe montre la **forme** de la concentration, pas "
+                 "seulement le podium.",
+                 20, 0, 24, 3),
             ]),
             ("Cofinancement", [
                 ("heading", "Taux de cofinancement face au plafond réglementaire", 0, 0, 24, 1),
@@ -1348,9 +1737,25 @@ def ensure_usage_dashboards(session, collection_id, cards):
                  9, 0, 24, 3),
             ]),
             ("Cohérence", [
-                ("text", A_VENIR + "Rapprochement opérations / enveloppes "
-                 "programmées, et écarts entre sources sur un même périmètre. "
-                 "**Phase D.**", 0, 0, 24, 3),
+                ("heading", "Cohérence des montants", 0, 0, 24, 1),
+                ("card", "analyse_coherence", 1, 0, 24, 8),
+                ("text",
+                 "Opérations dont le **montant UE dépasse le total des dépenses "
+                 "éligibles** — taux de cofinancement supérieur à 100 %, normalement "
+                 "impossible quel que soit le fonds (y compris REACT-EU, plafonné à "
+                 "100 % par le règlement 2020/2221 art. 92 ter §12). Un écart ici est "
+                 "un signal de cohérence de la source, pas une question de distribution "
+                 "statistique.\n\n"
+                 "Si le tableau est vide, c'est bon signe : aucune incohérence sur "
+                 "le périmètre affiché.",
+                 9, 0, 24, 3),
+                ("text",
+                 "**Filtre Périmètre sur les cartes d'analyse par opération.** "
+                 "Le filtre porte sur `operations.region` : les périmètres "
+                 "« national » et « interrégional » (opérations sans région dans la "
+                 "table source) produisent un résultat vide — l'analyse de "
+                 "distribution n'y serait pas instructive.",
+                 12, 0, 24, 2),
             ]),
         ],
         cards,

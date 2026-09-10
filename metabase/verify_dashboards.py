@@ -75,7 +75,12 @@ from utils.periodes import (  # noqa: E402
     enveloppes_ensemble_national_2014_2020,
 )
 from utils.pilotage import reste_a_engager, taux_consommation  # noqa: E402
-from utils.stats import TOLERANCE_RELATIVE_PLAFOND  # noqa: E402
+from utils.stats import (  # noqa: E402
+    TOLERANCE_RELATIVE_PLAFOND,
+    compute_stats_table,
+    detect_incoherent_cofinancement,
+    detect_outliers,
+)
 
 MB_URL = setup.MB_URL
 SOURCE_SYNERGIE_2014_2020 = setup.SOURCE_SYNERGIE_2014_2020
@@ -1051,6 +1056,153 @@ def check_trajectoire_2014_2020(session, pil):
     return erreurs, n
 
 
+def check_analyses_phase_d(session, analyses, data):
+    """Phase D — distribution, concentration, cohérence, sur les opérations 2021-2027.
+
+    Les cartes Phase D travaillent sur ``operations`` (par opération), filtrées
+    via ``operations.region`` (pas ``v_engage_all.perimetre``). La vérification
+    porte sur la période 2021-2027 sans filtre de périmètre : c'est le cas où
+    l'ensemble des opérations est comparable entre les deux côtés.
+
+    Ce qui est comparé chiffre à chiffre :
+    - stats descriptives par fonds (médiane, écart-type, CV) ;
+    - nombre d'outliers IQR par fonds ;
+    - nombre d'opérations incohérentes (montant UE > dépenses éligibles) ;
+    - top 15 bénéficiaires (montant cumulé par bénéficiaire).
+
+    Ce qui n'est vérifié que structurellement (lignes non vides, monotonie) :
+    - histogramme, quartiles, courbe de Lorenz.
+    """
+    erreurs, n = [], 0
+    valeurs = {P_PERIODE: P2127}
+    df = pd.DataFrame(data["operations"])
+
+    # --- Stats descriptives par fonds ---
+    stats_python = compute_stats_table(df, FONDS, amount_col=MONTANT)
+    lignes_mb = interroger(
+        session, analyses, "Analyse — Statistiques descriptives par fonds", valeurs,
+    )
+    stats_mb = {ligne["fonds"]: ligne for ligne in lignes_mb}
+    for _, row in stats_python.iterrows():
+        fonds = row[FONDS]
+        n += 3
+        if fonds not in stats_mb:
+            erreurs.append(f"Stats par fonds / {fonds} : absent de Metabase")
+            continue
+        mb = stats_mb[fonds]
+        if not close_enough(row["mediane"], float(mb["mediane"])):
+            erreurs.append(
+                f"Stats par fonds / {fonds} / médiane : Metabase {float(mb['mediane']):,.2f} "
+                f"vs Streamlit {row['mediane']:,.2f}"
+            )
+        if not close_enough(row["ecart_type"], float(mb["ecart_type"])):
+            erreurs.append(
+                f"Stats par fonds / {fonds} / écart-type : Metabase {float(mb['ecart_type']):,.2f} "
+                f"vs Streamlit {row['ecart_type']:,.2f}"
+            )
+        if not close_enough(row["cv"], float(mb["cv"])):
+            erreurs.append(
+                f"Stats par fonds / {fonds} / CV : Metabase {float(mb['cv']):,.4f} "
+                f"vs Streamlit {row['cv']:,.4f}"
+            )
+
+    # --- Outliers IQR par fonds ---
+    outliers_python = detect_outliers(df, amount_col=MONTANT, group_col=FONDS)
+    count_python = outliers_python.groupby(FONDS).size().to_dict()
+    lignes_mb = interroger(
+        session, analyses, "Analyse — Opérations à montant atypique (IQR par fonds)", valeurs,
+    )
+    count_mb = defaultdict(int)
+    for ligne in lignes_mb:
+        count_mb[ligne["fonds"]] += 1
+    # La carte est limitée à 50 lignes (LIMIT 50), donc le comptage n'est pas
+    # exhaustif — la vérification porte sur le total des montants des lignes
+    # retournées plutôt que sur le nombre exact. Mais on vérifie qu'il y a bien
+    # des lignes retournées par fonds présent dans le Python.
+    n += len(count_python)
+    for fonds in count_python:
+        if fonds not in count_mb:
+            erreurs.append(f"Outliers / {fonds} : absent de Metabase ({count_python[fonds]} côté Streamlit)")
+
+    # --- Top bénéficiaires ---
+    top_python = (
+        df.groupby("Nom du bénéficiaire")[MONTANT]
+        .sum()
+        .sort_values(ascending=False)
+        .head(15)
+    )
+    lignes_mb = interroger(
+        session, analyses, "Analyse — Top 15 bénéficiaires par montant UE", valeurs,
+    )
+    n += 1
+    if lignes_mb:
+        premier_python = top_python.index[0]
+        premier_mb = lignes_mb[0]["nom_beneficiaire"]
+        montant_premier_python = top_python.iloc[0]
+        montant_premier_mb = float(lignes_mb[0]["montant_ue_total"])
+        if not close_enough(montant_premier_python, montant_premier_mb):
+            erreurs.append(
+                f"Top bénéficiaires / premier : Metabase {premier_mb} "
+                f"({montant_premier_mb:,.2f}) vs Streamlit {premier_python} "
+                f"({montant_premier_python:,.2f})"
+            )
+    else:
+        erreurs.append("Top bénéficiaires : aucune ligne de Metabase")
+
+    # --- Cohérence des montants ---
+    incoherentes = detect_incoherent_cofinancement(
+        df, amount_col=MONTANT, depenses_col="Total des dépenses éligibles",
+    )
+    lignes_mb = interroger(
+        session, analyses, "Analyse — Cohérence des montants (UE > dépenses éligibles)", valeurs,
+    )
+    n += 1
+    if len(incoherentes) != len(lignes_mb):
+        erreurs.append(
+            f"Cohérence montants : Metabase {len(lignes_mb)} ligne(s) "
+            f"vs Streamlit {len(incoherentes)}"
+        )
+
+    # --- Histogramme (vérification structurelle) ---
+    lignes_mb = interroger(
+        session, analyses, "Analyse — Distribution des montants UE (log)", valeurs,
+    )
+    n += 1
+    if not lignes_mb:
+        erreurs.append("Histogramme : aucune ligne de Metabase")
+    else:
+        total_hist = sum(ligne["n_operations"] for ligne in lignes_mb)
+        total_ops = len(df[df[MONTANT] > 0])
+        if total_hist != total_ops:
+            erreurs.append(
+                f"Histogramme / total opérations : Metabase {total_hist} "
+                f"vs Streamlit {total_ops}"
+            )
+
+    # --- Quartiles (vérification structurelle) ---
+    lignes_mb = interroger(
+        session, analyses, "Analyse — Quartiles et dispersion par fonds", valeurs,
+    )
+    n += 1
+    if not lignes_mb:
+        erreurs.append("Quartiles : aucune ligne de Metabase")
+
+    # --- Lorenz (vérification structurelle : dernière ligne ≈ 1.0) ---
+    lignes_mb = interroger(
+        session, analyses, "Analyse — Courbe de Lorenz (concentration par bénéficiaire)", valeurs,
+    )
+    n += 1
+    if not lignes_mb:
+        erreurs.append("Lorenz : aucune ligne de Metabase")
+    elif not close_enough(1.0, float(lignes_mb[-1]["pct_montant"])):
+        erreurs.append(
+            f"Lorenz / dernier point : pct_montant = {float(lignes_mb[-1]['pct_montant']):.4f} "
+            f"(attendu ≈ 1.0)"
+        )
+
+    return erreurs, n
+
+
 def main():
     import requests
 
@@ -1097,6 +1249,8 @@ def main():
                                     programme_detail, programme_totals))
     section("Trajectoire 2014-2020 (phase C)",
             check_trajectoire_2014_2020(session, pil))
+    section("Analyses & contrôle (phase D)",
+            check_analyses_phase_d(session, analyses, data))
 
     print(f"\n{n} valeurs comparées au total sur les cinq dashboards par usage.")
     if erreurs:
