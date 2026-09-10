@@ -54,6 +54,10 @@ GEOJSON_METROPOLE_URL = (
     "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/"
     "frontend/public/geo/regions-metropole.geojson"
 )
+GEOJSON_DROMCOM_URL = (
+    "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/"
+    "frontend/public/geo/regions-dromcom.geojson"
+)
 
 env = {}
 env_path = SCRIPT_DIR / ".env"
@@ -146,6 +150,13 @@ def ensure_geojson_map(session):
     maps["fesi_metropole"] = {
         "name": "Régions métropole (FESI)",
         "url": GEOJSON_METROPOLE_URL,
+        "region_key": "nom",
+        "region_name": "nom",
+        "builtin": False,
+    }
+    maps["fesi_dromcom"] = {
+        "name": "Régions DROM-COM (FESI)",
+        "url": GEOJSON_DROMCOM_URL,
         "region_key": "nom",
         "region_name": "nom",
         "builtin": False,
@@ -423,6 +434,11 @@ CARD_TAGS = {
     "analyse_top_beneficiaires": ("periode", "perimetre", "fonds"),
     "analyse_lorenz": ("periode", "perimetre", "fonds"),
     "analyse_coherence": ("periode", "perimetre", "fonds"),
+    # Phase E — Territoires & complétude.
+    "engage_carte_dromcom": ("periode", "fonds"),
+    "territoire_rattachements": ("periode",),
+    "territoire_interregionaux": ("periode", "fonds"),
+    "qualite_completude": ("periode",),
 }
 
 SERIES_FONDS = {f: {"color": c} for f, c in FONDS_COLORS.items()}
@@ -1324,6 +1340,160 @@ def build_usage_cards(session, db_id, tables):
         },
     )
 
+    # ------------------------------------------------- Phase E : Territoires & complétude
+
+    tag_id_e = "b1000000-0000-0000-0000-0000000003%02d"
+
+    # Choroplèthe DROM-COM : même requête que la carte métropole mais sur le fond
+    # de carte DROM-COM. Les 6 périmètres ultramarins (Guadeloupe, Martinique,
+    # Guyane, La Réunion, Mayotte, Saint-Martin) sont invisibles sur le fond
+    # métropole à cause de l'échelle — d'où un encart séparé.
+    DROMCOM = (
+        "('Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte', 'Saint-Martin')"
+    )
+
+    cards["engage_carte_dromcom"] = upsert_card(
+        session,
+        "Engagé — Carte DROM-COM",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT perimetre AS region, SUM(engage) AS montant_ue "
+                        "FROM v_engage_all "
+                        f"WHERE perimetre IN {DROMCOM} "
+                        "AND {{periode}} AND {{fonds}} "
+                        "GROUP BY perimetre ORDER BY perimetre"
+                    ),
+                    "template-tags": filtres(("periode", "fonds"), engage, 0, tag_id_e),
+                },
+                "database": db_id,
+            },
+            "display": "map",
+            "visualization_settings": {
+                "map.type": "region",
+                "map.region": "fesi_dromcom",
+                "map.metric_column": "montant_ue",
+                "map.dimension_column": "region",
+            },
+        },
+    )
+
+    cards["territoire_rattachements"] = upsert_card(
+        session,
+        "Territoires — Rattachement régional par source",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT source_id, COUNT(*) AS n_operations, "
+                        "ROUND(100.0 * COUNT(region_source) / COUNT(*), 1) AS pct_region_source, "
+                        "ROUND(100.0 * COUNT(region) / COUNT(*), 1) AS pct_region_rattachee, "
+                        "COUNT(*) FILTER (WHERE region_source IS NOT NULL "
+                        "AND region IS NOT NULL AND region_source != region) "
+                        "AS n_region_normalisee, "
+                        "COUNT(*) FILTER (WHERE is_interregional) AS n_interregional "
+                        "FROM operations "
+                        "WHERE {{periode}} "
+                        "GROUP BY source_id ORDER BY source_id"
+                    ),
+                    "template-tags": filtres(("periode",), ops, 10, tag_id_e),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {
+                "column_settings": {
+                    '["name","pct_region_source"]': {"suffix": " %"},
+                    '["name","pct_region_rattachee"]': {"suffix": " %"},
+                },
+            },
+        },
+    )
+
+    cards["territoire_interregionaux"] = upsert_card(
+        session,
+        "Territoires — Opérations interrégionales",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT libelle_programme, fonds, "
+                        "array_to_string(regions_modernes, ', ') AS regions, "
+                        "intitule_projet, montant_ue "
+                        "FROM operations "
+                        "WHERE is_interregional "
+                        "AND {{periode}} AND {{fonds}} "
+                        "ORDER BY montant_ue DESC "
+                        "LIMIT 100"
+                    ),
+                    "template-tags": filtres(("periode", "fonds"), ops, 20, tag_id_e),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {
+                "column_settings": {
+                    '["name","montant_ue"]': {"number_style": "decimal", "decimals": 0},
+                },
+            },
+        },
+    )
+
+    cards["qualite_completude"] = upsert_card(
+        session,
+        "Qualité — Complétude des champs par source",
+        {
+            "dataset_query": {
+                "type": "native",
+                "native": {
+                    "query": (
+                        "SELECT source_id, COUNT(*) AS n_operations, "
+                        "ROUND(100.0 * COUNT(numero_operation) / COUNT(*), 1) AS pct_numero_op, "
+                        "ROUND(100.0 * COUNT(nom_beneficiaire) / COUNT(*), 1) AS pct_beneficiaire, "
+                        "ROUND(100.0 * COUNT(fonds) / COUNT(*), 1) AS pct_fonds, "
+                        "ROUND(100.0 * COUNT(region) / COUNT(*), 1) AS pct_region, "
+                        "ROUND(100.0 * COUNT(region_source) / COUNT(*), 1) AS pct_region_source, "
+                        "ROUND(100.0 * COUNT(departement) / COUNT(*), 1) AS pct_departement, "
+                        "ROUND(100.0 * COUNT(montant_ue) / COUNT(*), 1) AS pct_montant_ue, "
+                        "ROUND(100.0 * COUNT(depenses_eligibles) / COUNT(*), 1) AS pct_depenses, "
+                        "ROUND(100.0 * COUNT(objectif_strategique) / COUNT(*), 1) AS pct_obj_strategique, "
+                        "ROUND(100.0 * COUNT(domaine_intervention) / COUNT(*), 1) AS pct_dom_intervention, "
+                        "ROUND(100.0 * COUNT(taux_cofinancement) / COUNT(*), 1) AS pct_taux_cofin, "
+                        "ROUND(100.0 * COUNT(date_convention) / COUNT(*), 1) AS pct_date_convention, "
+                        "ROUND(100.0 * COUNT(date_programmation) / COUNT(*), 1) AS pct_date_prog "
+                        "FROM operations "
+                        "WHERE {{periode}} "
+                        "GROUP BY source_id ORDER BY source_id"
+                    ),
+                    "template-tags": filtres(("periode",), ops, 30, tag_id_e),
+                },
+                "database": db_id,
+            },
+            "display": "table",
+            "visualization_settings": {
+                "column_settings": {
+                    '["name","pct_numero_op"]': {"suffix": " %"},
+                    '["name","pct_beneficiaire"]': {"suffix": " %"},
+                    '["name","pct_fonds"]': {"suffix": " %"},
+                    '["name","pct_region"]': {"suffix": " %"},
+                    '["name","pct_region_source"]': {"suffix": " %"},
+                    '["name","pct_departement"]': {"suffix": " %"},
+                    '["name","pct_montant_ue"]': {"suffix": " %"},
+                    '["name","pct_depenses"]': {"suffix": " %"},
+                    '["name","pct_obj_strategique"]': {"suffix": " %"},
+                    '["name","pct_dom_intervention"]': {"suffix": " %"},
+                    '["name","pct_taux_cofin"]': {"suffix": " %"},
+                    '["name","pct_date_convention"]': {"suffix": " %"},
+                    '["name","pct_date_prog"]': {"suffix": " %"},
+                },
+            },
+        },
+    )
+
     return cards
 
 
@@ -1480,12 +1650,11 @@ def ensure_usage_dashboards(session, collection_id, cards):
                 ("card", "engage_montant", 1, 16, 8, 4),
                 ("card", "engage_n_operations", 5, 16, 8, 4),
                 ("card", "engage_par_perimetre", 9, 0, 24, 6),
+                ("card", "engage_carte_dromcom", 9, 16, 8, 8),
                 ("text",
-                 "La choroplèthe ne porte que les régions métropolitaines : les "
-                 "DROM-COM y seraient invisibles à cette échelle (encarts dédiés, "
-                 "phase E). `national` et `interregional` sont écartés de la carte "
+                 "`national` et `interregional` sont écartés des cartes "
                  "mais présents dans le classement ci-dessus.",
-                 15, 0, 24, 2),
+                 17, 0, 24, 2),
             ]),
             ("Détail périmètre", [
                 ("text", NOTE_PERIMETRE, 0, 0, 24, 2),
@@ -1495,9 +1664,29 @@ def ensure_usage_dashboards(session, collection_id, cards):
                 ("card", "pilotage_detail", 6, 0, 16, 6),
             ]),
             ("Rattachements atypiques", [
-                ("text", A_VENIR + "Opérations dont le rattachement régional diverge "
-                 "entre le fichier source et la région moderne, et opérations "
-                 "interrégionales. **Phase E.**", 0, 0, 24, 3),
+                ("heading", "Qualité du rattachement régional", 0, 0, 24, 1),
+                ("card", "territoire_rattachements", 1, 0, 24, 6),
+                ("text",
+                 "**Lecture de ce tableau.** `pct_region_source` = part des opérations "
+                 "dont le fichier source porte une colonne Région renseignée. "
+                 "`pct_region_rattachee` = part des opérations rattachées à une région "
+                 "moderne (par la colonne, par le programme, ou les deux). "
+                 "`n_region_normalisee` = opérations où la valeur source diffère de "
+                 "la région retenue (normalisation d'accents, préfixes INSEE, "
+                 "anciennes régions → nouvelles). Ce n'est pas une anomalie — c'est "
+                 "le signe que le rattachement a été harmonisé.",
+                 7, 0, 24, 3),
+                ("heading", "Opérations interrégionales", 10, 0, 24, 1),
+                ("card", "territoire_interregionaux", 11, 0, 24, 8),
+                ("text",
+                 "Opérations dont le territoire couvre **plusieurs régions** (actions "
+                 "massif/fleuve, programmes à cheval). Elles sont exclues des totaux "
+                 "par région et comptées une seule fois au niveau national, pour "
+                 "éviter le double-comptage. Concerne surtout les programmes "
+                 "Auvergne-Rhône-Alpes (massif des Alpes) et Grand Est (massif "
+                 "des Vosges) en 2021-2027, et les 5 programmes interrégionaux "
+                 "Synergie en 2014-2020.",
+                 19, 0, 24, 3),
             ]),
         ],
         cards,
@@ -1781,9 +1970,19 @@ def ensure_usage_dashboards(session, collection_id, cards):
                  8, 0, 24, 4),
             ]),
             ("Complétude", [
-                ("text", A_VENIR + "Taux de remplissage champ par champ et source "
-                 "par source, et contrôles de cohérence de `4_Validation_source`. "
-                 "**Phase E.**", 0, 0, 24, 3),
+                ("heading", "Taux de remplissage par champ et par source", 0, 0, 24, 1),
+                ("card", "qualite_completude", 1, 0, 24, 7),
+                ("text",
+                 "Chaque cellule indique le pourcentage d'opérations où le champ est "
+                 "renseigné (non NULL). Un champ à 0 % n'est pas forcément une "
+                 "lacune : `objectif_strategique` n'existe qu'en 2021-2027, "
+                 "`domaine_intervention` qu'en 2014-2020 et seulement sur certaines "
+                 "sources. `region` inclut le rattachement dérivé du programme "
+                 "(voie principale en 2014-2020, où la colonne brute `region_source` "
+                 "n'est renseignée qu'à 16 %).\n\n"
+                 "Ce tableau est le pendant Metabase de la page « Validation de la "
+                 "source » du dashboard Streamlit.",
+                 8, 0, 24, 4),
             ]),
         ],
         cards,

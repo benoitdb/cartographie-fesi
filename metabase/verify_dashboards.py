@@ -1203,6 +1203,113 @@ def check_analyses_phase_d(session, analyses, data):
     return erreurs, n
 
 
+def check_territoires_phase_e(session, terr, data):
+    """Phase E : carte DROM-COM, rattachements et opérations interrégionales."""
+    erreurs, n = [], 0
+
+    # Carte DROM-COM : le total des 6 périmètres ultramarins, période 2021-2027
+    dromcom_noms = {"Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte", "Saint-Martin"}
+    lignes = interroger(session, terr, "Engagé — Carte DROM-COM", {P_PERIODE: P2127})
+    noms_mb = {ligne["region"] for ligne in lignes}
+    if not noms_mb.issubset(dromcom_noms):
+        erreurs.append(f"Carte DROM-COM : périmètres inattendus {noms_mb - dromcom_noms}")
+    if len(lignes) < 5:
+        erreurs.append(f"Carte DROM-COM : seulement {len(lignes)} DROM-COM, attendu ≥ 5")
+    n += 2
+
+    # Montant total DROM-COM vs Streamlit (by_region)
+    agg = data["aggregates"]
+    by_region = agg["by_region"]
+    montant_dromcom_python = sum(
+        v["montant_ue_total"] for r, v in by_region.items() if r in dromcom_noms
+    )
+    montant_dromcom_mb = sum(ligne["montant_ue"] for ligne in lignes)
+    if not close_enough(montant_dromcom_python, montant_dromcom_mb):
+        erreurs.append(
+            f"Carte DROM-COM / montant total : Metabase {montant_dromcom_mb:,.0f} "
+            f"vs Python {montant_dromcom_python:,.0f}"
+        )
+    n += 1
+
+    # Rattachements par source : nombre d'opérations 2021-2027
+    ops = data["operations"]  # liste de dicts
+    lignes = interroger(session, terr, "Territoires — Rattachement régional par source",
+                        {P_PERIODE: P2127})
+    if len(lignes) != 1:
+        erreurs.append(f"Rattachements 2021-2027 : {len(lignes)} source(s), attendu 1")
+    else:
+        attendu = len(ops)
+        if lignes[0]["n_operations"] != attendu:
+            erreurs.append(
+                f"Rattachements / n_operations : Metabase {lignes[0]['n_operations']} "
+                f"vs Python {attendu}"
+            )
+    n += 1
+
+    # Rattachements 2014-2020 : au moins 6 sources
+    lignes_14 = interroger(session, terr, "Territoires — Rattachement régional par source",
+                           {P_PERIODE: P1420})
+    if len(lignes_14) < 6:
+        erreurs.append(f"Rattachements 2014-2020 : {len(lignes_14)} source(s), attendu ≥ 6")
+    n += 1
+
+    # Interrégionaux 2021-2027 : présence
+    lignes_inter = interroger(session, terr, "Territoires — Opérations interrégionales",
+                              {P_PERIODE: P2127})
+    n_inter_python = sum(1 for op in ops if op.get("is_interregional"))
+    if len(lignes_inter) != n_inter_python:
+        erreurs.append(
+            f"Interrégionaux 2021-2027 : Metabase {len(lignes_inter)} vs Python {n_inter_python}"
+        )
+    n += 1
+
+    return erreurs, n
+
+
+def check_completude_phase_e(session, qual, data):
+    """Phase E : complétude des champs par source."""
+    erreurs, n = [], 0
+
+    lignes = interroger(session, qual, "Qualité — Complétude des champs par source",
+                        {P_PERIODE: P2127})
+    if len(lignes) != 1:
+        erreurs.append(f"Complétude 2021-2027 : {len(lignes)} source(s), attendu 1")
+        return erreurs, n
+
+    ligne = lignes[0]
+    ops = data["operations"]
+    attendu_n = len(ops)
+    if ligne["n_operations"] != attendu_n:
+        erreurs.append(
+            f"Complétude / n_operations : Metabase {ligne['n_operations']} vs Python {attendu_n}"
+        )
+    n += 1
+
+    # Vérifier quelques taux de complétude clés contre les agrégats
+    total_by_fonds = sum(v["count"] for v in data["aggregates"]["by_fonds"].values())
+    checks = [
+        ("pct_fonds", 100.0 * total_by_fonds / attendu_n),
+        ("pct_montant_ue", 100.0),
+        ("pct_beneficiaire", 100.0),
+    ]
+    for col_mb, attendu_pct in checks:
+        mb_pct = float(ligne[col_mb])
+        if abs(mb_pct - attendu_pct) > 0.2:
+            erreurs.append(
+                f"Complétude / {col_mb} : Metabase {mb_pct:.1f} % vs Python {attendu_pct:.1f} %"
+            )
+        n += 1
+
+    # Complétude 2014-2020 : au moins 6 sources
+    lignes_14 = interroger(session, qual, "Qualité — Complétude des champs par source",
+                           {P_PERIODE: P1420})
+    if len(lignes_14) < 6:
+        erreurs.append(f"Complétude 2014-2020 : {len(lignes_14)} source(s), attendu ≥ 6")
+    n += 1
+
+    return erreurs, n
+
+
 def main():
     import requests
 
@@ -1251,6 +1358,10 @@ def main():
             check_trajectoire_2014_2020(session, pil))
     section("Analyses & contrôle (phase D)",
             check_analyses_phase_d(session, analyses, data))
+    section("Territoires (phase E)",
+            check_territoires_phase_e(session, terr, data))
+    section("Complétude des sources (phase E)",
+            check_completude_phase_e(session, qual, data))
 
     print(f"\n{n} valeurs comparées au total sur les cinq dashboards par usage.")
     if erreurs:
