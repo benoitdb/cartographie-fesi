@@ -1,11 +1,16 @@
 # Stack Metabase — Cartographie FESI
 
 Déploiement Metabase pour l'issue [#121](https://github.com/benoitdb/cartographie-fesi/issues/121)
-(bascule Streamlit → Metabase, cohabitation ciblée). Les cinq phases sont
-livrées : schéma et chargement (Phase 0), dashboard national 2021-2027
-(Phase 1), vues régionales/comparateur/volet national (Phase 2), période
-2014-2020 — fusion des six sources, cofinancement (Phase 3), et validation
-croisée Streamlit ↔ Metabase avec arbitrage des cinq écarts trouvés (Phase 4).
+(bascule Streamlit → Metabase, cohabitation ciblée) et
+[#129](https://github.com/benoitdb/cartographie-fesi/issues/129) (UX :
+parité de visualisation et interface unifiée). Dix phases livrées au total :
+schéma et chargement (Phase 0), dashboard national 2021-2027 (Phase 1), vues
+régionales/comparateur/volet national (Phase 2), période 2014-2020 — fusion des
+six sources, cofinancement (Phase 3), validation croisée Streamlit ↔ Metabase
+avec arbitrage des cinq écarts trouvés (Phase 4), puis les phases #129 —
+charpente et réorganisation par usage (A), vues unifiées par période (B),
+parité Structure & Pilotage (C), parité Analyses & contrôle (D), Territoires &
+Qualité des sources (E), et contrôle display + documentation (F).
 Quelqu'un qui veut juste **utiliser** les dashboards peut aller directement à
 la section « Guide utilisateur » ci-dessous ; le reste de ce fichier
 documente comment la stack a été construite.
@@ -99,12 +104,14 @@ en dur dans les fichiers versionnés.
 ## Guide utilisateur — quel dashboard pour quoi
 
 **Répartition des rôles** (voir aussi l'[étude d'impact](https://claude.ai/code/artifact/2ad9ab38-a0fc-4697-ab26-651c57d952bb)) :
-Metabase couvre la consultation courante — KPI, filtres, drill-down, pilotage
-programmé vs engagé. Streamlit garde pour l'instant les analyses statistiques
-avancées (Pareto, Lorenz, IQR, détection d'anomalies) et les choroplèthes
-DROM-COM en encarts ; [#129](https://github.com/benoitdb/cartographie-fesi/issues/129)
-en ramène la plus grande part dans Metabase, phase par phase. Les deux lisent
-la même base PostgreSQL — jamais deux calculs séparés du même chiffre.
+**Arbitrage Phase F (#129) : cohabitation pérenne.** Metabase couvre la
+consultation interne — KPI, filtres, drill-down, pilotage, analyses statistiques,
+territoires, qualité des sources (parité quasi-complète depuis les phases A→E).
+Streamlit reste la **plateforme de démo publique** sur données ouvertes, déployée
+sur Streamlit Community Cloud. Les deux lisent les mêmes données — jamais deux
+calculs séparés du même chiffre. Streamlit garde aussi les choroplèthes DROM-COM
+en encarts (6 mini-cartes côte à côte), que Metabase ne sait pas faire en carte
+unique.
 
 **Cinq dashboards, organisés par question posée** et non par page Streamlit
 ([#129](https://github.com/benoitdb/cartographie-fesi/issues/129)). La
@@ -395,10 +402,12 @@ metabase/
   verify_aggregates.py  — recoupe les agrégats SQL vs JSON, source par source (Phase 0)
   verify_pilotage_2014_2020.py — recoupe la fusion 14-20 SQL vs dashboard (Phase 3)
   verify_dashboards.py  — recoupe les cartes Metabase (via l'API, filtres appliqués)
-                          vs le dashboard Streamlit, 28 792 valeurs (Phase A #129)
+                          vs le dashboard Streamlit, et contrôle les types `display`
+                          de chaque dashcard (Phase F #129)
   verify_vues_unifiees.py — 9 contrôles sur les vues unifiées : fidélité, double-comptage,
                           complétude thématique, cofinancement, plafond, RUP (Phase A/B #129)
-  setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 5 dashboards (Phase 1/2/3)
+  setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 5 dashboards
+                          par usage + accueil (Phases 1-3 → réorganisés #129)
   venv/                 — environnement Python (gitignoré)
   README.md             — ce fichier
 ```

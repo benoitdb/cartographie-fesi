@@ -181,6 +181,19 @@ def dashboards_fesi(session):
     return {n: session.get(f"{MB_URL}/api/dashboard/{index[n]}").json() for n in noms}
 
 
+DISPLAY_TYPES_METABASE = {
+    "scalar", "smartscalar", "progress", "gauge",
+    "table", "pivot",
+    "bar", "line", "area", "combo", "row", "waterfall", "funnel",
+    "scatter", "pie", "donut",
+    "map",
+    "treemap", "sunburst", "sankey",
+    "trend",
+    "object", "list",
+    "heading", "text", "link", "action", "placeholder",
+    "dashboard",
+}
+
 P_PERIODE = setup.PARAM_PERIODE
 P_PERIMETRE = setup.PARAM_PERIMETRE
 P_FONDS = setup.PARAM_FONDS
@@ -1310,6 +1323,27 @@ def check_completude_phase_e(session, qual, data):
     return erreurs, n
 
 
+def check_display_types(dashboards):
+    """Vérifie que chaque dashcard utilise un type `display` connu de Metabase.
+
+    L'API accepte n'importe quelle chaîne sans erreur (gotcha #129) : une faute
+    de frappe produit une carte cassée en silence côté client.
+    """
+    erreurs = []
+    n = 0
+    for nom, dash in dashboards.items():
+        for dc in dash["dashcards"]:
+            card = dc.get("card") or {}
+            display = card.get("display") or dc.get("visualization_settings", {}).get("virtual_card", {}).get("display")
+            if display is None:
+                continue
+            n += 1
+            if display not in DISPLAY_TYPES_METABASE:
+                carte = card.get("name") or "(carte virtuelle)"
+                erreurs.append(f"{nom} / « {carte} » : display « {display} » inconnu")
+    return erreurs, n
+
+
 def main():
     import requests
 
@@ -1327,11 +1361,10 @@ def main():
     data, programme_totals, categories = charger_references()
     agg = data["aggregates"]
 
-    # Appels séquentiels et non une liste de tuples : chaque section imprime son
-    # compte dès qu'elle a fini. Une liste construite d'un bloc lancerait les
-    # cinq séries de requêtes avant la première ligne de sortie — plusieurs
-    # minutes de silence.
-    erreurs, n = [], 0
+    err_display, n_display = check_display_types(dash)
+    print(f"Types display : {n_display} dashcards vérifiées, {len(err_display)} inconnu(s).")
+
+    erreurs, n = list(err_display), 0
 
     def section(libelle, resultat):
         nonlocal erreurs, n
