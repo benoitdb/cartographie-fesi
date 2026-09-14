@@ -613,7 +613,7 @@ def cofinancement_python(operations, categories):
         if infos is None or est_absent(fonds) or cofinancement.est_hors_plafond(fonds):
             continue
         montant, depenses = op["montant_ue"], op["depenses_eligibles"]
-        if montant is None or depenses is None:
+        if est_absent(montant) or est_absent(depenses):
             continue
 
         plafond = cofinancement.plafond_intervalle_2014_2020(infos)

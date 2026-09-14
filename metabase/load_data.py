@@ -101,7 +101,7 @@ OPERATIONS_COLUMNS = [
 
 
 def parse_date(val):
-    if not val:
+    if not val or (not isinstance(val, str) and pd.isna(val)):
         return None
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"):
         try:
@@ -115,9 +115,12 @@ def parse_numeric(val):
     if val is None or val == "":
         return None
     try:
-        return float(val)
+        f = float(val)
     except (ValueError, TypeError):
         return None
+    if pd.isna(f):
+        return None
+    return f
 
 
 def schema_key_for(source_id, descriptor):

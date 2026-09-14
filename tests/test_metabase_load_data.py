@@ -91,6 +91,42 @@ def test_les_valeurs_deja_bonnes_ne_sont_pas_touchees():
     assert load_data.valeur_python(True) is True
 
 
+# --- parse_numeric / parse_date : défense en profondeur contre NaN/NaT --------
+
+
+@pytest.mark.parametrize(
+    "absente",
+    [float("nan"), np.nan, None, ""],
+    ids=["nan", "np.nan", "none", "vide"],
+)
+def test_parse_numeric_nan_donne_none(absente):
+    """Un NaN Parquet non intercepté par `valeur_python` ne doit jamais finir en
+    `float('nan')` dans PostgreSQL — `parse_numeric` est le dernier garde."""
+    assert load_data.parse_numeric(absente) is None
+
+
+def test_parse_numeric_valeur_normale():
+    assert load_data.parse_numeric(42.5) == 42.5
+    assert load_data.parse_numeric("3.14") == 3.14
+    assert load_data.parse_numeric(0) == 0.0
+
+
+@pytest.mark.parametrize(
+    "absente",
+    [pd.NaT, None, ""],
+    ids=["nat", "none", "vide"],
+)
+def test_parse_date_nat_donne_none(absente):
+    """Un NaT Parquet est truthy : `not val` ne l'écarte pas. `parse_date` doit
+    le traiter comme une absence, pas tenter de le parser."""
+    assert load_data.parse_date(absente) is None
+
+
+def test_parse_date_valeur_normale():
+    assert load_data.parse_date("2024-01-15") == date(2024, 1, 15)
+    assert load_data.parse_date("15/01/2024") == date(2024, 1, 15)
+
+
 # --- lire_operations : les deux formats, sur les fixtures committées -----------
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "dashboard"
