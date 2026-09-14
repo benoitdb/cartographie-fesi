@@ -37,16 +37,79 @@ jobs:
       - name: Tests
         run: pytest -q
 
+  # Recoupe les vues SQL (metabase/init/*.sql) contre les agrégats Python
+  # (agregats.py) et la fusion des six sources 2014-2020 (periodes.py).
+  # Job SÉPARÉ des tests : il a besoin d'un PostgreSQL chargé, que la suite
+  # principale n'a aucune raison d'installer, et il doit pouvoir échouer sans
+  # masquer un échec de test.
+  #
+  # Les Parquet sont committés (#119, #132), et le service PostgreSQL de GitHub
+  # Actions fournit l'infrastructure qu'il manquait (#125, #148) : `load_data.py`
+  # charge les données depuis les Parquet/JSON du clone, puis les trois scripts
+  # de vérification recoupent les vues SQL contre la couche Python.
+  verify-metabase:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: fesi
+          POSTGRES_USER: fesi
+          POSTGRES_PASSWORD: fesi_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fesi -d fesi"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_DB: fesi
+      POSTGRES_USER: fesi
+      POSTGRES_PASSWORD: fesi_local
+      POSTGRES_PORT: "5432"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: |
+          pip install -r requirements-dev.txt
+          pip install psycopg2-binary
+
+      - name: Appliquer le schéma et les vues SQL
+        run: |
+          for f in metabase/init/*.sql; do
+            psql -h localhost -U fesi -d fesi -f "$f"
+          done
+        env:
+          PGPASSWORD: fesi_local
+
+      - name: Charger les données
+        run: python metabase/load_data.py
+
+      - name: Vérifier les agrégats (SQL vs JSON)
+        run: python metabase/verify_aggregates.py
+
+      - name: Vérifier la fusion 2014-2020 (SQL vs dashboard)
+        run: python metabase/verify_pilotage_2014_2020.py
+
+      - name: Vérifier les vues unifiées (double-comptage, complétude, plafonds)
+        run: python metabase/verify_vues_unifiees.py
+
   # Recoupe les marts dbt contre `agregats.calculer_agregats`, la règle qui
   # alimente le dashboard. Job SÉPARÉ des tests : il a ses propres dépendances
   # (dbt-core + dbt-duckdb, ~200 Mo) que la suite principale n'a aucune raison
   # d'installer, et il doit pouvoir échouer sans masquer un échec de test.
   #
-  # POURQUOI IL PEUT TOURNER EN CI, là où `metabase/verify_*.py` ne le peut pas
-  # (issue #125) : la cible DuckDB ne demande AUCUNE infrastructure — pas de
-  # PostgreSQL, pas de Docker. Elle lit les Parquet directement, et ceux-ci sont
-  # committés depuis le déploiement Streamlit Cloud (#119) puis la bascule
-  # Parquet (#132). Le clone nu a donc tout ce qu'il faut.
+  # La cible DuckDB ne demande aucune infrastructure — pas de PostgreSQL, pas
+  # de Docker. Elle lit les Parquet directement, et ceux-ci sont committés
+  # depuis le déploiement Streamlit Cloud (#119) puis la bascule Parquet (#132).
+  # Le clone nu a donc tout ce qu'il faut.
   #
   # Couverture : les 6 marts de base (partitions d'`agregats.py`) plus les
   # contrôles de complétude et de planchage. Les marts 2014-2020 n'ont pas
