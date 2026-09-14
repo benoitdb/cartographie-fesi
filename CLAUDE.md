@@ -76,13 +76,20 @@ deux programmes (carte, engagé sans taux) reste possible mais n'est pas constru
 Guyane/Martinique/Réunion) : son engagé PON FSE se compare à la ligne FSE de son
 programme combiné FEDER-FSE, seule dotation FSE que porte Mayotte.
 
-Le pilotage 14-20 n'est donc plus masqué que sur « Ensemble national » — l'extraction
-Synergie n'y fusionne aucune des trois régions hors-Synergie (#68). « Volet national »
-en est sorti depuis que PON FSE et IEJ national y sont fusionnés : c'était la seule
-pièce qui lui manquait. Un taux calculé sur un engagé partiel afficherait une donnée
+Le pilotage 14-20 n'est plus masqué sur aucun périmètre agrégé depuis l'arbitrage
+Phase 4 (issue #121) : « Ensemble national » fusionne désormais les trois régions
+hors-Synergie ET le PON FSE (`dashboard/utils/periodes.fusionner_ensemble_national_2014_2020`,
+jumeau Python de `metabase/init/04_periode_2014_2020.sql`), comme « Volet national »
+depuis que PON FSE et IEJ national y sont fusionnés — c'était la seule pièce qui
+manquait à chacun. Un taux calculé sur un engagé partiel afficherait une donnée
 manquante comme une sous-consommation. Normandie, Nouvelle-Aquitaine et Bretagne
-retombent sur ce même masquage si leur fichier régional est absent du poste (repli,
-pas un cas d'erreur). Le FSE breton affiche un taux au-dessus de 100 % (111 % au
+retombent sur ce même masquage — désormais seulement régional, jamais sur un agrégat —
+si leur fichier régional est absent du poste (repli, pas un cas d'erreur), et
+« Ensemble national » retombe alors sur leur sous-comptage Synergie pour la même
+raison plutôt que d'être masqué en bloc. Le KPI d'« Ensemble national » (Vue
+d'ensemble) fusionne les six sources ; la carte et le classement par région du même
+écran restent, eux, sur la substitution seule, sans le PON FSE (issue #128) — écart
+connu, documenté à l'écran. Le FSE breton affiche un taux au-dessus de 100 % (111 % au
 12/02/2024) qui n'est pas une surconsommation mais un effet de granularité — ses sept
 lignes sont des marchés de formation du Conseil régional, pas des opérations
 unitaires (#95, point 2, non résolu par le changement de source) — signalé à l'écran
@@ -150,6 +157,71 @@ lit des Parquet committés.
   le réseau. Ne pas le lancer dans une régénération de routine : son résultat
   est committé exprès pour que le dashboard tourne sans dépendance externe.
   À relancer une fois par an environ.
+- **Stack Metabase locale** (issue #121, exploratoire — cohabitation ciblée
+  Streamlit/Metabase, voir l'étude d'impact liée à l'issue) : `ingest.py` ne
+  dépend d'aucune base de données et le reste volontairement, pour que
+  Streamlit Cloud puisse régénérer les JSON sans infra. La sortie SQL est donc
+  un chargement **découplé**, à relancer après toute régénération quand la
+  stack tourne (`cd metabase && docker compose up -d`) :
+  ```
+  metabase/venv/bin/python metabase/load_data.py       # charge les 7 sources dans PostgreSQL
+  metabase/venv/bin/python metabase/verify_aggregates.py  # recoupe les agrégats SQL vs JSON
+  metabase/venv/bin/python metabase/verify_pilotage_2014_2020.py  # recoupe la fusion des
+                                          # six sources 14-20 (substitution des trois régions
+                                          # à fichier propre, addition du PON FSE) SQL vs dashboard
+  metabase/venv/bin/python metabase/verify_vues_unifiees.py  # vérifie les vues `_all`
+                                          # (union par période, issue #129) contre les vues
+                                          # de période, et l'absence de double-comptage
+  venv/bin/python metabase/verify_dashboards.py  # recoupe les cartes Metabase (interrogées
+                                          # par l'API, filtres appliqués) vs le dashboard
+                                          # Streamlit — venv RACINE, pas metabase/venv
+  ```
+  Les trois scripts de vérification se recouvrent volontairement peu : les deux
+  premiers valident les **vues** en attaquant PostgreSQL, le troisième valide ce
+  qu'un utilisateur **lit** (SQL de la carte, template-tag, `parameter_mapping`),
+  seule couche où une erreur passe en silence — un paramètre mal câblé n'échoue
+  pas, le filtre est simplement ignoré.
+  Schéma dans `metabase/init/*.sql` (appliqué à la création du volume Docker
+  uniquement — `docker compose down -v` puis `up` pour repartir d'un schéma
+  modifié).
+
+  **`v_pilotage` et `v_engage_by_perimetre_fonds` ne sont pas scopées à
+  2021-2027** malgré leur usage : elles produisent aussi des lignes 2014-2020,
+  en sommant les six sources qui se chevauchent — le double-comptage que #68/#95
+  ont motivé. Elles sont justes sur 2021-2027 (source unique) et fausses sur
+  2014-2020, où seules les vues `v_*_2014_2020` le sont. Les vues unifiées
+  `v_pilotage_all` / `v_engage_all` (`init/05_vues_unifiees.sql`, issue #129)
+  filtrent donc explicitement leur côté 21-27 : **ce `WHERE periode = '2021-2027'`
+  n'est pas décoratif**, l'enlever double la période 2014-2020 (19 901 → 39 958 M€).
+  `verify_vues_unifiees.py` échoue si quelqu'un le retire.
+
+  **Les trois partitions d'`agregats.py` sont exclusives** (mono-région,
+  interrégional, national) : une vue qui se veut le total d'une période doit
+  porter les trois. `v_engage_all` en avait oublié une — 13 opérations, 1,625 M€
+  sur 2021-2027, soit 0,02 %, assez peu pour passer inaperçu à l'oeil et assez
+  pour faire mentir un KPI. Contrôle de complétude ajouté à
+  `verify_vues_unifiees.py` (somme des périmètres == `v_by_fonds`).
+
+  **`v_repartition_all` porte `'Non renseigné'` et non un filtre** : la
+  dimension thématique de 2014-2020 (`domaine_intervention`) n'est renseignée
+  que sur 9,6 % du montant (trois fichiers régionaux). Filtrer les opérations
+  sans domaine rendrait un treemap muet sur 90 % de la période — sans que rien
+  à l'écran n'en explique la cause. Le `COALESCE(…, 'Non renseigné')` rend
+  l'asymétrie visible et le contrôle de complétude possible (point 5 de
+  `verify_vues_unifiees.py`).
+
+  **`plafond_cofinancement` dans `region_metadata` est calculé en Python**, pas
+  en SQL : une catégorie mixte (Auvergne-Rhône-Alpes) est une moyenne pondérée
+  extraite du libellé par regex (`dashboard/utils/cofinancement.plafond_categorie`).
+  `load_data.py` l'appelle au chargement, et `verify_vues_unifiees.py` contrôle
+  que la valeur en base correspond au calcul Python (point 8).
+
+  **Un field filter (`"type": "dimension"`) est multi-valeurs, un template-tag
+  `"type": "text"` ne l'est pas.** C'est la limite qui avait imposé deux
+  paramètres `region_a`/`region_b` en Phase 2, et sa levée fait disparaître
+  l'écran Comparateur (#129). Un field filter suppose que Metabase ait
+  **synchronisé la vue** comme une table : une vue créée après la synchro
+  initiale n'a pas d'id de champ, d'où `setup_metabase.sync_views()`.
 
 - **Tests** : `venv/bin/python -m pytest -q` (376 tests, ~40 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
@@ -305,6 +377,22 @@ lit des Parquet committés.
     §5 le majore de **dix points** quand un axe est entièrement mis en œuvre par
     instruments financiers ou par développement local. Le fichier ne porte pas
     l'axe : un dépassement affiché est un écart à expliquer, jamais un constat ;
+  - **le taux de cofinancement affiché est toujours recalculé** (montant UE /
+    dépenses éligibles), jamais le taux déclaré par un fichier source, même
+    quand la source en porte un en clair (Bretagne, Normandie,
+    Nouvelle-Aquitaine) — arbitrage Phase 4 (issue #121, #127) : les deux
+    mesures d'une même opération ne concordaient pas systématiquement, et le
+    recalculé est seul homogène entre les six sources (Synergie et le PON FSE
+    n'ont pas de taux déclaré du tout). Le déclaré est conservé à part
+    (`TAUX_COFINANCEMENT_DECLARE`, `dashboard/utils/periodes.py`) et signalé à
+    l'écran s'il diverge de plus d'un point — un signal de qualité de source,
+    jamais une seconde vérité. La comparaison au plafond applique une
+    **tolérance relative de 1e-6** (`utils/stats.TOLERANCE_RELATIVE_PLAFOND`,
+    et sa contrepartie dans `metabase/init/04_periode_2014_2020.sql` — les deux
+    doivent rester alignées) : de nombreuses opérations sont programmées pile
+    au plafond, arrondies à la centime côté source, ce qui laisse un écart
+    résiduel de quelques 10⁻⁷ en relatif que ni le flottant ni le calcul
+    décimal exact n'absorbent tout seuls (issue #126) ;
   - la colonne région n'est remplie qu'à **16,4 %** : c'est le libellé du
     programme qui rattache le reste ;
   - **le périmètre Synergie est incomplet** (#68) : Bretagne (3 opérations) et

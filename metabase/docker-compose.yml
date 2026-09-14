@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    ports:
+      - "5437:5432"
+
+  geojson:
+    image: python:3.11-slim
+    command: python -m http.server 80 --directory /geo
+    volumes:
+      - ../frontend/public/geo:/geo:ro
+    expose:
+      - "80"
+
+  metabase:
+    image: metabase/metabase:latest
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - geojson
+
+volumes:
+  pgdata:

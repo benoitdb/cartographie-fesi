@@ -41,8 +41,12 @@ DATA = REPO / "data" / "processed"
 sys.path.insert(0, str(REPO / "data-pipeline"))
 sys.path.insert(0, str(REPO / "dashboard"))
 
+import region_mapping  # noqa: E402
 import schema_source  # noqa: E402
 
+from reference.programmes_interregionaux_2014_2020 import (  # noqa: E402
+    REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020,
+)
 from utils import periodes  # noqa: E402
 from utils.cofinancement import (  # noqa: E402
     FONDS_HORS_PLAFOND,
@@ -351,6 +355,90 @@ def generer_vars_regles(sortie):
           "— toutes importées, aucune recopie")
 
 
+def generer_seed_code_to_region(sortie):
+    """Seed de lookup code INSEE ancien/moderne → région moderne.
+
+    Union de OLD_TO_MODERN (codes vérifiés) et des codes modernes (identité).
+    """
+    with open(sortie, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["code", "region_moderne"])
+        n = 0
+        for code, region in region_mapping.OLD_TO_MODERN.items():
+            w.writerow([code, region])
+            n += 1
+    print(f"  {sortie.relative_to(DBT_DIR)} ({n} lignes)")
+
+
+def generer_seed_nom_to_region(sortie):
+    """Seed de lookup nom ancien/variante → région moderne.
+
+    Union de OLD_NAME_TO_MODERN (noms d'anciennes régions) et NORMALIZE_BARE
+    (variantes orthographiques).
+    """
+    with open(sortie, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["nom", "region_moderne"])
+        seen = {}
+        n = 0
+        for nom, region in region_mapping.OLD_NAME_TO_MODERN.items():
+            w.writerow([nom, region])
+            seen[nom] = region
+            n += 1
+        for nom, region in region_mapping.NORMALIZE_BARE.items():
+            if nom not in seen:
+                w.writerow([nom, region])
+                n += 1
+    print(f"  {sortie.relative_to(DBT_DIR)} ({n} lignes)")
+
+
+def generer_seed_programme_to_region(sortie):
+    """Seed des deux tables programme → région (2021-2027 et 2014-2020).
+
+    Les libellés sont normalisés comme dans `indexer_programmes` — c'est le
+    libellé normalisé qui sert de clé de jointure, pas le libellé brut.
+    """
+    with open(sortie, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["periode", "libelle_programme", "region"])
+        n = 0
+        for libelle, region in region_mapping.PROGRAMME_TO_REGION.items():
+            w.writerow(["2021-2027", schema_source.normalise_libelle(libelle), region])
+            n += 1
+        for libelle, region in region_mapping.PROGRAMME_TO_REGION_2014_2020.items():
+            w.writerow(["2014-2020", schema_source.normalise_libelle(libelle), region or ""])
+            n += 1
+    print(f"  {sortie.relative_to(DBT_DIR)} ({n} lignes, 2 périodes)")
+
+
+def generer_seed_programme_interregional(sortie):
+    """Seed des programmes interrégionaux 2014-2020 → liste de régions.
+
+    Une ligne par (programme, région) : le SQL jointera par libellé normalisé et
+    agrégera les régions en liste.
+    """
+    with open(sortie, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["libelle_programme", "region"])
+        n = 0
+        for libelle, regions in REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020.items():
+            cle = schema_source.normalise_libelle(libelle)
+            for region in sorted(regions):
+                w.writerow([cle, region])
+                n += 1
+    print(f"  {sortie.relative_to(DBT_DIR)} ({n} lignes)")
+
+
+def generer_seed_volet_national(sortie):
+    """Seed des libellés sentinelles « Volet national »."""
+    with open(sortie, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["label"])
+        for label in sorted(region_mapping.VOLET_NATIONAL_LABELS):
+            w.writerow([label])
+    print(f"  {sortie.relative_to(DBT_DIR)} ({len(region_mapping.VOLET_NATIONAL_LABELS)} lignes)")
+
+
 if __name__ == "__main__":
     print("Modèles de staging :")
     for source_id, cle_schema, periode, fichier in SOURCES_DU_SPIKE:
@@ -367,5 +455,11 @@ if __name__ == "__main__":
     generer_seed_categories_ue_2014_2020(
         DBT_DIR / "seeds" / "categories_ue_2014_2020.csv"
     )
+    print("Seeds harmonisation (spike #140) :")
+    generer_seed_code_to_region(DBT_DIR / "seeds" / "code_to_region.csv")
+    generer_seed_nom_to_region(DBT_DIR / "seeds" / "nom_to_region.csv")
+    generer_seed_programme_to_region(DBT_DIR / "seeds" / "programme_to_region.csv")
+    generer_seed_programme_interregional(DBT_DIR / "seeds" / "programme_interregional.csv")
+    generer_seed_volet_national(DBT_DIR / "seeds" / "volet_national.csv")
     print("Règles métier :")
     generer_vars_regles(DBT_DIR / "dbt_project.yml")

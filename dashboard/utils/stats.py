@@ -412,13 +412,30 @@ def detect_cofinancement_outliers(df, taux_col="Taux de cofinancement"):
     return df[(df[taux_col] < borne_basse) | (df[taux_col] > borne_haute)].sort_values(taux_col, ascending=False)
 
 
+
+# Tolérance relative sur la comparaison au plafond (arbitrage Phase 4, #126) : une
+# opération financée pile au plafond (montant / dépenses en flottant binaire) peut
+# tomber un ulp au-dessus de la valeur exacte — 0.6000000000000001 plutôt que 0.6 —
+# et se lire à tort comme un dépassement. Même raisonnement et même valeur que
+# RELATIVE_TOLERANCE dans metabase/verify_aggregates.py : deux ordres d'opérations
+# sur le même flottant source, jamais une vraie erreur de données au-delà de cette
+# marge. 40 opérations (13,0 M€) en étaient affectées, détecté par
+# metabase/verify_dashboards.py en comparant au calcul NUMERIC (décimal exact) de
+# la vue SQL — voir issue #126.
+TOLERANCE_RELATIVE_PLAFOND = 1e-6
+
+
 def detect_cofinancement_superieur_plafond(df, plafond, taux_col="Taux de cofinancement"):
     """Opérations dont le taux de cofinancement UE dépasse le plafond réglementaire de la
     catégorie de région (voir utils/cofinancement.plafond_categorie) — à ne pas confondre
     avec detect_cofinancement_outliers (taux statistiquement atypique par rapport aux autres
     opérations du même fonds) : ici la référence est le taux maximal légal, pas une médiane,
-    donc un signal plus directement actionnable. plafond est un taux (0-1), pas un %."""
-    return df[df[taux_col] > plafond].sort_values(taux_col, ascending=False)
+    donc un signal plus directement actionnable. plafond est un taux (0-1), pas un %.
+
+    Comparaison à `plafond * (1 + TOLERANCE_RELATIVE_PLAFOND)`, pas à `plafond` nu : voir
+    la docstring de la constante — sans quoi une opération pile au plafond bascule en faux
+    positif selon l'ordre des opérations flottantes qui a produit son taux (#126)."""
+    return df[df[taux_col] > plafond * (1 + TOLERANCE_RELATIVE_PLAFOND)].sort_values(taux_col, ascending=False)
 
 
 def detect_incoherent_cofinancement(df, amount_col="Montant UE", depenses_col="Total des dépenses éligibles"):

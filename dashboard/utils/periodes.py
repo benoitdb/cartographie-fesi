@@ -46,6 +46,8 @@ dans le schéma sans report ici fait rougir la suite, au lieu de produire une
 page vide en silence.
 """
 
+from collections import defaultdict
+
 import pandas as pd
 
 PERIODE_2021_2027 = "2021-2027"
@@ -246,7 +248,8 @@ TAUX_COFINANCEMENT_DIVERGENT = "Taux de cofinancement divergent"
 
 # Écart entre le taux déclaré par une source régionale 2014-2020 et le taux
 # recalculé (montant / dépenses) à partir duquel l'écart est signalé plutôt
-# qu'ignoré (arbitrage Phase 4, #127).
+# qu'ignoré (arbitrage Phase 4, #127) — même seuil que la vue SQL
+# `v_cofinancement_2014_2020.taux_divergent`, à faire évoluer ensemble.
 SEUIL_ECART_TAUX_DECLARE = 0.01
 
 # Le libellé affiché du montant, lui, ne se normalise pas : cf. piège 1 de la
@@ -278,8 +281,9 @@ CAPACITES = {
         # Dotations de l'Accord de partenariat 14-20 (section 1.6) et maquettes
         # REACT-EU (rapport d'évaluation ANCT 2024) transcrites — issue #93. La
         # capacité est vraie pour la période, mais pas pour tous ses périmètres :
-        # voir `pilotage_disponible()`, quatre d'entre eux restent sans pilotage
-        # faute d'un engagé comparable à l'enveloppe (#95).
+        # voir `pilotage_disponible()` — Normandie, Nouvelle-Aquitaine et Bretagne
+        # en restent privées quand leur fichier régional n'a pas pu être chargé
+        # (#95), faute d'un engagé comparable à l'enveloppe sans lui.
         "montants_programmes": True,
         # Règle de la période (1303/2013 art. 120 §3) et rattachement région →
         # catégorie de l'époque (décision 2014/99, via
@@ -308,6 +312,26 @@ AVERTISSEMENT_PERIMETRE = (
     "sont publiées à part et consultables sur la page « Validation de la source », mais "
     "ne sont pas fusionnées ici (issue #68). Les totaux par région, et toute comparaison "
     "entre régions ou entre périodes, sous-comptent donc ces quatre périmètres."
+)
+
+# Contrairement à `AVERTISSEMENT_PERIMETRE` ci-dessus (qui vaut pour une région ou un
+# périmètre non fusionné), « Ensemble national » fusionne bien les quatre sources
+# hors-Synergie depuis l'arbitrage Phase 4 (issue #121) — ce message dit ce qui l'est,
+# et les deux réserves qui restent malgré tout (décision explicite du 2 sept. 2026, pas
+# masquées pour un risque non quantifié, cf. issue #121) : un total fiable, deux nuances
+# à lire avant de s'appuyer sur les métriques par opération ou sur une lecture instantanée.
+MENTION_ENSEMBLE_NATIONAL_FUSIONNE = (
+    "**Périmètre fusionné, deux réserves à connaître.** Contrairement au reste de cette "
+    "page (issue #68), les quatre sources hors-Synergie sont ici additionnées à Synergie : "
+    "le montant total et l'engagé par fonds ci-dessous couvrent les six sources sans "
+    "double-comptage (vérifié, arbitrage Phase 4, issue #121). Deux nuances subsistent : "
+    "Bretagne compte ses opérations en marchés de formation regroupés plutôt qu'en dossiers "
+    "individuels (le nombre de projets et le montant moyen y sont donc moins comparables aux "
+    "autres régions — même granularité que sur le FSE breton en Pilotage) ; les six sources "
+    "ont été extraites à des dates différentes (2023 à 2026), donc ce total mélange des photos "
+    "prises à des moments différents. La carte et le classement par région plus bas restent "
+    "sur le même périmètre que le reste de la page (substitution des trois régions, sans le "
+    "PON FSE — issue #128)."
 )
 
 # À afficher **à la place** d'AVERTISSEMENT_PERIMETRE sur Normandie et Nouvelle-Aquitaine
@@ -371,6 +395,14 @@ MENTION_TAUX_DECLARE_DIVERGENT = (
 # Pourquoi un taux au-dessus du plafond n'est pas, en soi, une irrégularité. À afficher avec
 # tout décompte de dépassements : le plafond se fixe par axe prioritaire, pas par opération,
 # et le fichier ne porte pas l'axe.
+MENTION_TAUX_DECLARE_DIVERGENT = (
+    "Le taux affiché est **recalculé** (montant UE / dépenses éligibles), pour rester "
+    "comparable aux autres sources de la période — Synergie et le PON FSE ne portent aucun "
+    "taux déclaré. Sur {n} opération(s) ({montant}), le taux déclaré par le fichier source "
+    "diverge de plus d'un point du taux recalculé : signalé comme un point de qualité de "
+    "source à vérifier, pas comme un dépassement."
+)
+
 MENTION_PLAFOND_PAR_AXE = (
     "Un taux supérieur au plafond de la catégorie ne signale pas une irrégularité : "
     "l'article 120 fixe le plafond **par axe prioritaire**, pas par opération, et le majore "
@@ -434,14 +466,13 @@ PERIMETRES_SANS_PILOTAGE = frozenset()
 MENTION_PILOTAGE_MASQUE = (
     "**Pas de taux de consommation sur ce périmètre.** Son enveloppe programmée est connue, "
     "mais l'engagé qu'on lui opposerait vient de l'extraction Synergie, qui ne couvre pas "
-    "toutes les autorités de gestion de la période (issue #68) : sur « Ensemble national », "
-    "trois régions (Normandie, Nouvelle-Aquitaine, Bretagne) restent sous-comptées faute "
-    "d'y fusionner leur propre fichier régional, comme le fait chacune sur son périmètre "
-    "propre — un taux calculé malgré ce manque afficherait une donnée manquante comme une "
-    "sous-consommation. Sur une de ces trois régions, ce message signale plutôt que son "
-    "fichier régional n'a pas pu être chargé sur ce poste (repli, pas une donnée absente). "
-    "Le volet national, lui, a rejoint le pilotage depuis que le programme opérationnel "
-    "national FSE et le PO IEJ national y sont fusionnés (issue #95, point 3)."
+    "cette région (issue #68) — son fichier régional propre n'a pas pu être chargé sur ce "
+    "poste (repli, pas une donnée absente) : un taux calculé sur le seul sous-comptage "
+    "Synergie afficherait une donnée manquante comme une sous-consommation. Les deux "
+    "périmètres agrégés de la page (« Ensemble national », « Volet national ») ne dépendent "
+    "plus de cette seule région : ils restent pilotables même quand elle manque, en repli sur "
+    "son sous-comptage Synergie comme partout ailleurs sur cette page (arbitrage Phase 4, "
+    "issue #121, et #95 point 3 pour le volet national)."
 )
 
 # Bretagne FSE affiche un taux au-dessus de 100 % (111 % au 12/02/2024) qui n'est pas une
@@ -578,18 +609,104 @@ def fusionner_enveloppes_sans_libelle(enveloppes, fonds_engages):
     return resultat, fusionnes
 
 
-def pilotage_disponible(perimetre, est_national=False):
+PERIMETRE_FUSION = "_perimetre_fusion"
+
+
+def fusionner_ensemble_national_2014_2020(ops_synergie, ops_hors_synergie_par_region, ops_pon_fse):
+    """Fusion des six sources 2014-2020 en un seul DataFrame, chaque opération taguée de
+    son périmètre final (`PERIMETRE_FUSION` : une région, ou `'national'`) — jumeau Python de
+    la vue SQL `v_perimetre_2014_2020` (`metabase/init/04_periode_2014_2020.sql`), pour le
+    périmètre agrégé « Ensemble national » de cette page (arbitrage Phase 4, issue #121).
+
+    Reproduit les deux mêmes règles que la fusion SQL :
+      - **substitution** : Bretagne, Normandie et Nouvelle-Aquitaine lisent leur fichier
+        régional propre (`ops_hors_synergie_par_region`, dict {région: DataFrame}, déjà
+        normalisé et filtré par fonds par l'appelant) et ignorent leurs quelques lignes
+        Synergie marginales — une région dont le fichier n'a pas pu être chargé (gitignoré,
+        CI) n'est PAS dans ce dict : ses lignes Synergie restent alors incluses, en repli,
+        plutôt que silencieusement perdues ;
+      - **addition** : le PON FSE (`ops_pon_fse`, DataFrame déjà filtré par fonds) s'ajoute,
+        routé par `REGIONS_PON_FSE_2014_2020` (programme, pas la région portée par chaque
+        ligne).
+
+    Les opérations **interrégionales** de Synergie n'y figurent pas — même choix que la vue
+    SQL, pour rester concordant avec elle (Phase 4) : ni région ni volet national à proprement
+    parler, leur total reste affiché séparément (page 5, section KPI) plutôt qu'assimilé à
+    l'un ou l'autre.
+    """
+    regions_substituees = set(ops_hors_synergie_par_region)
+    synergie_filtre = ops_synergie[~ops_synergie["is_interregional"]].copy()
+    perimetre = pd.Series("", index=synergie_filtre.index)
+    perimetre[synergie_filtre["is_national"]] = "national"
+    mono = synergie_filtre["regions_modernes"].apply(
+        lambda r: isinstance(r, list) and len(r) == 1
+    )
+    mono_region = synergie_filtre["regions_modernes"].apply(
+        lambda r: r[0] if isinstance(r, list) and len(r) == 1 else ""
+    )
+    non_substitue = mono & ~mono_region.isin(regions_substituees) & ~synergie_filtre["is_national"]
+    perimetre[non_substitue] = mono_region[non_substitue]
+    synergie_filtre = synergie_filtre[perimetre != ""]
+    synergie_filtre = synergie_filtre.assign(**{PERIMETRE_FUSION: perimetre[perimetre != ""]})
+
+    parts = [synergie_filtre]
+    for region, df_region in ops_hors_synergie_par_region.items():
+        if not df_region.empty:
+            parts.append(df_region.assign(**{PERIMETRE_FUSION: region}))
+
+    if not ops_pon_fse.empty:
+        perimetre_pon = ops_pon_fse["Libellé Programme"].map(REGIONS_PON_FSE_2014_2020).fillna("national")
+        parts.append(ops_pon_fse.assign(**{PERIMETRE_FUSION: perimetre_pon}))
+
+    if not parts:
+        return pd.DataFrame()
+    return pd.concat(parts, ignore_index=True)
+
+
+def enveloppes_ensemble_national_2014_2020(fonds_engages_par_perimetre, totaux_2014_2020):
+    """Enveloppes programmées agrégées au national — jumeau Python de `v_enveloppes_2014_2020`,
+    pour le pilotage du périmètre « Ensemble national » (arbitrage Phase 4, issue #121).
+
+    `totaux_2014_2020` : sortie de `load_programme_totals_2014_2020()`, `{périmètre: {fonds:
+    montant}}` (une région, ou `'national'`). `fonds_engages_par_perimetre` : `{périmètre:
+    {fonds engagés sur ce périmètre}}`, typiquement dérivé de
+    `fusionner_ensemble_national_2014_2020` (`PERIMETRE_FUSION`).
+
+    La fusion FEDER REACT-EU -> FEDER (`fusionner_enveloppes_sans_libelle`) se décide
+    **périmètre par périmètre**, avant de sommer — pas l'inverse : les DROM gardent leurs deux
+    lignes (#96) parce que CE périmètre porte des opérations `FEDER REACT-EU`, une information
+    qui disparaîtrait si l'enveloppe nationale était sommée d'abord et fusionnée ensuite.
+
+    Retourne `(enveloppes, fonds_fusionnes)` — même forme que `fusionner_enveloppes_sans_libelle`,
+    pour que l'appelant affiche `MENTION_REACT_EU_FONDU` sur le même test qu'un périmètre
+    simple. `fonds_fusionnes` porte ici les fonds fusionnés sur **au moins un** périmètre : la
+    métropole fusionne, les DROM ne fusionnent pas (ils portent des opérations `FEDER REACT-EU`
+    en propre), et l'agrégat nnational doit signaler qu'une fusion a bien eu lieu quelque part.
+    """
+    enveloppes = defaultdict(float)
+    fonds_fusionnes = set()
+    for perimetre, enveloppe in totaux_2014_2020.items():
+        fusionnee, fusionnes_ici = fusionner_enveloppes_sans_libelle(
+            enveloppe, fonds_engages_par_perimetre.get(perimetre, set())
+        )
+        fonds_fusionnes.update(fusionnes_ici)
+        for fonds, montant in fusionnee.items():
+            enveloppes[fonds] += montant
+    return dict(enveloppes), sorted(fonds_fusionnes)
+
+
+def pilotage_disponible(perimetre):
     """Le pilotage a-t-il un sens sur ce périmètre ?
 
-    `est_national` couvre un périmètre agrégé de la page qui n'est pas une région et ne
-    peut donc pas être reconnu par son seul nom — jusqu'à #95 (point 3), les deux
-    périmètres agrégés (« Ensemble national » et « Volet national ») étaient dans ce cas ;
-    depuis que PON FSE (la seule pièce qui manquait au Volet national) y est fusionné, seul
-    « Ensemble national » reste concerné, faute d'y fusionner aussi les trois régions
-    hors-Synergie. Séparer les deux arguments évite d'avoir à réimporter ici le libellé de
-    ce périmètre, défini par la page.
+    Jusqu'à #95 (point 3), les deux périmètres agrégés de la page (« Ensemble national » et
+    « Volet national ») en étaient exclus par construction — aucun n'avait d'engagé fusionné
+    à opposer à une enveloppe. PON FSE (Volet national) puis la fusion des trois régions
+    hors-Synergie et de PON FSE (Ensemble national, `fusionner_ensemble_national_2014_2020`,
+    arbitrage Phase 4, #121) ont comblé la pièce qui manquait à chacun : aucun périmètre
+    agrégé n'en est plus exclu par construction. `PERIMETRES_SANS_PILOTAGE` reste le seul
+    levier (vide aujourd'hui) pour une future exclusion, région ou agrégat.
     """
-    return not est_national and perimetre not in PERIMETRES_SANS_PILOTAGE
+    return perimetre not in PERIMETRES_SANS_PILOTAGE
 
 
 MENTION_REGION_MIXTE = (
@@ -656,7 +773,7 @@ def normaliser_operations(df, source):
       conservé à part (`TAUX_COFINANCEMENT_DECLARE`) et comparé au taux
       recalculé : un écart de plus d'un point (`SEUIL_ECART_TAUX_DECLARE`) est
       signalé (`TAUX_COFINANCEMENT_DIVERGENT`), sans jamais faire foi à la place
-      du taux recalculé — arbitrage #127 : les deux mesures de la même
+      du taux recalculé — arbitrage Phase 4 (#127) : les deux mesures de la même
       opération ne concordaient pas systématiquement (8 opérations, 23,8 M€),
       et aucune des deux sources n'est plus légitime que l'autre a priori. Le
       taux recalculé reste la référence unique affichée et comparée aux

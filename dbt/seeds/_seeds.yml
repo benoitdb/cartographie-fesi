@@ -33,3 +33,33 @@ seeds:
         categorie_ue: varchar
         plafond_min: "decimal(8,6)"
         plafond_max: "decimal(8,6)"
+
+  - name: code_to_region
+    config:
+      column_types:
+        code: varchar
+        region_moderne: varchar
+
+  - name: nom_to_region
+    config:
+      column_types:
+        nom: varchar
+        region_moderne: varchar
+
+  - name: programme_to_region
+    config:
+      column_types:
+        periode: varchar
+        libelle_programme: varchar
+        region: varchar
+
+  - name: programme_interregional
+    config:
+      column_types:
+        libelle_programme: varchar
+        region: varchar
+
+  - name: volet_national
+    config:
+      column_types:
+        label: varchar

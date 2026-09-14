@@ -59,6 +59,7 @@ from utils.periodes import (
     AVERTISSEMENT_PERIMETRE,
     MENTION_BRETAGNE_FSE_GRANULARITE,
     MENTION_DEPASSEMENT_2014_2020,
+    MENTION_ENSEMBLE_NATIONAL_FUSIONNE,
     MENTION_FONDS_HORS_RAPPROCHEMENT,
     MENTION_MARTINIQUE_IEJ_FONDU,
     MENTION_MONTANTS_PROGRAMMES,
@@ -72,14 +73,19 @@ from utils.periodes import (
     MENTION_REACT_EU_TAUX_REFERENCE,
     MENTION_REGION_MIXTE,
     MENTION_SOURCE_REGIONALE,
+    MENTION_TAUX_DECLARE_DIVERGENT,
+    PERIMETRE_FUSION,
     PERIODE_2014_2020,
     REGIONS_PON_FSE_2014_2020,
     REGIONS_SUBSTITUEES_2014_2020,
     SOURCE_PON_FSE_2014_2020,
+    TAUX_COFINANCEMENT_DIVERGENT,
     absences_expliquees,
     appliquer_libelles_programmes,
     capacites,
     capacites_source,
+    enveloppes_ensemble_national_2014_2020,
+    fusionner_ensemble_national_2014_2020,
     fusionner_enveloppes_sans_libelle,
     libelle_montant,
     normaliser_operations,
@@ -206,6 +212,24 @@ if data_pon_fse is not None:
     operations_pon_fse = normaliser_operations(data_pon_fse["operations"], SOURCE_PON_FSE_2014_2020)
     ops_pon_fse_fonds = operations_pon_fse[operations_pon_fse[FONDS].isin(selected_fonds)]
 
+# Les TROIS fichiers régionaux, normalisés et filtrés par fonds — pas seulement celui du
+# périmètre sélectionné (`operations_regionales` ci-dessus) : `Ensemble national` a besoin
+# des trois à la fois pour sa propre fusion (`fusionner_ensemble_national_2014_2020`,
+# arbitrage Phase 4, #121). Un peu de travail redondant quand une seule région est
+# sélectionnée (elle est normalisée deux fois), sans conséquence : les trois fichiers sont
+# déjà chargés en mémoire dans tous les cas (`data_hors_synergie`, en tête de page), et leur
+# normalisation est un simple renommage de colonnes, pas une opération coûteuse.
+ops_hors_synergie_par_region = {}
+for region, source in SOURCE_HORS_SYNERGIE.items():
+    fichier_region = data_hors_synergie.get(region)
+    if fichier_region is None:
+        continue
+    ops_region = normaliser_operations(fichier_region["operations"], source)
+    if region == "Nouvelle-Aquitaine":
+        libelles_programmes = load_programme_detail_2014_2020()["libelles_programmes"]
+        ops_region = appliquer_libelles_programmes(ops_region, libelles_programmes)
+    ops_hors_synergie_par_region[region] = ops_region[ops_region[FONDS].isin(selected_fonds)]
+
 # Ce périmètre reçoit-il des opérations PON FSE, et lesquelles — calculé avant le grand
 # if/elif ci-dessous pour être fusionné dans chaque branche concernée (Volet national, ou
 # une des cinq régions DROM) sans dupliquer la logique de routage.
@@ -231,6 +255,8 @@ st.title(f"FESI 2014-2020 — {perimetre}")
 st.caption(MENTION_MONTANTS_PROGRAMMES)
 if lit_source_regionale:
     st.info(MENTION_SOURCE_REGIONALE)
+elif perimetre == ENSEMBLE_NATIONAL:
+    st.info(MENTION_ENSEMBLE_NATIONAL_FUSIONNE)
 elif perimetre == VOLET_NATIONAL and not ops_pon_fse_perimetre.empty:
     st.info(MENTION_PON_FSE_NATIONAL)
 elif not ops_pon_fse_perimetre.empty:
@@ -239,7 +265,7 @@ elif not capa["perimetre_complet"]:
     st.warning(AVERTISSEMENT_PERIMETRE)
 
 if perimetre == ENSEMBLE_NATIONAL:
-    df_ops = ops_fonds
+    df_ops = fusionner_ensemble_national_2014_2020(ops_fonds, ops_hors_synergie_par_region, ops_pon_fse_fonds)
 elif perimetre == VOLET_NATIONAL:
     parts = [ops_fonds[ops_fonds["is_national"]]]
     if not ops_pon_fse_perimetre.empty:
@@ -330,6 +356,12 @@ if perimetre == ENSEMBLE_NATIONAL:
     # — un gris à 0 laisserait croire à une absence réelle de financement sur ce filtre, alors
     # que Synergie peut porter une valeur non nulle pour les mêmes fonds (#68 : 3 opérations
     # bretonnes, 25 néo-aquitaines y figurent tout de même, à la marge).
+    #
+    # Cette carte et le classement plus bas restent sur `by_region`/`ops_hors_synergie_par_region`
+    # (substitution des trois régions, sans le PON FSE) — pas sur la fusion complète de
+    # `df_ops`/`resume` (KPI ci-dessous, Phase 4, #121) : le PON FSE ne ventile ses DROM
+    # que par montant brut, sans le même luxe de millésime/gris-vs-bleu que ce rendu suppose.
+    # Écart connu et documenté, issue #128 (au lieu d'une fusion à moitié faite ici aussi).
     regions_hors_synergie = {}
     for region, source in SOURCE_HORS_SYNERGIE.items():
         fichier_region = data_hors_synergie.get(region)
@@ -339,11 +371,6 @@ if perimetre == ENSEMBLE_NATIONAL:
         ops_region_carte = ops_region_norm[ops_region_norm[FONDS].isin(selected_fonds)]
         if ops_region_carte.empty:
             continue
-        # Dossiers sans fonds renseigné (ex. Normandie, ~26 dossiers/24,6 M€, voir la page
-        # dédiée à cette région) : le filtre `.isin(selected_fonds)` les écarte quel que soit
-        # le filtre — sous-total systématiquement légèrement inférieur au vrai total régional.
-        # Compté ici plutôt que sur la seule page Normandie, pour ne pas le taire sur cette
-        # vue agrégée où le montant affiché prétend justement être « le vrai montant ».
         sans_fonds = ops_region_norm[ops_region_norm[FONDS].fillna("") == ""]
         regions_hors_synergie[region] = {
             **summarize_ops(ops_region_carte),
@@ -352,30 +379,27 @@ if perimetre == ENSEMBLE_NATIONAL:
             "count_sans_fonds": len(sans_fonds),
         }
 
-    # Vue corrigée de `by_region`, utilisée partout où cette page affiche un total par région
-    # sur ce périmètre (carte, classement des régions plus bas) : les trois totaux Synergie
-    # sous-comptés sont remplacés par le vrai montant régional quand il est disponible pour
-    # les fonds sélectionnés, le reste (national, interrégional, autres régions) est inchangé.
+    # Vue corrigée de `by_region`, utilisée par la carte et le classement plus bas : les
+    # trois totaux Synergie sous-comptés sont remplacés par le vrai montant régional quand
+    # il est disponible pour les fonds sélectionnés, le reste (national, interrégional,
+    # autres régions) est inchangé. Pas le PON FSE (issue #128, cf. commentaire ci-dessus).
     by_region_corrige = {**by_region, **regions_hors_synergie}
 
-    # KPI corrigé (issue #110) : même substitution que `by_region_corrige` ci-dessus,
-    # appliquée en delta sur le total déjà juste de `resume` (Synergie) plutôt que
-    # resommée depuis `by_region_corrige` seul, pour ne pas retoucher au national, à
-    # l'interrégional ni aux opérations multi-région déjà comptés correctement dedans.
-    correction_hors_synergie = sum(
-        v["montant_ue_total"] - by_region.get(region, {"montant_ue_total": 0})["montant_ue_total"]
-        for region, v in regions_hors_synergie.items()
-    )
-    montant_ue_total_corrige = resume["montant_ue_total"] + correction_hors_synergie
+    # KPI (Vue d'ensemble) : `resume`, dérivé de la fusion complète (`df_ops`,
+    # Phase 4, #121) — substitution des trois régions ET addition du PON FSE, contrairement
+    # à `by_region_corrige` ci-dessus. « Volet national » recompté sur cette même fusion,
+    # pas sur `data["aggregates"]["national"]` (Synergie seul) : le PON FSE et le PO IEJ
+    # national y ajoutent des opérations que l'agrégat du pipeline ne voit pas.
+    volet_national_fusion = summarize_ops(df_ops[df_ops[PERIMETRE_FUSION] == "national"])
 
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric(f"{libelle_montant_ue} total", _fmt_millions(montant_ue_total_corrige))
+    col1.metric(f"{libelle_montant_ue} total", _fmt_millions(resume["montant_ue_total"]))
     col2.metric("Nombre de projets", _fmt_entier(resume["count"]))
     col3.metric(
         "Projets en région",
-        _fmt_entier(resume["count"] - national_summary["count"] - interregional_summary["count"]),
+        _fmt_entier(resume["count"] - volet_national_fusion["count"]),
     )
-    col4.metric("Volet national", _fmt_entier(national_summary["count"]))
+    col4.metric("Volet national", _fmt_entier(volet_national_fusion["count"]))
     col5.metric("Interrégional", _fmt_entier(interregional_summary["count"]))
     if interregional_summary["count"]:
         st.caption(
@@ -793,28 +817,42 @@ else:
 # de Synergie — `pilotage_disponible` seule ne le sait pas, elle ne connaît que la
 # période, pas la disponibilité d'un fichier sur ce poste.
 #
-# « Ensemble national » reste masqué (aucune de ses régions hors-Synergie n'y est
-# fusionnée, seul le fait pour son propre périmètre — voir ops_perimetre plus haut) ;
-# « Volet national » ne l'est plus depuis que PON FSE y est fusionné (issue #95, point
-# 3) : c'était la seule pièce manquante pour lui opposer un engagé complet, comme
-# l'annonçait déjà MENTION_PILOTAGE_MASQUE ("la reprise de ce point... suivie en #95").
-perimetre_pilotable = pilotage_disponible(
-    perimetre, est_national=perimetre == ENSEMBLE_NATIONAL
-) and not (perimetre in SOURCE_HORS_SYNERGIE and not lit_source_regionale)
+# « Ensemble national » n'est plus masqué depuis la fusion complète des six sources
+# (`fusionner_ensemble_national_2014_2020`, arbitrage Phase 4, issue #121) — comme
+# « Volet national » depuis que PON FSE y est fusionné (issue #95, point 3), la seule
+# pièce qui manquait à chacun pour lui opposer un engagé complet.
+perimetre_pilotable = pilotage_disponible(perimetre) and not (
+    perimetre in SOURCE_HORS_SYNERGIE and not lit_source_regionale
+)
 
 enveloppes_perimetre = {}
 fonds_fusionnes = set()
 if perimetre_pilotable:
-    # Les JSON d'enveloppes indexent les CCI sans région sous la clé "national", pas le
-    # libellé de ce périmètre (même convention que Page 2, Volet National 2021-2027).
-    cle_enveloppe = "national" if perimetre == VOLET_NATIONAL else perimetre
-    enveloppes_perimetre = load_programme_totals_2014_2020().get(cle_enveloppe, {})
-    # Une enveloppe dont aucun libellé de fonds ne porte d'opération ici rejoint son
-    # fonds d'origine : sans ça, la métropole afficherait un FEDER REACT-EU à 0 % et
-    # un FEDER gonflé de la même somme (voir la règle et ses chiffres dans periodes.py).
-    enveloppes_perimetre, fonds_fusionnes = fusionner_enveloppes_sans_libelle(
-        enveloppes_perimetre, set(df_ops[FONDS].unique())
-    )
+    if perimetre == ENSEMBLE_NATIONAL:
+        # Enveloppe nationale : fusion FEDER REACT-EU -> FEDER décidée région par région
+        # (les DROM gardent leurs deux lignes, #96) puis sommée — pas l'inverse, voir la
+        # docstring de la fonction. `fonds_engages_par_perimetre` vient de la même fusion
+        # complète que `df_ops` (Phase 4), régions ET national à la fois.
+        fonds_engages_par_perimetre = (
+            df_ops.groupby(PERIMETRE_FUSION)[FONDS].apply(set).to_dict()
+        )
+        enveloppes_perimetre, fonds_fusionnes = enveloppes_ensemble_national_2014_2020(
+            fonds_engages_par_perimetre, load_programme_totals_2014_2020()
+        )
+        cle_enveloppe = perimetre  # pas de clé dédiée dans programme_detail_2014_2020.json :
+        # `.get(cle_enveloppe, {})` plus bas y renvoie {} sans erreur, les captions
+        # optionnelles sur le détail REACT-EU ne s'affichent simplement pas pour ce périmètre.
+    else:
+        # Les JSON d'enveloppes indexent les CCI sans région sous la clé "national", pas le
+        # libellé de ce périmètre (même convention que Page 2, Volet National 2021-2027).
+        cle_enveloppe = "national" if perimetre == VOLET_NATIONAL else perimetre
+        enveloppes_perimetre = load_programme_totals_2014_2020().get(cle_enveloppe, {})
+        # Une enveloppe dont aucun libellé de fonds ne porte d'opération ici rejoint son
+        # fonds d'origine : sans ça, la métropole afficherait un FEDER REACT-EU à 0 % et
+        # un FEDER gonflé de la même somme (voir la règle et ses chiffres dans periodes.py).
+        enveloppes_perimetre, fonds_fusionnes = fusionner_enveloppes_sans_libelle(
+            enveloppes_perimetre, set(df_ops[FONDS].unique())
+        )
 
 tab_ensemble, tab_pilotage, tab_audit = st.tabs(["Vue d'ensemble", "Pilotage", "Analyses & contrôle"])
 
@@ -1254,10 +1292,21 @@ with tab_audit:
         st.plotly_chart(build_lorenz_beneficiaires(df_ops), width='stretch')
 
     st.subheader("Taux de cofinancement UE")
-    # Le fichier 2014-2020 ne porte pas de colonne de taux : il est dérivé du montant UE
-    # et des dépenses éligibles (utils/periodes.normaliser_operations), un simple quotient
-    # de deux colonnes présentes.
+    # Le taux affiché est toujours recalculé (montant UE / dépenses éligibles), pour être
+    # comparable entre les six sources de la période — Synergie et le PON FSE n'ont aucun
+    # taux déclaré à comparer (utils/periodes.normaliser_operations). Bretagne, Normandie
+    # et Nouvelle-Aquitaine, elles, en déclarent un : signalé à part plutôt que substitué
+    # (arbitrage Phase 4, #127) quand il diverge notablement du recalculé.
     st.caption(MENTION_PLAFONDS_PERIODE)
+    if TAUX_COFINANCEMENT_DIVERGENT in df_ops.columns:
+        divergentes = df_ops[df_ops[TAUX_COFINANCEMENT_DIVERGENT].fillna(False)]
+        if len(divergentes):
+            st.caption(
+                MENTION_TAUX_DECLARE_DIVERGENT.format(
+                    n=_fmt_entier(len(divergentes)),
+                    montant=_fmt_millions(divergentes[MONTANT].sum()),
+                )
+            )
     cofi_fonds = compute_cofinancement_table(df_ops, FONDS).rename(
         columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
     )
