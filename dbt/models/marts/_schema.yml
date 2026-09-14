@@ -1,0 +1,116 @@
+# Contraintes de schéma sur les marts — pas d'oracle de valeur (c'est le rôle
+# de verifier_equivalence.py), mais des gardes structurels : toute clé est
+# renseignée, tout couple discriminant est unique, aucun comptage négatif.
+version: 2
+
+models:
+  - name: by_region
+    columns:
+      - name: region
+        tests: [not_null]
+      - name: n_operations
+        tests: [not_null]
+      - name: montant_ue_total
+        tests: [not_null]
+
+  - name: by_fonds
+    columns:
+      - name: fonds
+        tests: [not_null]
+      - name: n_operations
+        tests: [not_null]
+
+  - name: by_region_fonds
+    columns:
+      - name: region
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]
+      - name: n_operations
+        tests: [not_null]
+
+  - name: by_objectif_strategique
+    columns:
+      - name: objectif_strategique
+        tests: [not_null]
+      - name: n_operations
+        tests: [not_null]
+
+  - name: national
+    columns:
+      - name: n_operations
+        tests: [not_null]
+
+  - name: interregional
+    columns:
+      - name: n_operations
+        tests: [not_null]
+
+  - name: pilotage
+    columns:
+      - name: perimetre
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]
+      - name: programme
+        tests: [not_null]
+      - name: reste_a_engager
+        tests: [not_null]
+
+  - name: pilotage_all
+    columns:
+      - name: periode
+        tests: [not_null]
+      - name: perimetre
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]
+
+  - name: pilotage_2014_2020
+    columns:
+      - name: perimetre
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]
+      - name: programme
+        tests: [not_null]
+      - name: reste_a_engager
+        tests: [not_null]
+
+  - name: engage_all
+    columns:
+      - name: periode
+        tests: [not_null]
+      - name: perimetre
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]
+      - name: engage
+        tests: [not_null]
+
+  - name: engage_2014_2020
+    columns:
+      - name: perimetre
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]
+      - name: engage
+        tests: [not_null]
+
+  - name: engage_by_perimetre_fonds
+    columns:
+      - name: perimetre
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]
+      - name: engage
+        tests: [not_null]
+
+  - name: cofinancement_all
+    columns:
+      - name: periode
+        tests: [not_null]
+      - name: region
+        tests: [not_null]
+      - name: fonds
+        tests: [not_null]

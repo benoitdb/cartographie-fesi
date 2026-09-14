@@ -47,7 +47,7 @@ if env_path.exists():
 
 DB_PARAMS = dict(
     host="localhost",
-    port=5437,
+    port=int(os.environ.get("POSTGRES_PORT", 5437)),
     dbname=os.environ.get("POSTGRES_DB", "fesi"),
     user=os.environ.get("POSTGRES_USER", "fesi"),
     password=os.environ.get("POSTGRES_PASSWORD", "fesi_local"),
