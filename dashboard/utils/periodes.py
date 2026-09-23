@@ -395,14 +395,6 @@ MENTION_TAUX_DECLARE_DIVERGENT = (
 # Pourquoi un taux au-dessus du plafond n'est pas, en soi, une irrégularité. À afficher avec
 # tout décompte de dépassements : le plafond se fixe par axe prioritaire, pas par opération,
 # et le fichier ne porte pas l'axe.
-MENTION_TAUX_DECLARE_DIVERGENT = (
-    "Le taux affiché est **recalculé** (montant UE / dépenses éligibles), pour rester "
-    "comparable aux autres sources de la période — Synergie et le PON FSE ne portent aucun "
-    "taux déclaré. Sur {n} opération(s) ({montant}), le taux déclaré par le fichier source "
-    "diverge de plus d'un point du taux recalculé : signalé comme un point de qualité de "
-    "source à vérifier, pas comme un dépassement."
-)
-
 MENTION_PLAFOND_PAR_AXE = (
     "Un taux supérieur au plafond de la catégorie ne signale pas une irrégularité : "
     "l'article 120 fixe le plafond **par axe prioritaire**, pas par opération, et le majore "

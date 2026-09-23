@@ -40,9 +40,11 @@ REPO = DBT_DIR.parent
 DATA = REPO / "data" / "processed"
 sys.path.insert(0, str(REPO / "data-pipeline"))
 sys.path.insert(0, str(REPO / "dashboard"))
+sys.path.insert(0, str(REPO / "metabase"))
 
 import region_mapping  # noqa: E402
 import schema_source  # noqa: E402
+from load_data import INTERNAL_KEY_TO_COLUMN  # noqa: E402
 
 from reference.programmes_interregionaux_2014_2020 import (  # noqa: E402
     REGIONS_PAR_PROGRAMME_INTERREGIONAL_2014_2020,
@@ -53,37 +55,6 @@ from utils.cofinancement import (  # noqa: E402
     plafond_categorie,
     plafond_intervalle_2014_2020,
 )
-
-# Même table que `metabase/load_data.INTERNAL_KEY_TO_COLUMN`. Recopiée ici faute
-# de pouvoir l'importer : `load_data.py` vit sur la branche `feat/metabase-121`,
-# pas sur `main` d'où part ce spike. C'est une duplication ASSUMÉE et
-# temporaire — dans une vraie mise en œuvre elle serait importée, comme
-# `schema_source` l'est ci-dessus.
-INTERNAL_KEY_TO_COLUMN = {
-    "numero_op": "numero_operation",
-    "numcci": "numcci",
-    "libelle_prog": "libelle_programme",
-    "intitule_proj": "intitule_projet",
-    "resume_op": "resume_operation",
-    "nom_benef": "nom_beneficiaire",
-    "cp_beneficiaire": "cp_beneficiaire",
-    "cp_operation": "cp_operation",
-    "zone": "zone",
-    "departement": "departement",
-    "pays": "pays",
-    "fonds": "fonds",
-    "objectif_strat": "objectif_strategique",
-    "objectif_spec": "objectif_specifique",
-    "domaine_intervention": "domaine_intervention",
-    "type_intervention": "type_intervention",
-    "depenses": "depenses_eligibles",
-    "taux_cofinance": "taux_cofinancement",
-    "montant_ue": "montant_ue",
-    "date_debut": "date_debut",
-    "date_fin": "date_fin",
-    "date_convention": "date_convention",
-    "date_programmation": "date_programmation",
-}
 
 # CONTRAT DE COLONNES du staging, et troisième coût mesuré par le spike.
 #
