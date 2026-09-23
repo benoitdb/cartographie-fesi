@@ -2,6 +2,17 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from utils.analyses_controle import (
+    render_cofinancement_atypique,
+    render_coherence_montants,
+    render_concentration_beneficiaires,
+    render_dispersion,
+    render_introduction_distribution,
+    render_montants_atypiques,
+    render_regroupements,
+    render_taux_cofinancement,
+    stats_col_config,
+)
 from utils.cofinancement import bucket_categorie, plafond_categorie
 from utils.data_loader import (
     load_beneficiaires_fuzzy,
@@ -29,21 +40,12 @@ from utils.stats import (
     build_cofinancement_categorie_chart,
     build_cumulative_curve,
     build_fonds_barchart,
-    build_histogram,
-    build_lorenz_beneficiaires,
-    build_pareto_beneficiaires,
     build_portfolio_scatter,
-    compute_cofinancement_table,
     compute_stats_table,
     detect_beneficiaires_multi_region,
-    detect_cofinancement_outliers,
-    detect_incoherent_cofinancement,
-    detect_outliers,
-    detect_regroupements_beneficiaire,
-    render_top_beneficiaires_drilldown,
 )
 from utils.table_style import text_widths
-from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_categorical_columns
+from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS
 from utils.treemap import build_hierarchy_treemap
 
 FONDS, LEVEL1, LEVEL2 = "Fonds", "Objectif stratégique", "Objectif spécifique (Code et libellé)"
@@ -187,21 +189,6 @@ df_mono_region = df_national_ops[
     mono_region & ~df_national_ops["is_interregional"] & ~df_national_ops["is_national"]
 ].copy()
 df_mono_region["Région"] = df_mono_region["regions_modernes"].apply(lambda r: r[0])
-
-montant_col_config = st.column_config.NumberColumn(format="%,d €")
-cv_col_config = st.column_config.NumberColumn(
-    "Coeff. de variation", help="Écart-type / médiane — dispersion relative, comparable entre groupes de tailles différentes"
-)
-concentration_col_config = st.column_config.NumberColumn(
-    "Concentration (top 10%)", format="percent", help="Part du montant total portée par les 10% de projets les plus importants du groupe"
-)
-stats_col_config = {
-    "Médiane": montant_col_config,
-    "Écart-type": montant_col_config,
-    "cv": cv_col_config,
-    "concentration_top10": concentration_col_config,
-}
-taux_col_config = st.column_config.NumberColumn(format="percent")
 
 tab_ensemble, tab_pilotage, tab_audit = st.tabs(["Vue d'ensemble", "Pilotage", "Analyses & contrôle"])
 
@@ -478,211 +465,13 @@ with tab_pilotage:
     )
 
 with tab_audit:
-    st.caption(
-        "Ces indicateurs complètent les agrégats de base (somme, moyenne) affichés dans la vue "
-        "d'ensemble : ils renseignent sur la dispersion des montants, la concentration du "
-        "portefeuille et la cohérence des taux de cofinancement — des repères usuels pour l'analyse "
-        "de dépense publique."
-    )
+    render_introduction_distribution(df_national_ops, "à l'échelle nationale", "_national")
 
-    st.caption(
-        "Distribution des montants UE par opération, à l'échelle nationale. Ces montants sont très "
-        "asymétriques (majorité de petites opérations, quelques grands projets) : l'échelle "
-        "logarithmique rend la forme de la distribution plus lisible."
-    )
-    echelle_hist = st.radio("Échelle", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_hist_national")
-    st.plotly_chart(
-        build_histogram(df_national_ops, log_x=echelle_hist == "Logarithmique", color_col="Fonds", color_map=FONDS_COLORS),
-        width='stretch',
-    )
-
-    st.caption(
-        "La médiane et l'écart-type mesurent la dispersion des montants au sein d'un groupe. Le "
-        "coefficient de variation (écart-type / médiane) rend cette dispersion comparable entre "
-        "groupes de tailles très différentes. La concentration indique la part du montant total "
-        "portée par les 10% de projets les plus importants du groupe. Chaque boîte à moustaches "
-        "représente la médiane et l'écart interquartile (IQR) ; les points au-delà des moustaches "
-        "sont les opérations à montant atypique."
-    )
-    echelle_box = st.radio("Échelle des boîtes à moustaches", ["Logarithmique", "Linéaire"], horizontal=True, key="echelle_box_national")
-
-    col_fonds, box_col_fonds = st.columns(2)
-    with col_fonds:
-        st.markdown("**Médiane, écart-type et concentration par fonds**")
-        stats_fonds = compute_stats_table(df_national_ops, "Fonds").rename(
-            columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
-        )
-        st.dataframe(
-            style_categorical_columns(stats_fonds, {"Fonds": FONDS_COLORS}),
-            hide_index=True,
-            width='stretch',
-            column_config={
-                **stats_col_config,
-                "Médiane": st.column_config.ProgressColumn(format="%,d €", min_value=0, max_value=int(stats_fonds["Médiane"].max())),
-            },
-        )
-    with box_col_fonds:
-        st.plotly_chart(
-            build_boxplot(df_national_ops, "Fonds", log_y=echelle_box == "Logarithmique"), width='stretch'
-        )
-
-    st.markdown("**Distribution par objectif stratégique**")
-    st.plotly_chart(
-        build_boxplot(
-            df_national_ops, LEVEL1, log_y=echelle_box == "Logarithmique", color_map=OBJECTIF_STRATEGIQUE_COLORS
-        ),
-        width='stretch',
-    )
-
-    st.markdown("**Médiane, écart-type et concentration par région**")
-    stats_region = compute_stats_table(df_mono_region, "Région").rename(
-        columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
-    )
-    st.dataframe(
-        stats_region, hide_index=True, width='stretch', column_config={**stats_col_config, **text_widths("Région")}
-    )
-
-    st.plotly_chart(
-        build_boxplot(df_mono_region, "Région", log_y=echelle_box == "Logarithmique"), width='stretch'
-    )
-
-    st.markdown("**Opérations à montant atypique**")
-    st.caption(
-        "Opérations dont le montant s'écarte fortement de la distribution habituelle de son fonds "
-        "(méthode IQR, calculée séparément par Fonds — FEDER, FSE+ et FTJ n'ont pas la même échelle "
-        "de montants) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
-        "correspondre à un projet structurant légitime."
-    )
-    outliers = detect_outliers(df_national_ops, group_col="Fonds")
-    st.caption(f"{len(outliers)} opération(s) hors de l'intervalle interquartile habituel.")
-    outliers_table = outliers[["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Région de l'opération", "Montant UE"]].head(50)
-    st.dataframe(
-        style_categorical_columns(outliers_table, {"Fonds": FONDS_COLORS}),
-        hide_index=True,
-        width='stretch',
-        column_config={
-            **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Région de l'opération"),
-            "Montant UE": st.column_config.ProgressColumn(
-                format="%,d €", min_value=0, max_value=int(outliers_table["Montant UE"].max()) if len(outliers_table) else 1
-            ),
-        },
-    )
-
-    st.markdown("**Concentration par bénéficiaire**")
-    st.caption(
-        "Bénéficiaires cumulant le plus de montant UE, tous projets confondus — vue d'ensemble des "
-        "acteurs les plus représentés dans le portefeuille."
-    )
-    st.plotly_chart(build_pareto_beneficiaires(df_national_ops), width='stretch')
-    with st.expander("Courbe de Lorenz (détail statistique de la concentration)"):
-        st.caption(
-            "Autre lecture de la même concentration : % cumulé de bénéficiaires (du plus petit au "
-            "plus gros) vs % cumulé du montant — plus la courbe s'éloigne de la diagonale "
-            "(égalité parfaite), plus le montant est concentré sur peu de bénéficiaires."
-        )
-        st.plotly_chart(build_lorenz_beneficiaires(df_national_ops), width='stretch')
-
-    render_top_beneficiaires_drilldown(df_national_ops, montant_col_config, key="top_beneficiaires_national")
-
-    st.markdown("**Opérations rapprochées par bénéficiaire**")
-    st.caption(
-        "On regarde ici de près les opérations d'un même bénéficiaire dont le montant et la date de "
-        "démarrage sont proches."
-    )
-    proches, grands_regroupements, regroupements_inter_fonds = detect_regroupements_beneficiaire(df_national_ops)
-
-    st.caption(
-        f"Petits regroupements (2 à 3 opérations) : {len(proches)} bénéficiaire(s). Les programmes "
-        "découpés en lots (nombreuses opérations très proches par construction) peuvent malgré tout "
-        "apparaître si le nombre de lots reste faible."
-    )
-    if len(proches):
-        st.dataframe(
-            proches.head(50),
-            hide_index=True,
-            width='stretch',
-            column_config={**text_widths("Nom du bénéficiaire", "Opérations", "Programme(s)"), "Montant UE cumulé": montant_col_config},
-        )
-
-    st.caption(
-        f"Grands regroupements (4 opérations ou plus) : {len(grands_regroupements)} bénéficiaire(s). Le "
-        "coefficient de variation indique la dispersion des montants au sein du regroupement (proche de "
-        "0 : montants quasi identiques ; élevé : montants très inégaux, ex. plusieurs lots de tailles "
-        "différentes)."
-    )
-    if len(grands_regroupements):
-        st.dataframe(
-            grands_regroupements.head(50),
-            hide_index=True,
-            width='stretch',
-            column_config={
-                **text_widths("Nom du bénéficiaire"),
-                "Montant UE cumulé": montant_col_config,
-                "Coeff. de variation": st.column_config.NumberColumn(format="%.2f"),
-            },
-        )
-
-    st.markdown("**Regroupements inter-fonds**")
-    st.caption(
-        f"{len(regroupements_inter_fonds)} bénéficiaire(s) avec des opérations rapprochées (montant et "
-        "date proches) couvrant plus d'un Fonds (ex. FEDER + FSE+) — signal plus fort qu'un regroupement "
-        "intra-programme (lots d'un même accord-cadre, cas le plus fréquent ci-dessus), à recouper, pas "
-        "une preuve en soi."
-    )
-    if len(regroupements_inter_fonds):
-        st.dataframe(
-            regroupements_inter_fonds,
-            hide_index=True,
-            width='stretch',
-            column_config={**text_widths("Nom du bénéficiaire", "Programme(s)", "Opérations"), "Montant UE cumulé": montant_col_config},
-        )
-    else:
-        st.caption("Aucun cas détecté sur le périmètre actuel.")
-
-    st.markdown("**Bénéficiaires présents dans plusieurs régions**")
-    st.caption(
-        "Un même bénéficiaire (ou une variante proche de saisie du même nom) apparaissant dans "
-        "plusieurs régions à la fois — à recouper, pas une preuve en soi : peut correspondre à "
-        "une organisation multi-sites tout à fait légitime comme à une saisie à vérifier."
-    )
-    beneficiaires_fuzzy = load_beneficiaires_fuzzy()
-    multi_region = detect_beneficiaires_multi_region(df_national_ops, beneficiaires_fuzzy)
-    if len(multi_region):
-        multi_region_table = multi_region.head(50)
-        st.dataframe(
-            multi_region_table,
-            hide_index=True,
-            width='stretch',
-            column_config={
-                **text_widths("Nom du bénéficiaire", "Régions"),
-                "Montant UE cumulé": st.column_config.ProgressColumn(
-                    format="%,d €",
-                    min_value=0,
-                    max_value=int(multi_region_table["Montant UE cumulé"].max()) if len(multi_region_table) else 1,
-                ),
-            },
-        )
-    else:
-        st.caption("Aucun cas détecté sur le périmètre actuel.")
-
-    st.markdown("**Taux de cofinancement UE**")
-    st.caption(
-        "Le taux de cofinancement est plafonné réglementairement selon le fonds et la catégorie de région "
-        "(plafonds non modélisés ici) ; un taux atypique peut signaler une opération à vérifier."
-    )
-    cofinancement_fonds = compute_cofinancement_table(df_national_ops, "Fonds").rename(
-        columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
-    )
-    st.dataframe(
-        style_categorical_columns(cofinancement_fonds, {"Fonds": FONDS_COLORS}),
-        hide_index=True,
-        width='stretch',
-        column_config={
-            "Taux moyen": st.column_config.ProgressColumn(
-                format="percent", min_value=0, max_value=max(1.0, cofinancement_fonds["Taux moyen"].max())
-            ),
-            "Taux médian": taux_col_config,
-        },
+    render_taux_cofinancement(
+        df_national_ops,
+        "Le taux de cofinancement est plafonné réglementairement selon le fonds et la catégorie de région : "
+        "le graphe ci-dessous compare le financement UE de chaque catégorie à son plafond. Un taux atypique "
+        "peut signaler une opération à vérifier.",
     )
 
     st.markdown("**Financement UE vs plafond réglementaire, par catégorie de région**")
@@ -716,61 +505,50 @@ with tab_audit:
     else:
         st.caption("Aucune catégorie de région identifiable sur le périmètre actuel.")
 
-    cofinancement_outliers = detect_cofinancement_outliers(df_national_ops).assign(
-        **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}
+    render_cofinancement_atypique(df_national_ops, colonnes_sup=("Région de l'opération",))
+
+    echelle_box = render_dispersion(df_national_ops, "_national")
+
+    st.markdown("**Médiane, écart-type et concentration par région**")
+    stats_region = compute_stats_table(df_mono_region, "Région").rename(
+        columns={"mediane": "Médiane", "ecart_type": "Écart-type", "count": "Nb projets"}
     )
-    st.caption(f"{len(cofinancement_outliers)} opération(s) à taux de cofinancement atypique (méthode IQR).")
-    cofinancement_outliers_table = cofinancement_outliers[
-        [
-            "Intitulé du projet",
-            "Nom du bénéficiaire",
-            "Fonds",
-            "Région de l'opération",
-            "Total des dépenses éligibles",
-            "Montant UE",
-            "Montant hors UE",
-            "Taux de cofinancement",
-        ]
-    ].head(50)
     st.dataframe(
-        style_categorical_columns(cofinancement_outliers_table, {"Fonds": FONDS_COLORS}),
-        hide_index=True,
-        width='stretch',
-        column_config={
-            **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Région de l'opération"),
-            "Taux de cofinancement": taux_col_config,
-            "Total des dépenses éligibles": montant_col_config,
-            "Montant UE": st.column_config.ProgressColumn(
-                format="%,d €",
-                min_value=0,
-                max_value=int(cofinancement_outliers_table["Montant UE"].max()) if len(cofinancement_outliers_table) else 1,
-            ),
-            "Montant hors UE": montant_col_config,
-        },
+        stats_region, hide_index=True, width='stretch', column_config={**stats_col_config(), **text_widths("Région")}
     )
 
-    st.markdown("**Cohérence des montants**")
-    st.caption(
-        "Contrôle de cohérence (pas une question de distribution) : opérations où le montant UE "
-        "dépasse le total des dépenses éligibles, ce qui correspondrait à un taux de cofinancement "
-        "supérieur à 100%, normalement impossible — à vérifier, potentiel signal de qualité de données."
+    st.plotly_chart(
+        build_boxplot(df_mono_region, "Région", log_y=echelle_box == "Logarithmique"), width='stretch'
     )
-    incoherentes = detect_incoherent_cofinancement(df_national_ops)
-    st.caption(f"{len(incoherentes)} opération(s) où le montant UE dépasse le total des dépenses éligibles.")
-    if len(incoherentes):
-        incoherentes_table = incoherentes[
-            ["Intitulé du projet", "Nom du bénéficiaire", "Fonds", "Total des dépenses éligibles", "Montant UE", "Taux de cofinancement"]
-        ].head(50)
+
+    render_montants_atypiques(df_national_ops, colonnes_sup=("Région de l'opération",))
+    render_concentration_beneficiaires(df_national_ops, "", "top_beneficiaires_national")
+    render_regroupements(df_national_ops)
+
+    st.markdown("**Bénéficiaires présents dans plusieurs régions**")
+    st.caption(
+        "Un même bénéficiaire (ou une variante proche de saisie du même nom) apparaissant dans "
+        "plusieurs régions à la fois — à recouper, pas une preuve en soi : peut correspondre à "
+        "une organisation multi-sites tout à fait légitime comme à une saisie à vérifier."
+    )
+    beneficiaires_fuzzy = load_beneficiaires_fuzzy()
+    multi_region = detect_beneficiaires_multi_region(df_national_ops, beneficiaires_fuzzy)
+    if len(multi_region):
+        multi_region_table = multi_region.head(50)
         st.dataframe(
-            style_categorical_columns(incoherentes_table, {"Fonds": FONDS_COLORS}),
+            multi_region_table,
             hide_index=True,
             width='stretch',
             column_config={
-                **text_widths("Intitulé du projet", "Nom du bénéficiaire"),
-                "Total des dépenses éligibles": montant_col_config,
-                "Montant UE": st.column_config.ProgressColumn(
-                    format="%,d €", min_value=0, max_value=int(incoherentes_table["Montant UE"].max())
+                **text_widths("Nom du bénéficiaire", "Régions"),
+                "Montant UE cumulé": st.column_config.ProgressColumn(
+                    format="%,d €",
+                    min_value=0,
+                    max_value=int(multi_region_table["Montant UE cumulé"].max()) if len(multi_region_table) else 1,
                 ),
-                "Taux de cofinancement": taux_col_config,
             },
         )
+    else:
+        st.caption("Aucun cas détecté sur le périmètre actuel.")
+
+    render_coherence_montants(df_national_ops)
