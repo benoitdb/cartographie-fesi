@@ -3,8 +3,7 @@
 ## Pourquoi
 
 Dashboard d'exploration et de pilotage des opérations conventionnées FEDER /
-FSE+ / FTJ sur la programmation 2021-2027 : où va l'argent, à qui, à quel
-rythme de consommation. Portfolio / démo, pas un outil de production.
+FSE+ / FTJ sur la programmation 2021-2027
 
 ## État actuel
 
