@@ -57,11 +57,11 @@ from utils.data_loader import (
 from utils.departments import (
     DEPT_TO_REGION,
     assign_departments_df,
-    build_department_choropleth,
     build_dromcom_outline,
     build_dromcom_projects_map,
     department_coverage_summary,
 )
+from utils.detail_departement import render_detail_departement
 from utils.dromcom_localisation import build_bubbles_localisation
 from utils.filters import compute_by_region, render_fonds_filter, summarize_ops
 from utils.millesime import libelle_millesime, render_millesime
@@ -114,7 +114,6 @@ from utils.pilotage import (
 )
 from utils.plot_style import (
     MAP_CONFIG,
-    build_standalone_colorbar,
 )
 from utils.stats import (
     build_cumulative_curve,
@@ -571,95 +570,23 @@ else:
             "et pas nécessairement le lieu du projet. "
             + (
                 f"{part_hors_perimetre:.0%} des opérations pointent vers un département situé "
-                f"hors de {perimetre} (ligne « Hors périmètre » ci-dessous) — le rattachement "
+                f"hors de {perimetre} (ligne « Hors périmètre » du tableau et liste ci-dessous) — le rattachement "
                 "régional reste fiable, seul le département est en cause."
                 if hors_perimetre.any()
                 else ""
             )
         )
 
-        non_reparti = df_region_dept[df_region_dept["dept"].isna()]
-        non_reparti_montant = non_reparti[MONTANT].sum()
-        non_reparti_count = len(non_reparti)
-
-        df_dept_connu = df_region_dept[df_region_dept["dept"].notna() & df_region_dept["dept"].isin(depts_perimetre)]
-        dept_table = (
-            df_dept_connu.groupby("dept")
-            .agg(montant_ue_total=(MONTANT, "sum"), count=(MONTANT, "count"))
-            .reset_index()
-            .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
-            .sort_values("Montant UE total", ascending=False)
-        )
-        # Échelle calée sur les seuls départements du périmètre (avant l'ajout des lignes
-        # "Non réparti"/"Hors périmètre" ci-dessous, qui ne correspondent à aucun département
-        # sur la carte) — même échelle que la carte donc.
-        color_range_dept = [0, dept_table["Montant UE total"].max()] if len(dept_table) else [0, 1]
-        # Les deux lignes suivantes complètent le tableau à 100 % du périmètre : sans elles,
-        # les opérations sans département connu ou rattachées à un département d'une autre
-        # région disparaîtraient silencieusement du total affiché (issue #100).
-        if non_reparti_count:
-            dept_table = pd.concat(
-                [
-                    dept_table,
-                    pd.DataFrame(
-                        [{"Département": "Non réparti (région entière)", "Montant UE total": non_reparti_montant, "Nb projets": non_reparti_count}]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        if hors_perimetre.any():
-            df_hors_perimetre = df_region_dept[hors_perimetre]
-            dept_table = pd.concat(
-                [
-                    dept_table,
-                    pd.DataFrame(
-                        [
-                            {
-                                "Département": "Hors périmètre (autre région)",
-                                "Montant UE total": df_hors_perimetre[MONTANT].sum(),
-                                "Nb projets": len(df_hors_perimetre),
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-
-        # Légende + carte + tableau côte à côte, comme sur la page 1 (`1_Vue_Régionale.py`) :
-        # la carte désactive son colorbar intégré au profit d'une légende commune.
-        col_legend_dept, col_map_dept, col_table_dept = st.columns([1, 4, 5])
-        with col_legend_dept:
-            st.plotly_chart(
-                build_standalone_colorbar(color_range_dept, "Montant UE (€)", height=420),
-                width='stretch',
-                config={"displayModeBar": False},
-            )
-        with col_map_dept:
-            part_approx = couverture_dept.get("approximé", 0)
-            annotation_carte = (
+        part_approx = couverture_dept.get("approximé", 0)
+        render_detail_departement(
+            df_region_dept,
+            perimetre,
+            annotation=(
                 f"≈ {part_approx:.0%} du rattachement approché depuis le siège du bénéficiaire"
                 if part_approx >= 0.05
                 else None
-            )
-            st.plotly_chart(
-                build_department_choropleth(df_region_dept, perimetre, show_colorbar=False, annotation=annotation_carte),
-                width='stretch',
-                config=MAP_CONFIG,
-            )
-        with col_table_dept:
-            st.dataframe(
-                dept_table,
-                hide_index=True,
-                width='stretch',
-                column_config={
-                    **text_widths("Département"),
-                    "Montant UE total": st.column_config.ProgressColumn(
-                        format="%,d €",
-                        min_value=0,
-                        max_value=int(dept_table["Montant UE total"].max()) if len(dept_table) else 1,
-                    ),
-                },
-            )
+            ),
+        )
 
 # ---------------------------------------------------------------- Analyses
 

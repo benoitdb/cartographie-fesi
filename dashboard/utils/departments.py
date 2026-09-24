@@ -200,6 +200,43 @@ def assign_departments_df(df):
 DEPT_SOURCES = ("opération", "zone", "approximé", "nom du bénéficiaire", "inconnu")
 
 
+NON_REPARTI = "Non réparti (région entière)"
+HORS_PERIMETRE = "Hors périmètre (autre région)"
+
+
+def tableau_departements(df_dept, region, montant_col="Montant UE"):
+    """Tableau du « Détail par département » (pages 1 et 5, issue #157 écart D3) et échelle
+    de couleur de la carte qui l'accompagne.
+
+    `df_dept` : opérations de la région passées par `assign_departments_df` (colonne `dept`).
+    Une ligne par département de la région, du plus doté au moins doté, puis deux lignes qui
+    complètent le tableau à 100 % de la région (#100) : « Non réparti » (aucun département
+    identifié) et « Hors périmètre » (département d'une autre région — siège du porteur,
+    ou projet mené ailleurs). L'échelle ne voit que les vrais départements, les seuls
+    dessinés sur la carte."""
+    depts_region = {code for code, r in DEPT_TO_REGION.items() if r == region}
+    connu = df_dept["dept"].notna()
+    dans_region = connu & df_dept["dept"].isin(depts_region)
+    tableau = (
+        df_dept[dans_region]
+        .groupby("dept")
+        .agg(montant_ue_total=(montant_col, "sum"), count=(montant_col, "count"))
+        .reset_index()
+        .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
+        .sort_values("Montant UE total", ascending=False)
+    )
+    color_range = [0, tableau["Montant UE total"].max()] if len(tableau) else [0, 1]
+
+    lignes_complementaires = [
+        {"Département": libelle, "Montant UE total": df_dept.loc[masque, montant_col].sum(), "Nb projets": int(masque.sum())}
+        for libelle, masque in ((NON_REPARTI, ~connu), (HORS_PERIMETRE, connu & ~dans_region))
+        if masque.any()
+    ]
+    if lignes_complementaires:
+        tableau = pd.concat([tableau, pd.DataFrame(lignes_complementaires)], ignore_index=True)
+    return tableau, color_range
+
+
 def department_coverage_summary(df):
     """Part des opérations rattachées à un département via le champ pipeline (fiable),
     via approximation (code postal du bénéficiaire), via déduction du nom du bénéficiaire,
