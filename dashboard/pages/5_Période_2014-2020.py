@@ -21,10 +21,10 @@ comme un choix documenté et non comme un oubli.
 """
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from utils.carte_nationale import DROM_COM, render_carte_nationale
 from utils.cofinancement import (
     filtrer_fonds_plafonnes,
     libelle_categorie_2014_2020,
@@ -102,9 +102,6 @@ from utils.pilotage import (
 from utils.plot_style import (
     MAP_CONFIG,
     build_standalone_colorbar,
-    disable_map_interaction,
-    style_hover,
-    style_map_background,
 )
 from utils.stats import (
     build_boxplot,
@@ -127,8 +124,6 @@ from utils.themes import FONDS_COLORS, style_categorical_columns
 FONDS = "Fonds"
 MONTANT = "Montant UE"
 BENEFICIAIRE = "Nom du bénéficiaire"
-
-DROM_COM = ["Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte", "Saint-Martin"]
 
 st.set_page_config(page_title="Cartographie FESI — 2014-2020", layout="wide")
 
@@ -372,131 +367,66 @@ if perimetre == ENSEMBLE_NATIONAL:
         "en gris avec leur vrai montant plutôt que quasi vides — voir la légende sous la carte."
     )
 
-    col_legend, col_metro, col_dromcom = st.columns([1, 4, 6])
-
-    with col_legend:
-        st.plotly_chart(
-            # « Montant UE (€) » et non le libellé long de la période : la colonne de
-            # légende est étroite, un titre plus long y est tronqué (« Montant UE pr »).
-            build_standalone_colorbar(color_range, "Montant UE (€)", height=480),
-            width='stretch',
-            config={"displayModeBar": False},
-        )
-
-    with col_metro:
-        st.markdown("**France métropolitaine**")
-        df_carte = pd.DataFrame(
-            [
-                {"region": region, "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
-                for region, v in by_region.items()
-                if region in regions_metro and region not in regions_hors_synergie
-            ]
-        )
-        fig_carte = px.choropleth(
-            df_carte,
+    # Bretagne, Normandie et Nouvelle-Aquitaine sortent de la trace bleue pour une trace à
+    # part, en gris : go.Choropleth manuel plutôt que px.choropleth, dont une trace ajoutée
+    # partagerait le coloraxis (et donc l'échelle bleue) — colorscale/zmin/zmax sont ici
+    # indépendants exprès, voir plus haut.
+    trace_hors_synergie = None
+    legendes_hors_synergie = []
+    if regions_hors_synergie:
+        montants_gris = [v["montant_ue_total"] for v in regions_hors_synergie.values()]
+        trace_hors_synergie = go.Choropleth(
             geojson=geojson,
-            locations="region",
+            locations=list(regions_hors_synergie),
             featureidkey="properties.nom",
-            color="montant_ue_total",
-            color_continuous_scale="Blues",
-            range_color=color_range,
-            custom_data=["count"],
-            labels={"montant_ue_total": f"{libelle_montant_ue} (€)"},
+            z=montants_gris,
+            zmin=0,
+            zmax=max(montants_gris) or 1,
+            colorscale="Greys",
+            showscale=False,
+            customdata=[
+                [v["count"], f" ({v['millesime']})" if v["millesime"] else ""] for v in regions_hors_synergie.values()
+            ],
+            hovertemplate=(
+                "<b>%{location}</b><br>"
+                f"{libelle_montant_ue} : %{{z:,.0f}} €<br>"
+                "Nb projets : %{customdata[0]}<br>"
+                "Fichier régional propre%{customdata[1]} — hors extraction "
+                "Synergie, non comparable directement aux autres régions"
+                "<extra></extra>"
+            ),
         )
-        fig_carte.update_traces(
-            hovertemplate=f"<b>%{{location}}</b><br>{libelle_montant_ue} : %{{z:,.0f}} €<br>Nb projets : %{{customdata[0]}}<extra></extra>"
-        )
-        if regions_hors_synergie:
-            montants_gris = [v["montant_ue_total"] for v in regions_hors_synergie.values()]
-            # go.Choropleth manuel plutôt que px.choropleth : une trace ajoutée par
-            # px.choropleth partagerait le coloraxis (et donc l'échelle bleue) de la trace
-            # ci-dessus — colorscale/zmin/zmax ici sont indépendants exprès, voir plus haut.
-            fig_carte.add_trace(
-                go.Choropleth(
-                    geojson=geojson,
-                    locations=list(regions_hors_synergie),
-                    featureidkey="properties.nom",
-                    z=montants_gris,
-                    zmin=0,
-                    zmax=max(montants_gris) or 1,
-                    colorscale="Greys",
-                    showscale=False,
-                    customdata=[
-                        [v["count"], f" ({v['millesime']})" if v["millesime"] else ""] for v in regions_hors_synergie.values()
-                    ],
-                    hovertemplate=(
-                        "<b>%{location}</b><br>"
-                        f"{libelle_montant_ue} : %{{z:,.0f}} €<br>"
-                        "Nb projets : %{customdata[0]}<br>"
-                        "Fichier régional propre%{customdata[1]} — hors extraction "
-                        "Synergie, non comparable directement aux autres régions"
-                        "<extra></extra>"
-                    ),
-                )
+        legendes_hors_synergie.append(
+            "En gris, hors extraction Synergie (issue #68), montant de leur propre fichier "
+            "régional plutôt que le sous-comptage Synergie — mais un millésime propre à "
+            "chacune, non comparable terme à terme au bleu ci-dessus (#104) : "
+            + " · ".join(
+                f"{region} {_fmt_millions(v['montant_ue_total'])}" + (f" ({v['millesime']})" if v["millesime"] else "")
+                for region, v in regions_hors_synergie.items()
             )
-        fig_carte.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-        fig_carte.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
-        st.plotly_chart(
-            disable_map_interaction(style_map_background(style_hover(fig_carte))),
-            width='stretch',
-            config=MAP_CONFIG,
+            + "."
         )
-        if regions_hors_synergie:
-            st.caption(
-                "En gris, hors extraction Synergie (issue #68), montant de leur propre fichier "
-                "régional plutôt que le sous-comptage Synergie — mais un millésime propre à "
-                "chacune, non comparable terme à terme au bleu ci-dessus (#104) : "
+        dossiers_sans_fonds = {region: v for region, v in regions_hors_synergie.items() if v["count_sans_fonds"]}
+        if dossiers_sans_fonds:
+            legendes_hors_synergie.append(
+                "Dossiers sans fonds renseigné, écartés quel que soit le filtre Fonds "
+                "ci-contre — montants ci-dessus donc très légèrement sous-estimés : "
                 + " · ".join(
-                    f"{region} {_fmt_millions(v['montant_ue_total'])}" + (f" ({v['millesime']})" if v["millesime"] else "")
-                    for region, v in regions_hors_synergie.items()
+                    f"{region} {v['count_sans_fonds']} dossier(s) ({_fmt_millions(v['montant_sans_fonds'])})"
+                    for region, v in dossiers_sans_fonds.items()
                 )
                 + "."
             )
-            dossiers_sans_fonds = {region: v for region, v in regions_hors_synergie.items() if v["count_sans_fonds"]}
-            if dossiers_sans_fonds:
-                st.caption(
-                    "Dossiers sans fonds renseigné, écartés quel que soit le filtre Fonds "
-                    "ci-contre — montants ci-dessus donc très légèrement sous-estimés : "
-                    + " · ".join(
-                        f"{region} {v['count_sans_fonds']} dossier(s) ({_fmt_millions(v['montant_sans_fonds'])})"
-                        for region, v in dossiers_sans_fonds.items()
-                    )
-                    + "."
-                )
 
-    with col_dromcom:
-        st.markdown("**DROM-COM**")
-        dromcom_geojson = load_dromcom_geojson()
-        dromcom_rows = st.columns(3), st.columns(3)
-        # strict=True : les 2x3 colonnes doivent couvrir exactement DROM_COM — ajouter un
-        # territoire sans ajouter la colonne le ferait disparaître de la page en silence.
-        for territoire, col in zip(DROM_COM, dromcom_rows[0] + dromcom_rows[1], strict=True):
-            valeurs = by_region.get(territoire, {"montant_ue_total": 0, "count": 0})
-            with col, st.container(border=True):
-                st.markdown(f"**{territoire}**")
-                fig_dromcom = px.choropleth(
-                    pd.DataFrame([{"region": territoire, "montant_ue_total": valeurs["montant_ue_total"]}]),
-                    geojson=dromcom_geojson,
-                    locations="region",
-                    featureidkey="properties.nom",
-                    color="montant_ue_total",
-                    color_continuous_scale="Blues",
-                    range_color=color_range,
-                )
-                fig_dromcom.update_traces(
-                    hovertemplate=f"<b>{territoire}</b><br>{libelle_montant_ue} : %{{z:,.0f}} €<extra></extra>"
-                )
-                fig_dromcom.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-                fig_dromcom.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=135, coloraxis_showscale=False)
-                st.plotly_chart(
-                    disable_map_interaction(style_map_background(style_hover(fig_dromcom))),
-                    width='stretch',
-                    config=MAP_CONFIG,
-                )
-                if valeurs["count"]:
-                    st.caption(f"{_fmt_millions(valeurs['montant_ue_total'])} · {valeurs['count']} projets")
-                else:
-                    st.caption("Aucun projet")
+    render_carte_nationale(
+        by_region,
+        geojson,
+        color_range,
+        libelle_montant=libelle_montant_ue,
+        regions_exclues=regions_hors_synergie,
+        trace_supplementaire=trace_hors_synergie,
+        legendes_metropole=legendes_hors_synergie,
+    )
 
 elif perimetre == VOLET_NATIONAL:
     col1, col2, col3 = st.columns(3)
@@ -928,82 +858,10 @@ with tab_ensemble:
 
         if by_region_pon:
             geojson_pon = load_geojson()
-            regions_metro_pon = {f["properties"]["nom"] for f in geojson_pon["features"]}
             montants_pon = [v["montant_ue_total"] for v in by_region_pon.values()]
             color_range_pon = [0, max(montants_pon)] if montants_pon else [0, 1]
 
-            col_legend_pon, col_metro_pon, col_dromcom_pon = st.columns([1, 4, 6])
-
-            with col_legend_pon:
-                st.plotly_chart(
-                    build_standalone_colorbar(color_range_pon, "Montant UE (€)", height=480),
-                    width='stretch',
-                    config={"displayModeBar": False},
-                )
-
-            with col_metro_pon:
-                st.markdown("**France métropolitaine**")
-                df_carte_pon = pd.DataFrame(
-                    [
-                        {"region": region, "montant_ue_total": v["montant_ue_total"], "count": v["count"]}
-                        for region, v in by_region_pon.items()
-                        if region in regions_metro_pon
-                    ]
-                )
-                if not df_carte_pon.empty:
-                    fig_carte_pon = px.choropleth(
-                        df_carte_pon,
-                        geojson=geojson_pon,
-                        locations="region",
-                        featureidkey="properties.nom",
-                        color="montant_ue_total",
-                        color_continuous_scale="Blues",
-                        range_color=color_range_pon,
-                        custom_data=["count"],
-                        labels={"montant_ue_total": f"{libelle_montant_ue} (€)"},
-                    )
-                    fig_carte_pon.update_traces(
-                        hovertemplate=f"<b>%{{location}}</b><br>{libelle_montant_ue} : %{{z:,.0f}} €<br>Nb projets : %{{customdata[0]}}<extra></extra>"
-                    )
-                    fig_carte_pon.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-                    fig_carte_pon.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
-                    st.plotly_chart(
-                        disable_map_interaction(style_map_background(style_hover(fig_carte_pon))),
-                        width='stretch',
-                        config=MAP_CONFIG,
-                    )
-
-            with col_dromcom_pon:
-                st.markdown("**DROM-COM**")
-                dromcom_geojson_pon = load_dromcom_geojson()
-                dromcom_rows_pon = st.columns(3), st.columns(3)
-                for territoire, col in zip(DROM_COM, dromcom_rows_pon[0] + dromcom_rows_pon[1], strict=True):
-                    valeurs = by_region_pon.get(territoire, {"montant_ue_total": 0, "count": 0})
-                    with col, st.container(border=True):
-                        st.markdown(f"**{territoire}**")
-                        fig_dromcom_pon = px.choropleth(
-                            pd.DataFrame([{"region": territoire, "montant_ue_total": valeurs["montant_ue_total"]}]),
-                            geojson=dromcom_geojson_pon,
-                            locations="region",
-                            featureidkey="properties.nom",
-                            color="montant_ue_total",
-                            color_continuous_scale="Blues",
-                            range_color=color_range_pon,
-                        )
-                        fig_dromcom_pon.update_traces(
-                            hovertemplate=f"<b>{territoire}</b><br>{libelle_montant_ue} : %{{z:,.0f}} €<extra></extra>"
-                        )
-                        fig_dromcom_pon.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-                        fig_dromcom_pon.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=135, coloraxis_showscale=False)
-                        st.plotly_chart(
-                            disable_map_interaction(style_map_background(style_hover(fig_dromcom_pon))),
-                            width='stretch',
-                            config=MAP_CONFIG,
-                        )
-                        if valeurs["count"]:
-                            st.caption(f"{_fmt_millions(valeurs['montant_ue_total'])} · {valeurs['count']} projets")
-                        else:
-                            st.caption("Aucun projet")
+            render_carte_nationale(by_region_pon, geojson_pon, color_range_pon, libelle_montant=libelle_montant_ue)
 
             df_regions_pon = (
                 pd.DataFrame(
