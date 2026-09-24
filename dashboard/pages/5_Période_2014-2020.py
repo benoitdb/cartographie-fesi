@@ -26,11 +26,13 @@ import streamlit as st
 
 from utils.analyses_controle import (
     montant_col_config,
+    render_cofinancement_atypique,
     render_coherence_montants,
     render_concentration_beneficiaires,
     render_dispersion,
     render_introduction_distribution,
     render_montants_atypiques,
+    render_regroupements,
     render_taux_cofinancement,
     taux_col_config,
 )
@@ -1051,10 +1053,15 @@ with tab_audit:
                 },
             )
 
+    # Bornes IQR par fonds (#167) : REACT-EU et IEJ, à taux structurellement hauts, ne
+    # sont comparés qu'à eux-mêmes (#166).
+    render_cofinancement_atypique(df_ops)
+
     # par_objectif=False : pas de dimension thématique sur cette période (#82).
     render_dispersion(df_ops, "_2014_2020", par_objectif=False)
     render_montants_atypiques(df_ops, libelle_montant=libelle_montant_ue)
     render_concentration_beneficiaires(df_ops, "", "top_benef_2014_2020")
+    render_regroupements(df_ops)
     render_coherence_montants(
         df_ops, precision=" Vaut quel que soit le fonds, y compris REACT-EU, dont le régime propre plafonne justement à 100 %."
     )

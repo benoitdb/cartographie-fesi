@@ -32,6 +32,19 @@ from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS, style_catego
 
 FONDS, LEVEL1 = "Fonds", "Objectif stratégique"
 
+# Les seules colonnes que lit detect_regroupements_beneficiaire (et _cluster_operations_proches) :
+# le cache ne hache qu'elles, et pas `regions_modernes` (des listes) ni le reste des
+# opérations. Une colonne oubliée ici lève une KeyError que les tests de fumée attrapent.
+COLONNES_REGROUPEMENT = [
+    "Nom du bénéficiaire",
+    "Numéro Opération",
+    "Intitulé du projet",
+    "Libellé Programme",
+    FONDS,
+    "Date de début de l'opération",
+    "Montant UE",
+]
+
 
 def montant_col_config():
     return st.column_config.NumberColumn(format="%,d €")
@@ -242,6 +255,14 @@ def render_concentration_beneficiaires(df_ops, perimetre, key_top_beneficiaires)
     render_top_beneficiaires_drilldown(df_ops, montant_col_config(), key=key_top_beneficiaires)
 
 
+@st.cache_data(max_entries=16, show_spinner="Recherche des opérations rapprochées…")
+def _regroupements(df_regroupement):
+    """En cache (#166) : 14 s sur les 54 755 opérations d'Ensemble national 2014-2020, à
+    chaque rendu de l'onglet sinon. `max_entries` borne la mémoire (Streamlit Cloud, #130) :
+    une entrée par périmètre et par filtre Fonds."""
+    return detect_regroupements_beneficiaire(df_regroupement)
+
+
 def render_regroupements(df_ops):
     """Opérations rapprochées par bénéficiaire (petits et grands regroupements), puis
     regroupements inter-fonds."""
@@ -250,7 +271,7 @@ def render_regroupements(df_ops):
         "On regarde ici de près les opérations d'un même bénéficiaire dont le montant et la date de "
         "démarrage sont proches."
     )
-    proches, grands_regroupements, inter_fonds = detect_regroupements_beneficiaire(df_ops)
+    proches, grands_regroupements, inter_fonds = _regroupements(df_ops[COLONNES_REGROUPEMENT])
 
     st.caption(
         f"Petits regroupements (2 à 3 opérations) : {len(proches)} bénéficiaire(s). Les "
