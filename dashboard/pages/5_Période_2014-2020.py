@@ -24,6 +24,14 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from utils.analyses_controle import (
+    render_coherence_montants,
+    render_concentration_beneficiaires,
+    render_dispersion,
+    render_introduction_distribution,
+    render_montants_atypiques,
+    render_taux_cofinancement,
+)
 from utils.carte_nationale import DROM_COM, render_carte_nationale
 from utils.cofinancement import (
     filtrer_fonds_plafonnes,
@@ -104,18 +112,9 @@ from utils.plot_style import (
     build_standalone_colorbar,
 )
 from utils.stats import (
-    build_boxplot,
     build_cumulative_curve,
     build_fonds_barchart,
-    build_histogram,
-    build_lorenz_beneficiaires,
-    build_pareto_beneficiaires,
-    compute_cofinancement_table,
-    compute_stats_table,
     detect_cofinancement_superieur_plafond,
-    detect_incoherent_cofinancement,
-    detect_outliers,
-    render_top_beneficiaires_drilldown,
     synthese_depassements_par_region_2014_2020,
 )
 from utils.table_style import text_widths
@@ -1014,110 +1013,25 @@ with tab_pilotage:
 
 
 with tab_audit:
-    st.caption(
-        "Dispersion des montants, concentration par bénéficiaire et cohérence des montants — "
-        "des repères usuels pour l'analyse d'un portefeuille. Un écart signalé est un point à "
-        "expliquer, pas une conclusion."
-    )
+    # Sections partagées avec les pages 2021-2027 (utils/analyses_controle.py, #160), dans
+    # le même ordre — cofinancement en tête (arbitrage A1 de #157). Seuls les plafonds et
+    # les mentions de la période restent écrits ici.
+    render_introduction_distribution(df_ops, "sur le périmètre affiché", "_2014_2020")
 
-    st.subheader("Statistiques par fonds")
-    stats_fonds = compute_stats_table(df_ops, FONDS)
-    st.dataframe(
-        style_categorical_columns(stats_fonds, {FONDS: FONDS_COLORS}),
-        width='stretch',
-        hide_index=True,
-        column_config={
-            "Médiane": montant_col_config,
-            "Écart-type": montant_col_config,
-            "cv": st.column_config.NumberColumn(
-                "Coeff. de variation",
-                help="Écart-type / médiane — dispersion relative, comparable entre groupes de tailles différentes",
-            ),
-            "concentration_top10": st.column_config.NumberColumn(
-                "Concentration (top 10%)",
-                format="percent",
-                help="Part du montant total portée par les 10% de projets les plus importants du groupe",
-            ),
-        },
-    )
-
-    col_hist, col_box = st.columns(2)
-    with col_hist:
-        st.markdown("**Distribution des montants**")
-        st.plotly_chart(
-            build_histogram(df_ops, log_x=True, color_col=FONDS, color_map=FONDS_COLORS),
-            width='stretch',
-        )
-        st.caption("Échelle logarithmique : les montants s'étalent sur plusieurs ordres de grandeur.")
-    with col_box:
-        st.markdown("**Dispersion par fonds**")
-        st.plotly_chart(build_boxplot(df_ops, FONDS, log_y=True, color_map=FONDS_COLORS), width='stretch')
-
-    st.subheader("Valeurs atypiques")
-    # group_col=FONDS : des bornes IQR communes à six fonds d'ordres de grandeur très
-    # différents signaleraient des opérations parfaitement ordinaires (constaté en
-    # 2021-2027, où 502 opérations FEDER l'étaient à tort).
-    atypiques = detect_outliers(df_ops, group_col=FONDS)
-    st.caption(
-        f"{len(atypiques)} opération(s) au montant atypique par rapport aux autres opérations "
-        "**du même fonds** (méthode IQR)."
-    )
-    table_atypiques = atypiques[["Intitulé du projet", BENEFICIAIRE, FONDS, MONTANT]].rename(
-        columns={MONTANT: libelle_montant_ue}
-    )
-    st.dataframe(
-        style_categorical_columns(table_atypiques, {FONDS: FONDS_COLORS}),
-        width='stretch',
-        hide_index=True,
-        column_config={
-            **text_widths("Intitulé du projet", BENEFICIAIRE),
-            libelle_montant_ue: st.column_config.ProgressColumn(
-                format="%,d €",
-                min_value=0,
-                max_value=int(table_atypiques[libelle_montant_ue].max()) if len(table_atypiques) else 1,
-            ),
-        },
-    )
-
-    st.subheader("Concentration par bénéficiaire")
-    render_top_beneficiaires_drilldown(df_ops, montant_col_config, key="top_benef_2014_2020")
-
-    col_pareto, col_lorenz = st.columns(2)
-    with col_pareto:
-        st.plotly_chart(build_pareto_beneficiaires(df_ops), width='stretch')
-    with col_lorenz:
-        st.plotly_chart(build_lorenz_beneficiaires(df_ops), width='stretch')
-
-    st.subheader("Taux de cofinancement UE")
     # Le taux affiché est toujours recalculé (montant UE / dépenses éligibles), pour être
     # comparable entre les six sources de la période — Synergie et le PON FSE n'ont aucun
     # taux déclaré à comparer (utils/periodes.normaliser_operations). Bretagne, Normandie
     # et Nouvelle-Aquitaine, elles, en déclarent un : signalé à part plutôt que substitué
     # (arbitrage Phase 4, #127) quand il diverge notablement du recalculé.
-    st.caption(MENTION_PLAFONDS_PERIODE)
+    legende_taux = MENTION_PLAFONDS_PERIODE
     if TAUX_COFINANCEMENT_DIVERGENT in df_ops.columns:
         divergentes = df_ops[df_ops[TAUX_COFINANCEMENT_DIVERGENT].fillna(False)]
         if len(divergentes):
-            st.caption(
-                MENTION_TAUX_DECLARE_DIVERGENT.format(
-                    n=_fmt_entier(len(divergentes)),
-                    montant=_fmt_millions(divergentes[MONTANT].sum()),
-                )
+            legende_taux += "\n\n" + MENTION_TAUX_DECLARE_DIVERGENT.format(
+                n=_fmt_entier(len(divergentes)),
+                montant=_fmt_millions(divergentes[MONTANT].sum()),
             )
-    cofi_fonds = compute_cofinancement_table(df_ops, FONDS).rename(
-        columns={"taux_moyen": "Taux moyen", "taux_median": "Taux médian", "count": "Nb projets"}
-    )
-    st.dataframe(
-        style_categorical_columns(cofi_fonds, {FONDS: FONDS_COLORS}),
-        width='stretch',
-        hide_index=True,
-        column_config={
-            "Taux moyen": st.column_config.ProgressColumn(
-                format="percent", min_value=0, max_value=max(1.0, cofi_fonds["Taux moyen"].max())
-            ),
-            "Taux médian": taux_col_config,
-        },
-    )
+    render_taux_cofinancement(df_ops, legende_taux)
 
     # Le plafond n'existe qu'à la maille d'une région : pas de plafond « moyen » à opposer
     # à une opération d'un périmètre agrégé. « Ensemble national » reçoit donc le décompte
@@ -1234,32 +1148,13 @@ with tab_audit:
                 },
             )
 
-    st.markdown("**Cohérence des montants**")
-    st.caption(
-        "Opérations dont le montant UE dépasse le total des dépenses éligibles, ce qui "
-        "correspondrait à un taux de cofinancement supérieur à 100 % — impossible quel que "
-        "soit le fonds, y compris REACT-EU dont le régime propre plafonne justement à 100 %."
+    # par_objectif=False : pas de dimension thématique sur cette période (#82).
+    render_dispersion(df_ops, "_2014_2020", par_objectif=False)
+    render_montants_atypiques(df_ops, libelle_montant=libelle_montant_ue)
+    render_concentration_beneficiaires(df_ops, "", "top_benef_2014_2020")
+    render_coherence_montants(
+        df_ops, precision=" Vaut quel que soit le fonds, y compris REACT-EU, dont le régime propre plafonne justement à 100 %."
     )
-    incoherentes = detect_incoherent_cofinancement(df_ops)
-    if len(incoherentes):
-        st.dataframe(
-            style_categorical_columns(
-                incoherentes[
-                    ["Intitulé du projet", BENEFICIAIRE, FONDS, "Total des dépenses éligibles", MONTANT, "Taux de cofinancement"]
-                ],
-                {FONDS: FONDS_COLORS},
-            ),
-            width='stretch',
-            hide_index=True,
-            column_config={
-                **text_widths("Intitulé du projet", BENEFICIAIRE),
-                "Total des dépenses éligibles": montant_col_config,
-                MONTANT: montant_col_config,
-                "Taux de cofinancement": taux_col_config,
-            },
-        )
-    else:
-        st.success("Aucune incohérence détectée sur le périmètre affiché.")
 
 absences = absences_expliquees(PERIODE_2014_2020)
 if absences:

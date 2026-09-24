@@ -1,11 +1,12 @@
 """Sections de l'onglet « Analyses & contrôle », partagées entre Accueil (vue nationale),
-Vue Régionale et Volet National (issue #160).
+Vue Régionale, Volet National (issue #160) et la page 2014-2020 (issue #157).
 
 Chaque page compose ces sections dans le même ordre — introduction et distribution,
 cofinancement, dispersion, montants atypiques, concentration par bénéficiaire,
 regroupements, cohérence des montants — et n'écrit elle-même que ce qui lui est propre :
-le plafond de sa catégorie de région (`region_analysis.render_region_audit`), ou les
-analyses par région et par catégorie de la vue nationale (`Accueil.py`).
+le plafond de sa catégorie de région (`region_analysis.render_region_audit`), les
+analyses par région et par catégorie de la vue nationale (`Accueil.py`), ou les plafonds
+et mentions propres à la période 2014-2020 (`pages/5_Période_2014-2020.py`).
 
 `key_suffix` rend uniques les clés des widgets d'une page à l'autre ; les clés produites
 sont celles d'avant l'extraction, pour ne pas réinitialiser les choix de l'utilisateur.
@@ -54,9 +55,9 @@ def stats_col_config():
     }
 
 
-def _montant_ue_progress(table):
+def _montant_ue_progress(table, colonne="Montant UE"):
     return st.column_config.ProgressColumn(
-        format="%,d €", min_value=0, max_value=int(table["Montant UE"].max()) if len(table) else 1
+        format="%,d €", min_value=0, max_value=int(table[colonne].max()) if len(table) else 1
     )
 
 
@@ -141,9 +142,13 @@ def render_cofinancement_atypique(df_ops, colonnes_sup=()):
     )
 
 
-def render_dispersion(df_ops, key_suffix):
+def render_dispersion(df_ops, key_suffix, par_objectif=True):
     """Statistiques et boîte à moustaches par fonds côte à côte, puis par objectif stratégique.
-    Retourne le choix d'échelle, que la vue nationale réutilise pour sa boîte par région."""
+    Retourne le choix d'échelle, que la vue nationale réutilise pour sa boîte par région.
+
+    par_objectif=False retire la boîte par objectif stratégique : 2014-2020 n'a pas de
+    dimension thématique (#82), et un bloc sans équivalent disparaît plutôt que de
+    s'afficher vide (#83)."""
     st.caption(
         "La médiane et l'écart-type mesurent la dispersion des montants au sein d'un groupe. Le "
         "coefficient de variation (écart-type / médiane) rend cette dispersion comparable entre "
@@ -173,8 +178,10 @@ def render_dispersion(df_ops, key_suffix):
             },
         )
     with box_col_fonds:
-        st.plotly_chart(build_boxplot(df_ops, FONDS, log_y=log_y), width='stretch')
+        st.plotly_chart(build_boxplot(df_ops, FONDS, log_y=log_y, color_map=FONDS_COLORS), width='stretch')
 
+    if not par_objectif:
+        return echelle_box
     st.markdown("**Distribution par objectif stratégique**")
     st.plotly_chart(
         build_boxplot(df_ops, LEVEL1, log_y=log_y, color_map=OBJECTIF_STRATEGIQUE_COLORS),
@@ -183,25 +190,30 @@ def render_dispersion(df_ops, key_suffix):
     return echelle_box
 
 
-def render_montants_atypiques(df_ops, colonnes_sup=()):
-    """colonnes_sup : comme `render_cofinancement_atypique`."""
+def render_montants_atypiques(df_ops, colonnes_sup=(), libelle_montant="Montant UE"):
+    """colonnes_sup : comme `render_cofinancement_atypique`. libelle_montant : en-tête de la
+    colonne montant (« Montant UE programmé » en 2014-2020, #83)."""
     st.markdown("**Opérations à montant atypique**")
     st.caption(
         "Opérations dont le montant s'écarte fortement de la distribution habituelle de son fonds "
-        "(méthode IQR, calculée séparément par Fonds — FEDER, FSE+ et FTJ n'ont pas la même échelle "
-        "de montants) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
+        "(méthode IQR, calculée séparément par Fonds — les fonds n'ont pas la même échelle de "
+        "montants) — à examiner, sans présumer d'une anomalie : un montant élevé peut aussi "
         "correspondre à un projet structurant légitime."
     )
     outliers = detect_outliers(df_ops, group_col=FONDS)
     st.caption(f"{len(outliers)} opération(s) hors de l'intervalle interquartile habituel.")
-    outliers_table = outliers[["Intitulé du projet", "Nom du bénéficiaire", FONDS, *colonnes_sup, "Montant UE"]].head(50)
+    outliers_table = (
+        outliers[["Intitulé du projet", "Nom du bénéficiaire", FONDS, *colonnes_sup, "Montant UE"]]
+        .head(50)
+        .rename(columns={"Montant UE": libelle_montant})
+    )
     st.dataframe(
         style_categorical_columns(outliers_table, {FONDS: FONDS_COLORS}),
         hide_index=True,
         width='stretch',
         column_config={
             **text_widths("Intitulé du projet", "Nom du bénéficiaire", *colonnes_sup),
-            "Montant UE": _montant_ue_progress(outliers_table),
+            libelle_montant: _montant_ue_progress(outliers_table, libelle_montant),
         },
     )
 
@@ -286,12 +298,14 @@ def render_regroupements(df_ops):
         st.caption("Aucun cas détecté sur le périmètre actuel.")
 
 
-def render_coherence_montants(df_ops):
+def render_coherence_montants(df_ops, precision=""):
+    """precision : phrase ajoutée à la légende, pour ce qui est propre à une période."""
     st.markdown("**Cohérence des montants**")
     st.caption(
         "Contrôle de cohérence (pas une question de distribution) : opérations où le montant UE "
         "dépasse le total des dépenses éligibles, ce qui correspondrait à un taux de cofinancement "
         "supérieur à 100%, normalement impossible — à vérifier, potentiel signal de qualité de données."
+        + precision
     )
     incoherentes = detect_incoherent_cofinancement(df_ops)
     st.caption(f"{len(incoherentes)} opération(s) où le montant UE dépasse le total des dépenses éligibles.")
