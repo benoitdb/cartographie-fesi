@@ -328,8 +328,20 @@ def test_le_total_2014_2020_est_la_somme_des_decomptes_regionaux_de_la_page_5():
 
 
 def test_les_taux_statistiquement_atypiques_sont_detectes_par_l_ecart_a_l_iqr():
-    df = pd.DataFrame({"Taux de cofinancement": [*[0.5 + 0.001 * i for i in range(10)], 0.95]})
+    df = pd.DataFrame({"Fonds": "FEDER", "Taux de cofinancement": [*[0.5 + 0.001 * i for i in range(10)], 0.95]})
     assert detect_cofinancement_outliers(df)["Taux de cofinancement"].tolist() == [0.95]
+
+
+def test_un_fonds_a_taux_structurellement_haut_n_est_pas_atypique_face_aux_autres():
+    """Bornes IQR par fonds (#167), comme pour les montants : REACT-EU, à 100 % par
+    dérogation, ressortait en bloc face au FEDER quand les bornes étaient communes. Un taux
+    atypique au sein de son propre fonds reste signalé."""
+    feder = [0.4 + 0.01 * i for i in range(20)]
+    df = pd.DataFrame({
+        "Fonds": ["FEDER"] * 20 + ["FEDER REACT-EU"] * 5 + ["FEDER"],
+        "Taux de cofinancement": [*feder, 1.0, 1.0, 1.0, 1.0, 1.0, 0.95],
+    })
+    assert detect_cofinancement_outliers(df)["Fonds"].tolist() == ["FEDER"]
 
 
 def test_un_montant_ue_superieur_aux_depenses_eligibles_est_incoherent():
