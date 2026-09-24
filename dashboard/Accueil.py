@@ -12,6 +12,7 @@ from utils.analyses_controle import (
     render_regroupements,
     render_taux_cofinancement,
     stats_col_config,
+    taux_col_config,
 )
 from utils.cofinancement import bucket_categorie, plafond_categorie
 from utils.data_loader import (
@@ -43,6 +44,7 @@ from utils.stats import (
     build_portfolio_scatter,
     compute_stats_table,
     detect_beneficiaires_multi_region,
+    synthese_depassements_par_region,
 )
 from utils.table_style import text_widths
 from utils.themes import FONDS_COLORS, OBJECTIF_STRATEGIQUE_COLORS
@@ -504,6 +506,49 @@ with tab_audit:
         st.plotly_chart(build_cofinancement_categorie_chart(df_categorie), width='stretch')
     else:
         st.caption("Aucune catégorie de région identifiable sur le périmètre actuel.")
+
+    # Synthèse et non liste d'opérations (#163) : ~14% des opérations mono-région dépassent le
+    # plafond de leur région, une liste tronquée à 50 lignes n'en montrerait qu'une fraction
+    # choisie par le tri. Le détail reste dans la Vue Régionale, qui compte avec la même fonction.
+    st.markdown("**Dépassements du plafond de cofinancement, par région**")
+    plafonds_region = df_categorie_source.groupby("Région")["_plafond"].first().to_dict()
+    synthese_depassements = synthese_depassements_par_region(df_mono_region, plafonds_region)
+    nb_hors_region = len(df_national_ops) - len(df_mono_region)
+    if len(synthese_depassements):
+        total_depassements = int(synthese_depassements["Dépassements"].sum())
+        total_operations = int(synthese_depassements["Opérations"].sum())
+        nb_depassements, nb_operations, nb_hors = (
+            f"{n:,}".replace(",", " ") for n in (total_depassements, total_operations, nb_hors_region)
+        )
+        st.caption(
+            f"{nb_depassements} opération(s) sur {nb_operations} ({total_depassements / total_operations:.0%}) "
+            "ont un taux de cofinancement UE supérieur au plafond de leur région. Le plafond est fixé par axe "
+            "prioritaire, pas par opération : un dépassement est un écart à expliquer, pas un constat. Pour une "
+            "région mixte (ex. Auvergne-Rhône-Alpes), le plafond affiché est la moyenne pondérée de ses catégories, "
+            "ce qui peut signaler des opérations régulières de la partie la mieux dotée. Le détail des opérations "
+            "figure dans la Vue Régionale, onglet « Analyses & contrôle ». "
+            f"{nb_hors} opération(s) interrégionale(s) ou du volet national sont hors décompte, faute "
+            "de catégorie de région unique."
+        )
+        st.dataframe(
+            synthese_depassements,
+            hide_index=True,
+            width='stretch',
+            column_config={
+                **text_widths("Région"),
+                "Plafond": taux_col_config(),
+                "Part": st.column_config.NumberColumn(
+                    "Part des opérations", format="percent", help="Dépassements / opérations mono-région de la région"
+                ),
+                "Excédent UE": st.column_config.NumberColumn(
+                    format="%,d €",
+                    help="Montant UE au-delà de ce que le plafond autorise (Montant UE − plafond × dépenses éligibles), "
+                    "sommé sur les opérations en dépassement",
+                ),
+            },
+        )
+    else:
+        st.caption("Aucune région à plafond connu sur le périmètre actuel.")
 
     render_cofinancement_atypique(df_national_ops, colonnes_sup=("Région de l'opération",))
 
