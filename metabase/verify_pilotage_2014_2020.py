@@ -5,10 +5,10 @@ SQL. Ici c'est l'inverse qui est vérifié : la **fusion des six sources** de la
 période, que `init/04_periode_2014_2020.sql` refait en SQL et que
 `dashboard/pages/5_Période_2014-2020.py` fait en Python.
 
-Les règles ne sont pas réimplémentées : elles sont relues du dashboard
-(`REGIONS_PON_FSE_2014_2020`, `FUSIONS_ENVELOPPES_SANS_LIBELLE`,
-`reste_a_engager`, `taux_consommation`) et appliquées ici aux mêmes JSON que
-lit la page, périmètre par périmètre. Ce qui reste dupliqué côté SQL — le
+Les règles ne sont pas réimplémentées : elles sont relues du dashboard — le
+routage des six sources (`utils/periodes.operations_perimetre_2014_2020`, #177),
+`FUSIONS_ENVELOPPES_SANS_LIBELLE`, `reste_a_engager`, `taux_consommation` — et
+appliquées ici aux mêmes fichiers que lit la page, périmètre par périmètre. Ce qui reste dupliqué côté SQL — le
 routage PON FSE écrit en CASE, la liste des trois régions à substituer, les
 trois fonds hors plafond — est précisément ce que ce script fait rougir s'il
 diverge un jour du Python.
@@ -37,9 +37,16 @@ import schema_source  # noqa: E402
 import sources as sources_module  # noqa: E402
 
 from utils.periodes import (  # noqa: E402
+    ENSEMBLE_NATIONAL,
     FUSIONS_ENVELOPPES_SANS_LIBELLE,
-    REGIONS_PON_FSE_2014_2020,
-    _taux,
+    PERIMETRE_FUSION,
+    PERIODE_2014_2020,
+    REGIONS_SUBSTITUEES_2014_2020,
+    SOURCE_PON_FSE_2014_2020,
+    TAUX_COFINANCEMENT_DECLARE,
+    normaliser_fichiers_hors_synergie,
+    normaliser_operations,
+    operations_perimetre_2014_2020,
 )
 
 env_path = SCRIPT_DIR / ".env"
@@ -62,15 +69,6 @@ DB_PARAMS = dict(
 # sommation différent sur les mêmes flottants, jamais une erreur de données.
 RELATIVE_TOLERANCE = 1e-6
 
-# Les trois régions dont le fichier régional SE SUBSTITUE à Synergie (#95), par
-# identifiant de source. Le vieux fichier Bretagne europe.bzh
-# (`2014-2020-bretagne`) n'y figure pas : remplacé par l'export officiel pour
-# tout usage autre que la page « Validation de la source ».
-SOURCES_REGIONALES = {
-    "Bretagne": "2014-2020-bretagne-officiel",
-    "Normandie": "2014-2020-normandie",
-    "Nouvelle-Aquitaine": "2014-2020-nouvelle-aquitaine",
-}
 SOURCE_SYNERGIE = "2014-2020-synergie"
 SOURCE_PON_FSE = "2014-2020-pon-fse"
 
@@ -156,78 +154,70 @@ def charger_source(source_id):
     return data["operations"], libelles_bruts(source_id)
 
 
-def _ligne(op, cols, perimetre):
-    """Une opération réduite à ce dont les vues SQL et les écrans ont besoin.
+def _dataframe_source(source_id):
+    """Opérations d'une source en DataFrame, comme les charge le dashboard : Parquet, avec
+    `regions_modernes` en liste (le routage compare à une liste, le Parquet rend un tableau
+    numpy). Sortie en erreur si le fichier manque, pour la même raison que `charger_source`."""
+    parquet = DATA_DIR / Path(sources_module.SOURCES[source_id]["fichier_sortie"]).with_suffix(".parquet")
+    if not parquet.exists():
+        sys.exit(f"{parquet.name} absent : la fusion de {source_id} ne peut pas être vérifiée.")
+    df = pd.read_parquet(parquet)
+    if "regions_modernes" in df.columns:
+        df["regions_modernes"] = df["regions_modernes"].apply(lambda v: list(v) if v is not None else v)
+    return df
 
-    `taux_cofinancement` suit la règle de `periodes.normaliser_operations` depuis
-    l'arbitrage Phase 4 (#127) : **toujours** le quotient montant/dépenses, jamais
-    le taux déclaré par le fichier — homogène avec Synergie et PON FSE, qui n'ont
-    pas de taux déclaré du tout, et avec `v_cofinancement_2014_2020` côté SQL, qui
-    recalcule aussi. Le taux déclaré (Bretagne, Normandie, Nouvelle-Aquitaine
-    seulement) est conservé à part (`taux_declare`) : un signal de qualité de
-    source, pas une seconde vérité concurrente. Une valeur non numérique vaut
-    None sans repli sur le quotient — le taux Nouvelle-Aquitaine est une formule
-    Excel qui écrit parfois `#DIV/0` en toutes lettres.
-    """
-    montant = op.get(cols["montant_ue"])
-    depenses = op.get(cols["depenses"])
-    libelle_taux = cols.get("taux_cofinance")
-    if libelle_taux and libelle_taux in op:
-        brut = op[libelle_taux]
-        declare = brut if isinstance(brut, (int, float)) else None
-    else:
-        declare = None
-    return {
-        "numero_operation": op.get(cols["numero_op"]),
-        "fonds": op.get(cols["fonds"]),
-        "montant_ue": montant,
-        "depenses_eligibles": depenses,
-        "taux_cofinancement": _taux(montant, depenses),
-        "taux_declare": declare,
-        "perimetre": perimetre,
-    }
+
+def _valeur(val):
+    """None pour toute valeur manquante (NaN, NaT) : les consommateurs testent `is None`
+    (voir `est_absent` pour le piège qu'un NaN leur tendrait)."""
+    return None if est_absent(val) else val
 
 
 def operations_par_perimetre():
     """Chaque opération 2014-2020 avec son périmètre final — jumeau Python de la
     vue `v_perimetre_2014_2020`.
 
-    Reproduit le grand `if/elif` de `pages/5_Période_2014-2020.py` :
-      - Synergie : une opération mono-région va à sa région, une opération
-        `is_national` au volet national, une interrégionale à aucun des deux
-        (sinon elle compterait dans plusieurs totaux censés s'additionner) ;
-      - les trois régions à fichier propre ignorent entièrement Synergie ;
-      - PON FSE s'ajoute, routé par programme (REGIONS_PON_FSE_2014_2020).
+    Le routage n'est plus réécrit ici (#177) : c'est celui de la page, dans
+    `utils/periodes.py` (`normaliser_fichiers_hors_synergie`,
+    `operations_perimetre_2014_2020` sur « Ensemble national »), qui fusionne les six
+    sources — Synergie mono-région et national, les trois régions à fichier propre à la
+    place de leurs lignes Synergie, le PON FSE routé par programme. Le même routage est
+    confronté au mart dbt en CI (#176).
 
-    Les opérations **sans fonds renseigné** sont émises comme les autres, comme
-    les émet la vue SQL : les écarter ici cacherait les 26 dossiers Normandie
-    concernés à tout appelant, alors que c'est précisément à chaque écran de
-    dire s'il les compte (`v_engage_2014_2020` les écarte, la carte KPI du
-    dashboard non — cf. verify_dashboards.py). Les agrégats de ce script
-    filtrent donc eux-mêmes `fonds is None`.
+    Sources passées **non filtrées** par fonds : les opérations sans fonds renseigné sont
+    émises comme les autres, comme les émet la vue SQL. Les écarter ici cacherait les 26
+    dossiers Normandie concernés à tout appelant, alors que c'est précisément à chaque écran
+    de dire s'il les compte (`v_engage_2014_2020` les écarte, la carte KPI du dashboard non —
+    cf. verify_dashboards.py). Les agrégats de ce script filtrent donc eux-mêmes
+    `fonds is None`.
+
+    `taux_cofinancement` est le taux recalculé de `normaliser_operations` (arbitrage
+    Phase 4, #127) ; `taux_declare`, le taux déclaré par Bretagne, Normandie et
+    Nouvelle-Aquitaine, None ailleurs ou s'il n'est pas numérique.
 
     Fonction séparée plutôt qu'inline dans `engage_python` : `verify_dashboards.py`
-    (Phase 4) en a besoin pour les comptages et le cofinancement, et la fusion des
-    six sources ne doit exister qu'à un seul endroit côté Python.
+    (Phase 4) en a besoin pour les comptages et le cofinancement.
     """
-    operations, cols = charger_source(SOURCE_SYNERGIE)
-    for op in operations:
-        if op.get("is_national"):
-            yield _ligne(op, cols, "national")
-        elif not op.get("is_interregional"):
-            regions = op.get("regions_modernes") or []
-            if len(regions) == 1 and regions[0] not in SOURCES_REGIONALES:
-                yield _ligne(op, cols, regions[0])
-
-    for region, source_id in SOURCES_REGIONALES.items():
-        operations, cols = charger_source(source_id)
-        for op in operations:
-            yield _ligne(op, cols, region)
-
-    operations, cols = charger_source(SOURCE_PON_FSE)
-    for op in operations:
-        perimetre = REGIONS_PON_FSE_2014_2020.get(op.get(cols["libelle_prog"])) or "national"
-        yield _ligne(op, cols, perimetre)
+    with open(DATA_DIR / "programme_detail_2014_2020.json", encoding="utf-8") as f:
+        libelles_programmes = json.load(f)["libelles_programmes"]
+    synergie = normaliser_operations(_dataframe_source(SOURCE_SYNERGIE), PERIODE_2014_2020)
+    hors_synergie = normaliser_fichiers_hors_synergie(
+        {region: {"operations": _dataframe_source(source_id)} for region, source_id in REGIONS_SUBSTITUEES_2014_2020.items()},
+        libelles_programmes,
+    )
+    pon_fse = normaliser_operations(_dataframe_source(SOURCE_PON_FSE), SOURCE_PON_FSE_2014_2020)
+    fusion = operations_perimetre_2014_2020(ENSEMBLE_NATIONAL, synergie, hors_synergie, pon_fse)
+    declare = fusion[TAUX_COFINANCEMENT_DECLARE] if TAUX_COFINANCEMENT_DECLARE in fusion.columns else None
+    for i, op in enumerate(fusion.to_dict("records")):
+        yield {
+            "numero_operation": _valeur(op.get("Numéro Opération")),
+            "fonds": _valeur(op.get("Fonds")),
+            "montant_ue": _valeur(op.get("Montant UE")),
+            "depenses_eligibles": _valeur(op.get("Total des dépenses éligibles")),
+            "taux_cofinancement": _valeur(op.get("Taux de cofinancement")),
+            "taux_declare": None if declare is None else _valeur(declare.iloc[i]),
+            "perimetre": op[PERIMETRE_FUSION],
+        }
 
 
 def engage_python():
