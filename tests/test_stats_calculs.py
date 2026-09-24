@@ -34,6 +34,7 @@ from utils.stats import (  # noqa: E402
     detect_outliers,
     detect_regroupements_beneficiaire,
     synthese_depassements_par_region,
+    synthese_depassements_par_region_2014_2020,
 )
 
 COLONNES_REGROUPEMENT = [
@@ -268,6 +269,62 @@ def test_la_synthese_est_triee_par_nombre_de_depassements_decroissant():
         _operations_plafonnees(), {"Occitanie": 0.6, "Île-de-France": 0.5}
     )
     assert synthese["Région"].tolist() == ["Île-de-France", "Occitanie"]
+
+
+CATEGORIES_2014_2020 = {
+    # Mixte : le plafond dépend de l'ancienne région, fourchette 50-60 %.
+    "Occitanie": {"categorie_ue": None, "composantes": [["Languedoc-Roussillon", "en transition"], ["Midi-Pyrénées", "plus développée"]]},
+    "Île-de-France": {"categorie_ue": "plus développée"},
+}
+
+
+def _operations_2014_2020():
+    """Occitanie (50-60 %) : 55 % sous la borne haute, 70 % au-dessus, une IEJ à 90 % hors
+    plafond. Île-de-France (50 %) : 55 % au-dessus. Corse : pas de catégorie transcrite."""
+    return pd.DataFrame(
+        {
+            "Région": ["Occitanie", "Occitanie", "Occitanie", "Île-de-France", "Corse"],
+            "Fonds": ["FEDER", "FEDER", "IEJ", "FSE", "FEDER"],
+            "Total des dépenses éligibles": [100_000.0] * 5,
+            "Montant UE": [55_000.0, 70_000.0, 90_000.0, 55_000.0, 99_000.0],
+            "Taux de cofinancement": [0.55, 0.7, 0.9, 0.55, 0.99],
+        }
+    )
+
+
+def test_une_region_mixte_2014_2020_est_comptee_sur_la_borne_haute_de_sa_fourchette():
+    """Sous la borne haute, une opération peut relever de l'ancienne région à 60 % : la
+    compter sur la borne basse signalerait des opérations peut-être régulières."""
+    synthese, _, _ = synthese_depassements_par_region_2014_2020(_operations_2014_2020(), CATEGORIES_2014_2020)
+    occitanie = synthese.set_index("Région").loc["Occitanie"]
+    assert occitanie["Dépassements"] == 1
+    assert (occitanie["Plafond bas"], occitanie["Plafond"]) == (0.5, 0.6)
+
+
+def test_les_fonds_hors_plafond_2014_2020_sont_ecartes_et_comptes():
+    synthese, nb_hors_plafond, _ = synthese_depassements_par_region_2014_2020(_operations_2014_2020(), CATEGORIES_2014_2020)
+    assert nb_hors_plafond == 1
+    assert synthese.set_index("Région").loc["Occitanie", "Opérations"] == 2
+
+
+def test_une_region_2014_2020_sans_categorie_est_nommee_plutot_que_perdue():
+    synthese, _, regions_sans_plafond = synthese_depassements_par_region_2014_2020(
+        _operations_2014_2020(), CATEGORIES_2014_2020
+    )
+    assert regions_sans_plafond == ["Corse"]
+    assert "Corse" not in synthese["Région"].tolist()
+
+
+def test_le_total_2014_2020_est_la_somme_des_decomptes_regionaux_de_la_page_5():
+    """Chaque région compte comme le décompte régional de la page 5 : fonds hors plafond
+    retirés, dépassement sur la borne haute."""
+    df = _operations_2014_2020()
+    synthese, _, _ = synthese_depassements_par_region_2014_2020(df, CATEGORIES_2014_2020)
+    attendu = sum(
+        len(detect_cofinancement_superieur_plafond(df[(df["Région"] == r) & (df["Fonds"] != "IEJ")], haut))
+        for r, haut in {"Occitanie": 0.6, "Île-de-France": 0.5}.items()
+    )
+    assert synthese["Dépassements"].sum() == attendu == 2
 
 
 def test_les_taux_statistiquement_atypiques_sont_detectes_par_l_ecart_a_l_iqr():
