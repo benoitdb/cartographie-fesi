@@ -115,7 +115,10 @@ def render_cofinancement_atypique(df_ops, colonnes_sup=()):
     cofinancement_outliers = detect_cofinancement_outliers(df_ops).assign(
         **{"Montant hors UE": lambda d: d["Total des dépenses éligibles"] - d["Montant UE"]}
     )
-    st.caption(f"{len(cofinancement_outliers)} opération(s) à taux de cofinancement atypique (méthode IQR).")
+    st.caption(
+        f"{len(cofinancement_outliers)} opération(s) à taux de cofinancement atypique par rapport aux "
+        "autres opérations **du même fonds** (méthode IQR)."
+    )
     cofinancement_outliers_table = cofinancement_outliers[
         [
             "Intitulé du projet",

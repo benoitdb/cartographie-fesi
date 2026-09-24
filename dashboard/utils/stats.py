@@ -404,14 +404,13 @@ def build_cofinancement_categorie_chart(df, label_col="Catégorie", ue_col="mont
     return style_hover(fig)
 
 
-def detect_cofinancement_outliers(df, taux_col="Taux de cofinancement"):
-    """Opérations dont le taux de cofinancement sort de [Q1 - 1.5*IQR, Q3 + 1.5*IQR]
-    (à ne pas confondre avec un dépassement de plafond réglementaire, non modélisé ici)."""
-    q1, q3 = df[taux_col].quantile(0.25), df[taux_col].quantile(0.75)
-    iqr = q3 - q1
-    borne_basse, borne_haute = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-    return df[(df[taux_col] < borne_basse) | (df[taux_col] > borne_haute)].sort_values(taux_col, ascending=False)
-
+def detect_cofinancement_outliers(df, taux_col="Taux de cofinancement", group_col="Fonds"):
+    """Opérations dont le taux de cofinancement sort de [Q1 - 1.5*IQR, Q3 + 1.5*IQR], bornes
+    calculées **par fonds** (#167), comme detect_outliers pour les montants : un fonds à taux
+    structurellement haut (REACT-EU, à 100 % par dérogation ; IEJ) ressortait en bloc face
+    aux autres quand les bornes étaient communes au périmètre. À ne pas confondre avec
+    detect_cofinancement_superieur_plafond, dont la référence est le taux maximal légal."""
+    return detect_outliers(df, amount_col=taux_col, group_col=group_col)
 
 
 # Tolérance relative sur la comparaison au plafond (arbitrage Phase 4, #126) : une
