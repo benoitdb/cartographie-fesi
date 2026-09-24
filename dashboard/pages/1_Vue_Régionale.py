@@ -17,11 +17,12 @@ from utils.departments import (
     build_dromcom_projects_map,
     department_coverage_summary,
 )
+from utils.detail_departement import render_detail_departement
 from utils.dromcom_localisation import build_bubbles_localisation
 from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
 from utils.millesime import render_millesime
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
-from utils.plot_style import MAP_CONFIG, build_standalone_colorbar
+from utils.plot_style import MAP_CONFIG
 from utils.region_analysis import (
     FONDS,
     render_region_audit,
@@ -252,101 +253,7 @@ with tab_ensemble:
                 "encore plus élevée que dans les autres régions."
             )
 
-        non_reparti = df_region_dept[df_region_dept["dept"].isna()]
-        non_reparti_montant = non_reparti["Montant UE"].sum()
-        non_reparti_count = len(non_reparti)
-
-        df_dept_connu = df_region_dept[df_region_dept["dept"].notna() & df_region_dept["dept"].isin(depts_region)]
-        dept_table = (
-            df_dept_connu.groupby("dept")
-            .agg(montant_ue_total=("Montant UE", "sum"), count=("Montant UE", "count"))
-            .reset_index()
-            .rename(columns={"dept": "Département", "montant_ue_total": "Montant UE total", "count": "Nb projets"})
-            .sort_values("Montant UE total", ascending=False)
-        )
-        # Échelle calée sur les seuls départements (avant l'ajout de la ligne "Non réparti" ci-dessous,
-        # qui ne correspond à aucun département sur la carte) — même échelle que la carte donc.
-        color_range_dept = [0, dept_table["Montant UE total"].max()] if len(dept_table) else [0, 1]
-        if non_reparti_count:
-            dept_table = pd.concat(
-                [
-                    dept_table,
-                    pd.DataFrame(
-                        [{"Département": "Non réparti (région entière)", "Montant UE total": non_reparti_montant, "Nb projets": non_reparti_count}]
-                    ),
-                ],
-                ignore_index=True,
-            )
-
-        # Légende + carte + tableau côte à côte (plutôt qu'empilés) : la carte d'une seule région est
-        # étroite, ce qui générait beaucoup de vide autour d'elle et du tableau en dessous. Même
-        # principe de légende autonome que la carte nationale (Accueil.py) : la carte désactive son
-        # colorbar intégré au profit d'une légende commune dans sa propre colonne.
-        col_legend_dept, col_map_dept, col_table_dept = st.columns([1, 4, 5])
-        with col_legend_dept:
-            st.plotly_chart(
-                build_standalone_colorbar(color_range_dept, "Montant UE (€)", height=420),
-                width='stretch',
-                config={"displayModeBar": False},
-            )
-        with col_map_dept:
-            st.plotly_chart(
-                build_department_choropleth(df_region_dept, region, show_colorbar=False),
-                width='stretch',
-                config=MAP_CONFIG,
-            )
-        with col_table_dept:
-            st.dataframe(
-                dept_table,
-                hide_index=True,
-                width='stretch',
-                column_config={
-                    **text_widths("Département"),
-                    "Montant UE total": st.column_config.ProgressColumn(
-                        format="%,d €",
-                        min_value=0,
-                        max_value=int(dept_table["Montant UE total"].max()) if len(dept_table) else 1,
-                    ),
-                },
-            )
-
-        if non_reparti_count:
-            kpi_col1, kpi_col2 = st.columns(2)
-            kpi_col1.metric("Montant non rattaché à un département", f"{non_reparti_montant / 1e6:,.2f} M€".replace(",", " "))
-            kpi_col2.metric("Opérations non rattachées", f"{non_reparti_count}")
-
-        # Opérations dont le département assigné sort du périmètre de la région
-        st.subheader("Opérations rattachées à un département hors de la région")
-        st.caption(
-            f"Ces opérations sont bien attribuées à {region} (donnée fiable), mais leur département "
-            "assigné (donnée pipeline, champ Zone, ou approximation via le code postal du bénéficiaire) "
-            f"appartient à une autre région — soit un projet réalisé hors de {region} par un porteur qui "
-            "y a son siège, soit, pour les cas approximés, le siège du bénéficiaire situé ailleurs que "
-            "le lieu de réalisation du projet. Elles sont incluses dans tous les totaux de la région "
-            "affichés sur cette page, mais exclues de la carte et du tableau ci-dessus."
-        )
-
-        df_hors_region = df_region_dept[hors_region].copy()
-        df_hors_region["Région du département"] = df_hors_region["dept"].map(DEPT_TO_REGION)
-        st.caption(f"{len(df_hors_region)} opération(s) concernée(s).")
-        df_hors_region_table = (
-            df_hors_region[
-                ["Intitulé du projet", "Nom du bénéficiaire", FONDS, "dept", "Région du département", "dept_source", "Montant UE"]
-            ].rename(columns={"dept": "Département", "dept_source": "Rattachement"}).sort_values("Montant UE", ascending=False)
-        )
-        st.dataframe(
-            style_categorical_columns(df_hors_region_table, {FONDS: FONDS_COLORS}),
-            hide_index=True,
-            width='stretch',
-            column_config={
-                **text_widths("Intitulé du projet", "Nom du bénéficiaire", "Département", "Région du département", "Rattachement"),
-                "Montant UE": st.column_config.ProgressColumn(
-                    format="%,d €",
-                    min_value=0,
-                    max_value=int(df_hors_region_table["Montant UE"].max()) if len(df_hors_region_table) else 1,
-                ),
-            },
-        )
+        render_detail_departement(df_region_dept, region, metriques_non_reparti=True)
 
     render_liste_complete_projets(df_region_ops, region)
 

@@ -11,6 +11,8 @@ l'approximation par code postal du bénéficiaire (siège, pas lieu du projet).
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "dashboard"))
 
@@ -99,3 +101,33 @@ def test_assign_departement_inconnu_si_rien_ne_resout():
 
 def test_dept_sources_contient_zone():
     assert "zone" in DEPT_SOURCES
+
+
+# --- Tableau « Détail par département » (issue #157, écart D3) ----------------------
+
+
+def test_le_tableau_par_departement_totalise_100_pourcent_de_la_region():
+    """Pages 1 et 5 : une ligne par département de la région, puis « Non réparti » et
+    « Hors périmètre » — sans ces deux lignes, des opérations disparaîtraient du total (#100)."""
+    from utils.departments import tableau_departements
+
+    df = pd.DataFrame({
+        "dept": ["29", "35", "35", None, "75"],
+        "Montant UE": [100.0, 50.0, 70.0, 30.0, 999.0],
+    })
+    tableau, color_range = tableau_departements(df, "Bretagne")
+
+    assert tableau["Département"].tolist() == ["35", "29", "Non réparti (région entière)", "Hors périmètre (autre région)"]
+    assert tableau["Montant UE total"].tolist() == [120.0, 100.0, 30.0, 999.0]
+    assert tableau["Nb projets"].tolist() == [2, 1, 1, 1]
+    assert tableau["Montant UE total"].sum() == df["Montant UE"].sum()
+    # L'échelle de la carte ne voit que les départements : la ligne « Hors périmètre », la
+    # plus grosse ici, écraserait sinon toutes les couleurs.
+    assert color_range == [0, 120.0]
+
+
+def test_sans_operation_non_rattachee_ni_hors_region_le_tableau_n_a_que_des_departements():
+    from utils.departments import tableau_departements
+
+    tableau, _ = tableau_departements(pd.DataFrame({"dept": ["29"], "Montant UE": [10.0]}), "Bretagne")
+    assert tableau["Département"].tolist() == ["29"]
