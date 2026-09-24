@@ -43,9 +43,29 @@ REPO = DBT_DIR.parent
 DATA = REPO / "data" / "processed"
 BASE = DBT_DIR / "target" / "fesi.duckdb"
 sys.path.insert(0, str(REPO / "data-pipeline"))
+sys.path.insert(0, str(REPO / "dashboard"))
 
 import schema_source  # noqa: E402
 from agregats import calculer_agregats, partitionner  # noqa: E402
+
+from utils.periodes import (  # noqa: E402
+    ENSEMBLE_NATIONAL,
+    PERIMETRE_FUSION,
+    PERIODE_2014_2020,
+    REGIONS_SUBSTITUEES_2014_2020,
+    SOURCE_PON_FSE_2014_2020,
+    VOLET_NATIONAL,
+    normaliser_fichiers_hors_synergie,
+    normaliser_operations,
+    operations_perimetre_2014_2020,
+)
+
+# Fichier Parquet de chaque région à fichier propre (#95) : celui que lit la page 2014-2020.
+PARQUET_HORS_SYNERGIE = {
+    "Normandie": "data_2014-2020_normandie.parquet",
+    "Nouvelle-Aquitaine": "data_2014-2020_nouvelle_aquitaine.parquet",
+    "Bretagne": "data_2014-2020_bretagne_officiel.parquet",
+}
 
 # Seuil d'égalité des montants, en euros.
 CENTIME = 0.01
@@ -76,6 +96,63 @@ def comparer_resume(prefixe, attendu, ligne):
     comparer(f"{prefixe}.montant_ue_moyen", attendu["montant_ue_moyen"], ligne[2])
     comparer(f"{prefixe}.depenses_total", attendu["depenses_total"], ligne[3])
     comparer(f"{prefixe}.depenses_moyen", attendu["depenses_moyen"], ligne[4])
+
+
+def lire_operations(fichier):
+    """Opérations d'un Parquet, comme les charge le dashboard
+    (`utils/data_loader._load_operations_data`, non importable ici : il dépend de
+    Streamlit) : `regions_modernes` y revient en tableau numpy, que le routage compare à
+    une liste."""
+    df = pd.read_parquet(DATA / fichier)
+    if "regions_modernes" in df.columns:
+        df["regions_modernes"] = df["regions_modernes"].apply(lambda v: list(v) if v is not None else v)
+    return df
+
+
+def verifier_perimetre_2014_2020(con):
+    """Le mart `perimetre_2014_2020` contre le routage Python de la page 2014-2020 (#176).
+
+    Les TABLES de règles sont communes (codegen `generer.py`) ; la LOGIQUE de routage
+    existe deux fois, `if/elif` en Python et `UNION`/`CASE` en SQL. Deux chemins Python
+    sont confrontés au mart : la fusion d'« Ensemble national », et le routage périmètre par
+    périmètre que la page applique quand on choisit une région ou le Volet national.
+
+    Écarts assumés, hors contrat :
+      - sources NON filtrées par fonds : le mart émet les 26 dossiers normands sans fonds
+        renseigné, que la page écarte par son filtre Fonds — c'est un choix d'écran,
+        pas une règle de routage ;
+      - « Interrégional », périmètre du sélecteur de la page, n'a pas de ligne dans le mart
+        (la fusion l'écarte, comme la vue SQL d'origine)."""
+    synergie = normaliser_operations(lire_operations("data_2014-2020.parquet"), PERIODE_2014_2020)
+    with open(DATA / "programme_detail_2014_2020.json", encoding="utf-8") as f:
+        libelles_programmes = json.load(f)["libelles_programmes"]
+    assert set(PARQUET_HORS_SYNERGIE) == set(REGIONS_SUBSTITUEES_2014_2020), "table des fichiers régionaux à jour"
+    hors_synergie = normaliser_fichiers_hors_synergie(
+        {region: {"operations": lire_operations(fichier)} for region, fichier in PARQUET_HORS_SYNERGIE.items()},
+        libelles_programmes,
+    )
+    pon_fse = normaliser_operations(lire_operations("data_2014-2020_pon_fse.parquet"), SOURCE_PON_FSE_2014_2020)
+
+    mart = {
+        perimetre: (n, montant)
+        for perimetre, n, montant in con.execute(
+            "SELECT perimetre, COUNT(*), SUM(montant_ue) FROM perimetre_2014_2020 GROUP BY perimetre"
+        ).fetchall()
+    }
+    fusion = operations_perimetre_2014_2020(ENSEMBLE_NATIONAL, synergie, hors_synergie, pon_fse)
+    par_perimetre = fusion.groupby(PERIMETRE_FUSION)["Montant UE"].agg(["size", "sum"])
+    comparer("perimetre_2014_2020.perimetres", len(par_perimetre), len(mart), seuil=0)
+    for perimetre, (n, montant) in mart.items():
+        attendu = par_perimetre.loc[perimetre] if perimetre in par_perimetre.index else None
+        comparer(f"perimetre_2014_2020[{perimetre}].fusion.count", None if attendu is None else attendu["size"], n, seuil=0)
+        comparer(f"perimetre_2014_2020[{perimetre}].fusion.montant_ue", None if attendu is None else attendu["sum"], montant)
+
+        selection = VOLET_NATIONAL if perimetre == "national" else perimetre
+        page = operations_perimetre_2014_2020(selection, synergie, hors_synergie, pon_fse)
+        comparer(f"perimetre_2014_2020[{perimetre}].page.count", len(page), n, seuil=0)
+        comparer(f"perimetre_2014_2020[{perimetre}].page.montant_ue", page["Montant UE"].sum(), montant)
+    nb_operations = f"{sum(n for n, _ in mart.values()):,}".replace(",", " ")
+    print(f"   {len(mart)} périmètres, {nb_operations} opérations, chacun contre deux chemins Python")
 
 
 def main():
@@ -198,6 +275,9 @@ def main():
         "à 2 décimales (ingest.prepare_for_parquet). Ne fait pas échouer le harnais."
     )
 
+    print("9. perimetre_2014_2020 : routage SQL vs routage Python de la page 2014-2020 (#176)")
+    verifier_perimetre_2014_2020(con)
+
     con.close()
 
     print(f"\n{controles} contrôles (oracle A, strict).")
@@ -209,8 +289,8 @@ def main():
             print(f"   ... et {len(ecarts) - 40} autres")
         sys.exit(1)
     print(
-        "✅ Marts dbt identiques à `agregats.calculer_agregats` sur la même entrée "
-        "(comptages exacts, montants au centime)."
+        "✅ Marts dbt identiques à `agregats.calculer_agregats` et au routage 2014-2020 de "
+        "`utils/periodes.py` sur la même entrée (comptages exacts, montants au centime)."
     )
 
 
