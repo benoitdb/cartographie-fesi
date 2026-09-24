@@ -655,6 +655,94 @@ def fusionner_ensemble_national_2014_2020(ops_synergie, ops_hors_synergie_par_re
     return pd.concat(parts, ignore_index=True)
 
 
+# Périmètres agrégés du sélecteur de la page 2014-2020 ; les autres valeurs du sélecteur
+# sont des régions.
+ENSEMBLE_NATIONAL = "Ensemble national"
+VOLET_NATIONAL = "Volet national"
+INTERREGIONAL = "Interrégional"
+
+# Fichiers régionaux qui ne nomment leurs programmes que par code CCI (issue #95, étape 1) :
+# seuls ceux-là passent par `appliquer_libelles_programmes`. Un ensemble explicite plutôt
+# qu'une traduction appliquée à tous : un libellé d'une autre source qui coïnciderait avec
+# une clé de la table serait réécrit sans raison.
+REGIONS_PROGRAMMES_EN_CODE_CCI = frozenset({"Nouvelle-Aquitaine"})
+
+
+def normaliser_fichiers_hors_synergie(fichiers, libelles_programmes):
+    """{région: opérations normalisées, tous fonds} pour les fichiers régionaux chargés.
+
+    `fichiers` : {région: données chargées, ou None si le fichier est absent du poste}
+    (gitignoré, CI sur clone nu). Une région sans fichier n'a **pas de clé** dans le
+    résultat : c'est cette absence qui la fait retomber sur Synergie, dans la page comme
+    dans `fusionner_ensemble_national_2014_2020`. Tous fonds confondus : la page a besoin
+    aussi des dossiers sans fonds renseigné, que le filtre Fonds écarterait.
+
+    Une seule normalisation par fichier — la page en faisait trois (#157, D2)."""
+    normalises = {}
+    for region, source in REGIONS_SUBSTITUEES_2014_2020.items():
+        fichier = fichiers.get(region)
+        if fichier is None:
+            continue
+        ops = normaliser_operations(fichier["operations"], source)
+        if region in REGIONS_PROGRAMMES_EN_CODE_CCI:
+            ops = appliquer_libelles_programmes(ops, libelles_programmes)
+        normalises[region] = ops
+    return normalises
+
+
+def router_pon_fse(ops_pon_fse, perimetre):
+    """Opérations du fichier PON FSE qui reviennent à ce périmètre, par programme
+    (`REGIONS_PON_FSE_2014_2020`) et non par la région portée par chaque ligne : les
+    programmes nationaux au Volet national, chaque PO FSE État à sa région DROM, rien
+    ailleurs (#95, point 3)."""
+    if ops_pon_fse.empty:
+        return ops_pon_fse
+    region_du_programme = ops_pon_fse["Libellé Programme"].map(REGIONS_PON_FSE_2014_2020.get)
+    if perimetre == VOLET_NATIONAL:
+        return ops_pon_fse[region_du_programme.isna()]
+    return ops_pon_fse[region_du_programme == perimetre]
+
+
+def operations_perimetre_2014_2020(perimetre, ops_synergie, ops_hors_synergie_par_region, ops_pon_fse):
+    """Opérations d'un périmètre du sélecteur de la page 2014-2020 (sortie de la page, #157).
+
+    Les trois sources d'opérations sont déjà normalisées et filtrées par fonds par
+    l'appelant ; `ops_hors_synergie_par_region` n'a de clé que pour les fichiers chargés
+    (voir `normaliser_fichiers_hors_synergie`).
+
+    - « Ensemble national » : fusion des six sources (`fusionner_ensemble_national_2014_2020`).
+    - « Volet national » : lignes nationales de Synergie + programmes nationaux du PON FSE.
+    - « Interrégional » : lignes flaguées interrégionales de Synergie — champ région
+      multi-valué ou l'un des cinq programmes interrégionaux, sortis du Volet national
+      depuis #77. Le PON FSE n'y va jamais.
+    - une région à fichier propre (#68) : ce fichier seul, qui ne couvre que ce périmètre
+      par construction ; ses lignes Synergie marginales sont ignorées.
+    - toute autre région : même découpage que la Vue Régionale 2021-2027 — lignes
+      mono-région, hors interrégional et national, sinon une opération serait comptée dans
+      plusieurs totaux censés s'additionner —, plus son PO FSE État pour les cinq DROM."""
+    if perimetre == ENSEMBLE_NATIONAL:
+        return fusionner_ensemble_national_2014_2020(ops_synergie, ops_hors_synergie_par_region, ops_pon_fse)
+    if perimetre == INTERREGIONAL:
+        return ops_synergie[ops_synergie["is_interregional"]]
+    if perimetre in ops_hors_synergie_par_region:
+        return ops_hors_synergie_par_region[perimetre]
+
+    if perimetre == VOLET_NATIONAL:
+        ops = ops_synergie[ops_synergie["is_national"]]
+    else:
+        ops = ops_synergie[
+            ops_synergie["regions_modernes"].apply(lambda r: r == [perimetre])
+            & ~ops_synergie["is_interregional"]
+            & ~ops_synergie["is_national"]
+        ]
+    ops_pon_fse_perimetre = router_pon_fse(ops_pon_fse, perimetre)
+    # Le Volet national est toujours réindexé, une région seulement si le PON FSE y ajoute
+    # des lignes : comportement de la page avant extraction, conservé tel quel.
+    if ops_pon_fse_perimetre.empty and perimetre != VOLET_NATIONAL:
+        return ops
+    return pd.concat([ops, ops_pon_fse_perimetre], ignore_index=True)
+
+
 def enveloppes_ensemble_national_2014_2020(fonds_engages_par_perimetre, totaux_2014_2020):
     """Enveloppes programmées agrégées au national — jumeau Python de `v_enveloppes_2014_2020`,
     pour le pilotage du périmètre « Ensemble national » (arbitrage Phase 4, issue #121).

@@ -56,8 +56,11 @@ from utils.periodes import (  # noqa: E402
     fusionner_ensemble_national_2014_2020,
     fusionner_enveloppes_sans_libelle,
     libelle_montant,
+    normaliser_fichiers_hors_synergie,
     normaliser_operations,
+    operations_perimetre_2014_2020,
     pilotage_disponible,
+    router_pon_fse,
 )
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "dashboard"
@@ -742,3 +745,122 @@ def test_la_page_2014_2020_ne_redefinit_pas_la_table():
     )
     assert "REGIONS_SUBSTITUEES_2014_2020" in page
     assert '"Normandie": SOURCE_NORMANDIE_2014_2020' not in page
+
+
+# --- Opérations d'un périmètre 2014-2020 (issue #157, sorti de la page 5) ----------
+
+
+def _synergie_six_lignes():
+    """Une ligne par cas de routage Synergie : mono-région sans fichier propre (Occitanie),
+    mono-région AVEC fichier propre (Bretagne, à ignorer quand le fichier est là), DROM
+    (Guadeloupe), national (dont une ligne qui porte sa région d'exécution : elle reste au
+    Volet national), interrégional (dont une ligne d'un programme interrégional qui
+    ne porte qu'une région : le flag l'emporte), et une ligne multi-régions non flaguée
+    interrégionale (ne doit tomber dans aucune région)."""
+    return pd.DataFrame([
+        {"id": "OCC", "regions_modernes": ["Occitanie"], "is_national": False, "is_interregional": False},
+        {"id": "BZH-SYN", "regions_modernes": ["Bretagne"], "is_national": False, "is_interregional": False},
+        {"id": "GUA", "regions_modernes": ["Guadeloupe"], "is_national": False, "is_interregional": False},
+        {"id": "NAT", "regions_modernes": [], "is_national": True, "is_interregional": False},
+        {"id": "NAT-MONO", "regions_modernes": ["Occitanie"], "is_national": True, "is_interregional": False},
+        {"id": "INTER", "regions_modernes": ["Occitanie", "Grand Est"], "is_national": False, "is_interregional": True},
+        {"id": "INTER-MONO", "regions_modernes": ["Occitanie"], "is_national": False, "is_interregional": True},
+        {"id": "MULTI", "regions_modernes": ["Occitanie", "Bretagne"], "is_national": False, "is_interregional": False},
+    ])
+
+
+def _pon_fse_trois_programmes():
+    return pd.DataFrame([
+        {"id": "PON-NAT", "Libellé Programme": "Programme Opérationnel National FSE"},
+        {"id": "PON-IEJ", "Libellé Programme": "Programme Opérationnel IEJ"},
+        {"id": "PON-GUA", "Libellé Programme": "PO Guadeloupe"},
+    ])
+
+
+def _ids(perimetre, hors_synergie=None):
+    hors_synergie = {"Bretagne": pd.DataFrame([{"id": "BZH-OFF"}])} if hors_synergie is None else hors_synergie
+    ops = operations_perimetre_2014_2020(perimetre, _synergie_six_lignes(), hors_synergie, _pon_fse_trois_programmes())
+    return sorted(ops["id"])
+
+
+def test_le_pon_fse_va_au_volet_national_pour_ses_programmes_nationaux():
+    assert sorted(router_pon_fse(_pon_fse_trois_programmes(), "Volet national")["id"]) == ["PON-IEJ", "PON-NAT"]
+
+
+def test_le_pon_fse_va_a_sa_region_drom_par_le_programme():
+    assert router_pon_fse(_pon_fse_trois_programmes(), "Guadeloupe")["id"].tolist() == ["PON-GUA"]
+
+
+def test_le_pon_fse_n_apporte_rien_a_une_region_sans_po_fse_etat():
+    assert router_pon_fse(_pon_fse_trois_programmes(), "Occitanie").empty
+
+
+def test_une_region_sans_fichier_propre_prend_ses_lignes_synergie_mono_region():
+    """Ni l'interrégional, ni le national, ni une ligne multi-régions : sinon une même
+    opération serait comptée dans plusieurs totaux censés s'additionner."""
+    assert _ids("Occitanie") == ["OCC"]
+
+
+def test_une_region_drom_additionne_synergie_et_son_po_fse_etat():
+    assert _ids("Guadeloupe") == ["GUA", "PON-GUA"]
+
+
+def test_une_region_a_fichier_propre_lit_ce_fichier_et_ignore_synergie():
+    assert _ids("Bretagne") == ["BZH-OFF"]
+
+
+def test_sans_son_fichier_une_region_substituee_retombe_sur_synergie():
+    """Fichier gitignoré absent du poste (CI sur clone nu) : repli, pas un périmètre vide."""
+    assert _ids("Bretagne", hors_synergie={}) == ["BZH-SYN"]
+
+
+def test_le_volet_national_additionne_synergie_national_et_pon_fse_national():
+    assert _ids("Volet national") == ["NAT", "NAT-MONO", "PON-IEJ", "PON-NAT"]
+
+
+def test_l_interregional_ne_prend_que_les_lignes_flaguees_et_jamais_le_pon_fse():
+    assert _ids("Interrégional") == ["INTER", "INTER-MONO"]
+
+
+def test_l_ensemble_national_est_la_fusion_des_six_sources():
+    hors_synergie = {"Bretagne": pd.DataFrame([{"id": "BZH-OFF"}])}
+    attendu = fusionner_ensemble_national_2014_2020(_synergie_six_lignes(), hors_synergie, _pon_fse_trois_programmes())
+    obtenu = operations_perimetre_2014_2020(
+        "Ensemble national", _synergie_six_lignes(), hors_synergie, _pon_fse_trois_programmes()
+    )
+    pd.testing.assert_frame_equal(obtenu, attendu)
+
+
+def test_normaliser_fichiers_hors_synergie_ecarte_un_fichier_absent():
+    """Un fichier non chargé (None) n'entre pas dans le dict : c'est l'absence de clé qui
+    déclenche le repli sur Synergie, dans la page comme dans la fusion nationale."""
+    fichiers = {"Normandie": None, "Bretagne": None, "Nouvelle-Aquitaine": None}
+    assert normaliser_fichiers_hors_synergie(fichiers, libelles_programmes={}) == {}
+
+
+def test_normaliser_fichiers_hors_synergie_ne_traduit_le_code_cci_que_pour_la_nouvelle_aquitaine():
+    """Seule la Nouvelle-Aquitaine nomme ses programmes par code CCI. Un libellé normand
+    qui coïnciderait avec une clé de la table ne doit pas être réécrit."""
+    libelle_normand = "Programme opérationnel Basse-Normandie 2014-2020"
+    libelles = {"2014FR16M0OP001": "PO FEDER-FSE Aquitaine", libelle_normand: "NE DOIT PAS APPARAÎTRE"}
+    op_naq = {
+        "Funds": "FEDER",
+        "Amount co-financing European Union": 220000.0,
+        "Total amount programmed": 550000.0,
+        "Union co-financing rate (%)": 0.4,
+        "Colonne à masquer lors de la diffusion": "2014FR16M0OP001",
+    }
+    op_normandie = {
+        "Fond": "FEDER",
+        "Montant UE programmé": 170948.18,
+        "Total des dépenses éligibles - Total eligible costs": 355154.47,
+        "taux de cofinancement UE - EU co-financing rate": 0.48,
+        "Libellé programme": libelle_normand,
+    }
+    fichiers = {
+        "Nouvelle-Aquitaine": {"operations": pd.DataFrame([op_naq])},
+        "Normandie": {"operations": pd.DataFrame([op_normandie])},
+    }
+    normalises = normaliser_fichiers_hors_synergie(fichiers, libelles)
+    assert normalises["Nouvelle-Aquitaine"]["Libellé Programme"].tolist() == ["PO FEDER-FSE Aquitaine"]
+    assert normalises["Normandie"]["Libellé Programme"].tolist() == [libelle_normand]
