@@ -438,6 +438,39 @@ def detect_cofinancement_superieur_plafond(df, plafond, taux_col="Taux de cofina
     return df[df[taux_col] > plafond * (1 + TOLERANCE_RELATIVE_PLAFOND)].sort_values(taux_col, ascending=False)
 
 
+def synthese_depassements_par_region(df, plafonds, region_col="Région"):
+    """Dépassements de plafond décomptés région par région, pour la vue nationale (#163).
+
+    Une synthèse et non une liste d'opérations : ~14% des opérations mono-région dépassent le
+    plafond de leur région (2 273 au 24 sept. 2026), une liste tronquée n'en montrerait qu'une
+    fraction choisie par le tri. Chaque région passe par detect_cofinancement_superieur_plafond
+    avec son propre plafond — la fonction de la Vue Régionale —, si bien que le total national
+    est par construction la somme des décomptes régionaux.
+
+    plafonds : dict région → plafond (0-1) ou None ; une région sans plafond est écartée.
+    « Excédent UE » : montant UE au-delà de ce que le plafond autorise
+    (Montant UE − plafond × dépenses éligibles), sommé sur les opérations en dépassement."""
+    lignes = []
+    for region, df_region in df.groupby(region_col):
+        plafond = plafonds.get(region)
+        if plafond is None:
+            continue
+        depassements = detect_cofinancement_superieur_plafond(df_region, plafond)
+        excedent = (depassements["Montant UE"] - plafond * depassements["Total des dépenses éligibles"]).sum()
+        lignes.append(
+            {
+                "Région": region,
+                "Plafond": plafond,
+                "Opérations": len(df_region),
+                "Dépassements": len(depassements),
+                "Part": len(depassements) / len(df_region),
+                "Excédent UE": excedent,
+            }
+        )
+    colonnes = ["Région", "Plafond", "Opérations", "Dépassements", "Part", "Excédent UE"]
+    return pd.DataFrame(lignes, columns=colonnes).sort_values("Dépassements", ascending=False, ignore_index=True)
+
+
 def detect_incoherent_cofinancement(df, amount_col="Montant UE", depenses_col="Total des dépenses éligibles"):
     """Opérations où le montant UE dépasse le total des dépenses éligibles (taux de
     cofinancement > 100%), normalement impossible — contrôle de cohérence sur les montants

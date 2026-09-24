@@ -33,6 +33,7 @@ from utils.stats import (  # noqa: E402
     detect_incoherent_cofinancement,
     detect_outliers,
     detect_regroupements_beneficiaire,
+    synthese_depassements_par_region,
 )
 
 COLONNES_REGROUPEMENT = [
@@ -209,6 +210,64 @@ def test_un_taux_pile_au_plafond_par_arrondi_flottant_n_est_pas_un_depassement()
     vrai dépassement de même ampleur (cf. le test au-dessus, à 88-90% pour un plafond 85%)."""
     df = pd.DataFrame({"Taux de cofinancement": [46882.80 / 78138.00]})
     assert detect_cofinancement_superieur_plafond(df, plafond=0.6).empty
+
+
+def _operations_plafonnees():
+    """Deux régions à plafonds différents : Occitanie (60%) a une opération sur trois au-delà,
+    Île-de-France (50%) deux sur deux. Montants choisis pour que l'excédent se pose à la main."""
+    return pd.DataFrame(
+        {
+            "Région": ["Occitanie", "Occitanie", "Occitanie", "Île-de-France", "Île-de-France"],
+            "Total des dépenses éligibles": [100_000.0, 100_000.0, 100_000.0, 200_000.0, 100_000.0],
+            "Montant UE": [70_000.0, 60_000.0, 40_000.0, 120_000.0, 55_000.0],
+            "Taux de cofinancement": [0.7, 0.6, 0.4, 0.6, 0.55],
+        }
+    )
+
+
+def test_la_synthese_nationale_des_depassements_compte_chaque_region_a_son_propre_plafond():
+    synthese = synthese_depassements_par_region(
+        _operations_plafonnees(), {"Occitanie": 0.6, "Île-de-France": 0.5}
+    ).set_index("Région")
+    assert synthese.loc["Occitanie", "Dépassements"] == 1
+    assert synthese.loc["Occitanie", "Opérations"] == 3
+    assert synthese.loc["Occitanie", "Part"] == pytest.approx(1 / 3)
+    assert synthese.loc["Île-de-France", "Dépassements"] == 2
+    assert synthese.loc["Île-de-France", "Plafond"] == 0.5
+
+
+def test_l_excedent_ue_est_la_part_du_montant_ue_au_dela_du_plafond():
+    """70 000 € d'UE sur 100 000 € à 60% : 10 000 € au-delà. Île-de-France à 50% :
+    (120 000 − 100 000) + (55 000 − 50 000) = 25 000 €. L'opération pile au plafond ne compte pas."""
+    synthese = synthese_depassements_par_region(
+        _operations_plafonnees(), {"Occitanie": 0.6, "Île-de-France": 0.5}
+    ).set_index("Région")
+    assert synthese.loc["Occitanie", "Excédent UE"] == pytest.approx(10_000)
+    assert synthese.loc["Île-de-France", "Excédent UE"] == pytest.approx(25_000)
+
+
+def test_le_total_national_est_la_somme_des_decomptes_regionaux():
+    """Invariant de #163 : chaque région est comptée avec la même fonction que la Vue
+    Régionale (detect_cofinancement_superieur_plafond), donc les totaux se recoupent."""
+    df = _operations_plafonnees()
+    plafonds = {"Occitanie": 0.6, "Île-de-France": 0.5}
+    synthese = synthese_depassements_par_region(df, plafonds)
+    attendu = sum(
+        len(detect_cofinancement_superieur_plafond(df[df["Région"] == r], p)) for r, p in plafonds.items()
+    )
+    assert synthese["Dépassements"].sum() == attendu == 3
+
+
+def test_une_region_sans_plafond_connu_est_ecartee_de_la_synthese():
+    synthese = synthese_depassements_par_region(_operations_plafonnees(), {"Occitanie": 0.6, "Île-de-France": None})
+    assert synthese["Région"].tolist() == ["Occitanie"]
+
+
+def test_la_synthese_est_triee_par_nombre_de_depassements_decroissant():
+    synthese = synthese_depassements_par_region(
+        _operations_plafonnees(), {"Occitanie": 0.6, "Île-de-France": 0.5}
+    )
+    assert synthese["Région"].tolist() == ["Île-de-France", "Occitanie"]
 
 
 def test_les_taux_statistiquement_atypiques_sont_detectes_par_l_ecart_a_l_iqr():
