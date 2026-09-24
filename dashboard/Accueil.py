@@ -14,12 +14,12 @@ from utils.analyses_controle import (
     stats_col_config,
     taux_col_config,
 )
+from utils.carte_nationale import DROM_COM, render_carte_nationale
 from utils.cofinancement import bucket_categorie, plafond_categorie
 from utils.data_loader import (
     load_beneficiaires_fuzzy,
     load_data,
     load_dotations_os,
-    load_dromcom_geojson,
     load_geojson,
     load_interreg,
     load_programme_totals,
@@ -30,11 +30,7 @@ from utils.filters import FONDS_OPTIONS, compute_by_region, render_fonds_filter,
 from utils.millesime import render_millesime
 from utils.pilotage import RESERVE_METHODO, build_ranking_programme_vs_engage, render_kpi_pilotage
 from utils.plot_style import (
-    MAP_CONFIG,
-    build_standalone_colorbar,
-    disable_map_interaction,
     style_hover,
-    style_map_background,
 )
 from utils.stats import (
     build_boxplot,
@@ -97,8 +93,6 @@ if interregional_summary["count"]:
         "fois), incluses dans le total ci-dessus mais non ventilées par région ni dans le volet national."
     )
 
-DROM_COM = ["Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte", "Saint-Martin"]
-
 # Échelle de couleur partagée entre la carte métropole et les vignettes DROM-COM ci-dessous :
 # si chaque vignette se colorait sur sa propre échelle (son seul montant), un petit territoire
 # ressortirait aussi "foncé" qu'une grande région bien plus dotée — trompeur. Avec une échelle
@@ -113,74 +107,7 @@ st.caption(
     "territoires, l'intensité de bleu reste directement comparable partout."
 )
 
-col_legend, col_metro, col_dromcom = st.columns([1, 4, 6])
-
-with col_legend:
-    st.plotly_chart(
-        build_standalone_colorbar(color_range, "Montant UE (€)", height=480),
-        width='stretch',
-        config={"displayModeBar": False},
-    )
-
-with col_metro:
-    st.markdown("**France métropolitaine**")
-    rows = [
-        {"region": region, "montant_ue_total": values["montant_ue_total"], "count": values["count"]}
-        for region, values in by_region.items()
-        if region in regions_metro
-    ]
-    df = pd.DataFrame(rows)
-
-    fig = px.choropleth(
-        df,
-        geojson=geojson,
-        locations="region",
-        featureidkey="properties.nom",
-        color="montant_ue_total",
-        color_continuous_scale="Blues",
-        range_color=color_range,
-        custom_data=["count"],
-        labels={"montant_ue_total": "Montant UE (€)"},
-    )
-    fig.update_traces(
-        hovertemplate="<b>%{location}</b><br>Montant UE : %{z:,.0f} €<br>Nb projets : %{customdata[0]}<extra></extra>"
-    )
-    fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=480, coloraxis_showscale=False)
-    fig = disable_map_interaction(style_map_background(style_hover(fig)))
-
-    st.plotly_chart(fig, width='stretch', config=MAP_CONFIG)
-
-with col_dromcom:
-    st.markdown("**DROM-COM**")
-    dromcom_geojson = load_dromcom_geojson()
-
-    dromcom_rows = st.columns(3), st.columns(3)
-    # strict=True : les 2x3 colonnes doivent couvrir exactement DROM_COM — ajouter un
-    # territoire sans ajouter la colonne le ferait disparaître de la page en silence.
-    for territory, col in zip(DROM_COM, dromcom_rows[0] + dromcom_rows[1], strict=True):
-        values = by_region.get(territory, {"montant_ue_total": 0, "count": 0})
-        with col:
-            with st.container(border=True):
-                st.markdown(f"**{territory}**")
-                fig_dromcom = px.choropleth(
-                    pd.DataFrame([{"region": territory, "montant_ue_total": values["montant_ue_total"]}]),
-                    geojson=dromcom_geojson,
-                    locations="region",
-                    featureidkey="properties.nom",
-                    color="montant_ue_total",
-                    color_continuous_scale="Blues",
-                    range_color=color_range,
-                )
-                fig_dromcom.update_traces(hovertemplate=f"<b>{territory}</b><br>Montant UE : %{{z:,.0f}} €<extra></extra>")
-                fig_dromcom.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
-                fig_dromcom.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=135, coloraxis_showscale=False)
-                fig_dromcom = disable_map_interaction(style_map_background(style_hover(fig_dromcom)))
-                st.plotly_chart(fig_dromcom, width='stretch', config=MAP_CONFIG)
-                if values["count"]:
-                    st.caption(f"{values['montant_ue_total'] / 1e6:,.1f} M€ · {values['count']} projets".replace(",", " "))
-                else:
-                    st.caption("Aucun projet")
+render_carte_nationale(by_region, geojson, color_range)
 
 df_national_ops = data["operations"][data["operations"]["Fonds"].isin(selected_fonds)].copy()
 df_national_ops[LEVEL1] = df_national_ops[LEVEL1].fillna("Non spécifié")
