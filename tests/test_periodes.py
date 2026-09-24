@@ -60,7 +60,10 @@ from utils.periodes import (  # noqa: E402
     normaliser_operations,
     operations_perimetre_2014_2020,
     pilotage_disponible,
+    regions_couvertes_par_programme,
     router_pon_fse,
+    taux_reference_react_eu,
+    ventiler_par_region_d_execution,
 )
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "dashboard"
@@ -864,3 +867,55 @@ def test_normaliser_fichiers_hors_synergie_ne_traduit_le_code_cci_que_pour_la_no
     normalises = normaliser_fichiers_hors_synergie(fichiers, libelles)
     assert normalises["Nouvelle-Aquitaine"]["Libellé Programme"].tolist() == ["PO FEDER-FSE Aquitaine"]
     assert normalises["Normandie"]["Libellé Programme"].tolist() == [libelle_normand]
+
+
+# --- Petits calculs sortis de la page 2014-2020 (issue #157, étape 4) --------------
+
+
+def test_la_ventilation_compte_chaque_operation_dans_sa_region_d_execution():
+    ops = pd.DataFrame([
+        {"Montant UE": 100.0, "regions_modernes": ["Guadeloupe"]},
+        {"Montant UE": 50.0, "regions_modernes": ["Guadeloupe"]},
+        {"Montant UE": None, "regions_modernes": ["Occitanie"]},
+        {"Montant UE": 30.0, "regions_modernes": []},
+        {"Montant UE": 20.0, "regions_modernes": None},
+    ])
+    par_region, nb_sans_region = ventiler_par_region_d_execution(ops)
+    assert par_region["Guadeloupe"] == {"montant_ue_total": 150.0, "count": 2}
+    # Comportement repris tel quel de la page : un montant manquant compte pour 0 dans la
+    # somme, et le décompte ne compte que les montants renseignés.
+    assert par_region["Occitanie"] == {"montant_ue_total": 0.0, "count": 0}
+    assert nb_sans_region == 2
+
+
+def test_le_taux_de_reference_react_eu_rapporte_le_justifie_au_programme():
+    detail = {
+        "react_eu": {"Normandie": {"FEDER": 200.0, "FSE": 100.0}},
+        "react_eu_justifie": {"Normandie": {"FEDER": 150.0}},
+    }
+    assert taux_reference_react_eu(detail, "Normandie", ["FEDER", "FSE"]) == {"FEDER": 0.75}
+
+
+def test_le_taux_de_reference_react_eu_suit_les_fonds_selectionnes():
+    """Sélection explicite de l'utilisateur, pas les fonds rapprochables : c'est pour le FEDER
+    REACT-EU fondu en métropole que la référence compte le plus (#96)."""
+    detail = {"react_eu": {"Normandie": {"FEDER": 200.0}}, "react_eu_justifie": {"Normandie": {"FEDER": 150.0}}}
+    assert taux_reference_react_eu(detail, "Normandie", ["FSE"]) == {}
+
+
+def test_le_taux_de_reference_react_eu_est_vide_hors_des_perimetres_transcrits():
+    detail = {"react_eu": {}, "react_eu_justifie": {}}
+    assert taux_reference_react_eu(detail, "Ensemble national", ["FEDER"]) == {}
+
+
+def test_les_regions_d_un_programme_interregional_viennent_d_abord_de_la_table_de_reference():
+    ops = pd.DataFrame([
+        {"Libellé Programme": "POI Massif central", "regions_modernes": ["Occitanie"]},
+        {"Libellé Programme": "Autre programme", "regions_modernes": ["Bretagne", "Normandie"]},
+        {"Libellé Programme": "Autre programme", "regions_modernes": ["Normandie", "Grand Est"]},
+    ])
+    table = {"POI Massif central": ["Auvergne-Rhône-Alpes", "Occitanie"]}
+    regions = regions_couvertes_par_programme(ops, table)
+    assert regions["POI Massif central"] == ["Auvergne-Rhône-Alpes", "Occitanie"]
+    # à défaut : l'union triée des régions portées par les opérations
+    assert regions["Autre programme"] == ["Bretagne", "Grand Est", "Normandie"]
