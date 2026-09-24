@@ -57,6 +57,8 @@ from utils.filters import compute_by_region, render_fonds_filter, summarize_ops
 from utils.millesime import libelle_millesime, render_millesime
 from utils.periodes import (
     AVERTISSEMENT_PERIMETRE,
+    ENSEMBLE_NATIONAL,
+    INTERREGIONAL,
     MENTION_BRETAGNE_FSE_GRANULARITE,
     MENTION_DEPASSEMENT_2014_2020,
     MENTION_ENSEMBLE_NATIONAL_FUSIONNE,
@@ -76,20 +78,21 @@ from utils.periodes import (
     MENTION_TAUX_DECLARE_DIVERGENT,
     PERIMETRE_FUSION,
     PERIODE_2014_2020,
-    REGIONS_PON_FSE_2014_2020,
     REGIONS_SUBSTITUEES_2014_2020,
     SOURCE_PON_FSE_2014_2020,
     TAUX_COFINANCEMENT_DIVERGENT,
+    VOLET_NATIONAL,
     absences_expliquees,
-    appliquer_libelles_programmes,
     capacites,
     capacites_source,
     enveloppes_ensemble_national_2014_2020,
-    fusionner_ensemble_national_2014_2020,
     fusionner_enveloppes_sans_libelle,
     libelle_montant,
+    normaliser_fichiers_hors_synergie,
     normaliser_operations,
+    operations_perimetre_2014_2020,
     pilotage_disponible,
+    router_pon_fse,
 )
 from utils.pilotage import (
     build_ranking_programme_vs_engage,
@@ -123,10 +126,6 @@ from utils.themes import FONDS_COLORS, style_categorical_columns
 FONDS = "Fonds"
 MONTANT = "Montant UE"
 BENEFICIAIRE = "Nom du bénéficiaire"
-
-ENSEMBLE_NATIONAL = "Ensemble national"
-VOLET_NATIONAL = "Volet national"
-INTERREGIONAL = "Interrégional"
 
 DROM_COM = ["Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte", "Saint-Martin"]
 
@@ -190,59 +189,33 @@ filtre_actif = set(selected_fonds) != set(fonds_periode)
 operations = normaliser_operations(data["operations"], PERIODE_2014_2020)
 ops_fonds = operations[operations[FONDS].isin(selected_fonds)]
 
-ops_fonds_regionaux = pd.DataFrame()
+# Les trois fichiers régionaux, normalisés une fois, tous fonds confondus : la carte
+# nationale et la mention Normandie ci-dessous ont besoin des dossiers sans fonds
+# renseigné, que le filtre Fonds écarte. Filtrés ensuite, tous les trois et pas seulement
+# celui du périmètre : « Ensemble national » les fusionne (arbitrage Phase 4, #121).
+ops_hors_synergie = normaliser_fichiers_hors_synergie(
+    data_hors_synergie, load_programme_detail_2014_2020()["libelles_programmes"]
+)
+ops_hors_synergie_par_region = {
+    region: ops_region[ops_region[FONDS].isin(selected_fonds)] for region, ops_region in ops_hors_synergie.items()
+}
+
 ops_fond_vide_normandie = pd.DataFrame()
-if lit_source_regionale:
-    operations_regionales = normaliser_operations(data_regionale["operations"], source_regionale)
-    if perimetre == "Nouvelle-Aquitaine":
-        # Ce fichier ne nomme ses programmes que par code CCI (issue #95, étape 1) : traduit
-        # après le renommage des colonnes (`normaliser_operations` reste une fonction pure de
-        # renommage), sur la clé canonique "Libellé Programme" qui porte alors encore le code.
-        libelles_programmes = load_programme_detail_2014_2020()["libelles_programmes"]
-        operations_regionales = appliquer_libelles_programmes(operations_regionales, libelles_programmes)
-    if perimetre == "Normandie":
-        # ~26 dossiers hors répertoire (2021-2023, probable reste à payer post-clôture —
-        # voir data-pipeline/sources.py) sans `Fond` renseigné : le filtre Fonds les écarte
-        # silencieusement quel que soit le fonds sélectionné, faute d'y figurer.
-        ops_fond_vide_normandie = operations_regionales[operations_regionales[FONDS].fillna("") == ""]
-    ops_fonds_regionaux = operations_regionales[operations_regionales[FONDS].isin(selected_fonds)]
+if perimetre == "Normandie" and lit_source_regionale:
+    # ~26 dossiers hors répertoire (2021-2023, probable reste à payer post-clôture —
+    # voir data-pipeline/sources.py) sans `Fond` renseigné : le filtre Fonds les écarte
+    # silencieusement quel que soit le fonds sélectionné, faute d'y figurer.
+    ops_normandie = ops_hors_synergie["Normandie"]
+    ops_fond_vide_normandie = ops_normandie[ops_normandie[FONDS].fillna("") == ""]
 
 ops_pon_fse_fonds = pd.DataFrame()
 if data_pon_fse is not None:
     operations_pon_fse = normaliser_operations(data_pon_fse["operations"], SOURCE_PON_FSE_2014_2020)
     ops_pon_fse_fonds = operations_pon_fse[operations_pon_fse[FONDS].isin(selected_fonds)]
 
-# Les TROIS fichiers régionaux, normalisés et filtrés par fonds — pas seulement celui du
-# périmètre sélectionné (`operations_regionales` ci-dessus) : `Ensemble national` a besoin
-# des trois à la fois pour sa propre fusion (`fusionner_ensemble_national_2014_2020`,
-# arbitrage Phase 4, #121). Un peu de travail redondant quand une seule région est
-# sélectionnée (elle est normalisée deux fois), sans conséquence : les trois fichiers sont
-# déjà chargés en mémoire dans tous les cas (`data_hors_synergie`, en tête de page), et leur
-# normalisation est un simple renommage de colonnes, pas une opération coûteuse.
-ops_hors_synergie_par_region = {}
-for region, source in SOURCE_HORS_SYNERGIE.items():
-    fichier_region = data_hors_synergie.get(region)
-    if fichier_region is None:
-        continue
-    ops_region = normaliser_operations(fichier_region["operations"], source)
-    if region == "Nouvelle-Aquitaine":
-        libelles_programmes = load_programme_detail_2014_2020()["libelles_programmes"]
-        ops_region = appliquer_libelles_programmes(ops_region, libelles_programmes)
-    ops_hors_synergie_par_region[region] = ops_region[ops_region[FONDS].isin(selected_fonds)]
-
-# Ce périmètre reçoit-il des opérations PON FSE, et lesquelles — calculé avant le grand
-# if/elif ci-dessous pour être fusionné dans chaque branche concernée (Volet national, ou
-# une des cinq régions DROM) sans dupliquer la logique de routage.
-if ops_pon_fse_fonds.empty:
-    ops_pon_fse_perimetre = ops_pon_fse_fonds
-elif perimetre == VOLET_NATIONAL:
-    ops_pon_fse_perimetre = ops_pon_fse_fonds[
-        ops_pon_fse_fonds["Libellé Programme"].map(REGIONS_PON_FSE_2014_2020.get).isna()
-    ]
-else:
-    ops_pon_fse_perimetre = ops_pon_fse_fonds[
-        ops_pon_fse_fonds["Libellé Programme"].map(REGIONS_PON_FSE_2014_2020.get) == perimetre
-    ]
+# Ce que le PON FSE apporte à ce périmètre : les mentions de haut de page, la ventilation
+# régionale du Volet national et le Pilotage en dépendent, en plus de `df_ops`.
+ops_pon_fse_perimetre = router_pon_fse(ops_pon_fse_fonds, perimetre)
 
 # Catégorie de cohésion de la période, et le plafond de cofinancement qui en découle.
 # `.get` sur le périmètre : « Ensemble national » et « Volet national » ne sont pas des
@@ -264,40 +237,9 @@ elif not ops_pon_fse_perimetre.empty:
 elif not capa["perimetre_complet"]:
     st.warning(AVERTISSEMENT_PERIMETRE)
 
-if perimetre == ENSEMBLE_NATIONAL:
-    df_ops = fusionner_ensemble_national_2014_2020(ops_fonds, ops_hors_synergie_par_region, ops_pon_fse_fonds)
-elif perimetre == VOLET_NATIONAL:
-    parts = [ops_fonds[ops_fonds["is_national"]]]
-    if not ops_pon_fse_perimetre.empty:
-        parts.append(ops_pon_fse_perimetre)
-    df_ops = pd.concat(parts, ignore_index=True)
-elif perimetre == INTERREGIONAL:
-    # Opérations non attribuables à une seule région : champ région brut multi-valué,
-    # ou l'un des cinq programmes interrégionaux (massifs, bassins fluviaux) — sortis
-    # du Volet national depuis l'issue #77. PON FSE ne route jamais ici (ses deux
-    # catégories vont soit à une région DROM, soit au Volet national).
-    df_ops = ops_fonds[ops_fonds["is_interregional"]]
-elif lit_source_regionale:
-    # Le fichier régional ne couvre que ce périmètre par construction (issue #68) : pas
-    # besoin du filtre regions_modernes/is_interregional/is_national de la branche Synergie
-    # ci-dessous, il ne changerait rien ici. Ces trois régions n'ont pas de PO FSE État
-    # dans le fichier PON FSE (ops_pon_fse_perimetre est vide) : rien à y fusionner.
-    df_ops = ops_fonds_regionaux
-else:
-    # Même découpage que la Vue Régionale 2021-2027 : les opérations
-    # interrégionales et nationales sont exclues du total d'une région, sinon
-    # elles seraient comptées dans plusieurs totaux censés s'additionner.
-    # `ops_pon_fse_perimetre` n'ajoute quelque chose que pour les cinq DROM dont le PO FSE
-    # État est routé ici (issue #95, point 3) : vide pour toute autre région.
-    ops_region = ops_fonds[
-        (ops_fonds["regions_modernes"].apply(lambda r: r == [perimetre]))
-        & ~ops_fonds["is_interregional"]
-        & ~ops_fonds["is_national"]
-    ]
-    if not ops_pon_fse_perimetre.empty:
-        df_ops = pd.concat([ops_region, ops_pon_fse_perimetre], ignore_index=True)
-    else:
-        df_ops = ops_region
+# Règles de routage (substitution, addition du PON FSE, découpage mono-région) : voir
+# la docstring d'`operations_perimetre_2014_2020`, testée dans tests/test_periodes.py.
+df_ops = operations_perimetre_2014_2020(perimetre, ops_fonds, ops_hors_synergie_par_region, ops_pon_fse_fonds)
 
 if df_ops.empty:
     st.info("Aucune opération sur ce périmètre avec les fonds sélectionnés.")
@@ -363,18 +305,14 @@ if perimetre == ENSEMBLE_NATIONAL:
     # que par montant brut, sans le même luxe de millésime/gris-vs-bleu que ce rendu suppose.
     # Écart connu et documenté, issue #128 (au lieu d'une fusion à moitié faite ici aussi).
     regions_hors_synergie = {}
-    for region, source in SOURCE_HORS_SYNERGIE.items():
-        fichier_region = data_hors_synergie.get(region)
-        if fichier_region is None:
-            continue
-        ops_region_norm = normaliser_operations(fichier_region["operations"], source)
-        ops_region_carte = ops_region_norm[ops_region_norm[FONDS].isin(selected_fonds)]
+    for region, ops_region_norm in ops_hors_synergie.items():
+        ops_region_carte = ops_hors_synergie_par_region[region]
         if ops_region_carte.empty:
             continue
         sans_fonds = ops_region_norm[ops_region_norm[FONDS].fillna("") == ""]
         regions_hors_synergie[region] = {
             **summarize_ops(ops_region_carte),
-            "millesime": libelle_millesime(fichier_region.get("metadata")),
+            "millesime": libelle_millesime(data_hors_synergie[region].get("metadata")),
             "montant_sans_fonds": sans_fonds[MONTANT].fillna(0).sum(),
             "count_sans_fonds": len(sans_fonds),
         }
