@@ -119,6 +119,7 @@ from utils.stats import (
     detect_incoherent_cofinancement,
     detect_outliers,
     render_top_beneficiaires_drilldown,
+    synthese_depassements_par_region_2014_2020,
 )
 from utils.table_style import text_widths
 from utils.themes import FONDS_COLORS, style_categorical_columns
@@ -1260,18 +1261,76 @@ with tab_audit:
         },
     )
 
-    # Le plafond n'existe qu'à la maille d'une région : les périmètres agrégés réunissent
-    # des catégories différentes, et il n'y a pas de plafond « moyen » à opposer à une
-    # opération. Plutôt qu'un tableau sans borne et sans explication, on dit à quelle
-    # maille l'information existe.
-    if plafond_periode is None:
+    # Le plafond n'existe qu'à la maille d'une région : pas de plafond « moyen » à opposer
+    # à une opération d'un périmètre agrégé. « Ensemble national » reçoit donc le décompte
+    # région par région (#169, comme Accueil en 2021-2027 depuis #163) ; le Volet national et
+    # l'Interrégional, rattachés à aucune région, l'explication de l'absence.
+    if plafond_periode is None and perimetre == ENSEMBLE_NATIONAL:
+        st.markdown("**Dépassements du plafond de cofinancement, par région**")
+        synthese_2014_2020, nb_hors_plafond_national, regions_sans_plafond = synthese_depassements_par_region_2014_2020(
+            df_ops[df_ops[PERIMETRE_FUSION] != "national"], load_categories_ue_2014_2020(), region_col=PERIMETRE_FUSION
+        )
+        total_depassements = int(synthese_2014_2020["Dépassements"].sum())
+        total_operations = int(synthese_2014_2020["Opérations"].sum())
+        st.caption(
+            f"{_fmt_entier(total_depassements)} opération(s) sur {_fmt_entier(total_operations)} "
+            f"({total_depassements / total_operations if total_operations else 0:.0%}) ont un taux de "
+            "cofinancement UE supérieur au plafond de la catégorie de leur région pour la période. "
+            "Chaque région est comptée comme lorsqu'on la sélectionne dans la barre latérale, où figure "
+            "le détail des opérations. Volet national exclu : il n'est rattaché à aucune région."
+        )
+        if synthese_2014_2020["Plafond bas"].ne(synthese_2014_2020["Plafond"]).any():
+            st.caption(
+                "Plafond en fourchette pour les régions qui réunissent des anciennes régions de "
+                "catégories différentes : le plafond dépend de l'ancienne région de l'opération, que le "
+                "fichier ne porte pas. Le dépassement y est compté sur la borne **haute** — sous elle, "
+                "une opération peut relever de l'ancienne région la mieux dotée."
+            )
+        if nb_hors_plafond_national:
+            st.caption(
+                f"{_fmt_entier(nb_hors_plafond_national)} opération(s) écartée(s) du décompte "
+                "(FEDER REACT-EU, IEJ, FEAD) : leur régime n'est pas celui de l'article 120."
+            )
+        if regions_sans_plafond:
+            st.caption(
+                "Sans catégorie de la période transcrite, donc hors décompte : "
+                + ", ".join(regions_sans_plafond)
+                + "."
+            )
+        st.caption(
+            "Contrairement à la carte et au classement de la Vue d'ensemble (issue #128), ce décompte "
+            "part de la fusion des six sources, PO FSE État des DROM compris."
+        )
+        st.caption(MENTION_PLAFOND_PAR_AXE)
+        tableau_plafonds = synthese_2014_2020.assign(
+            Plafond=[
+                f"{haut:.0%}" if bas == haut else f"{bas:.0%}-{haut:.0%}"
+                for bas, haut in zip(synthese_2014_2020["Plafond bas"], synthese_2014_2020["Plafond"], strict=True)
+            ]
+        ).drop(columns="Plafond bas")
+        st.dataframe(
+            tableau_plafonds,
+            width='stretch',
+            hide_index=True,
+            column_config={
+                **text_widths("Région"),
+                "Part": st.column_config.NumberColumn(
+                    "Part des opérations", format="percent", help="Dépassements / opérations de la région soumises au plafond"
+                ),
+                "Excédent UE": st.column_config.NumberColumn(
+                    format="%,d €",
+                    help="Montant UE au-delà de ce que la borne haute du plafond autorise (Montant UE − plafond × "
+                    "dépenses éligibles), sommé sur les opérations en dépassement",
+                ),
+            },
+        )
+    elif plafond_periode is None:
         st.info(
             "**Pas de plafond opposable sur ce périmètre.** Le plafond de cofinancement "
-            "2014-2020 découle de la catégorie de la région, or ce périmètre en réunit "
-            "plusieurs (ensemble national) ou n'est rattaché à aucune (volet national : "
-            "programmes nationaux, assistance technique, programmes interrégionaux). "
-            "Sélectionner une région dans la barre latérale affiche son plafond et les "
-            "opérations qui le dépassent."
+            "2014-2020 découle de la catégorie de la région, or ce périmètre n'est rattaché à "
+            "aucune (volet national : programmes nationaux, assistance technique ; "
+            "interrégional : programmes de massifs et de bassins). Sélectionner une région dans "
+            "la barre latérale affiche son plafond et les opérations qui le dépassent."
         )
     else:
         plafond_min, plafond_max = plafond_periode

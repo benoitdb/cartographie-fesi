@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from utils.cofinancement import filtrer_fonds_plafonnes, plafond_intervalle_2014_2020
 from utils.plot_style import style_hover, wrap_label
 from utils.table_style import text_widths
 
@@ -469,6 +470,32 @@ def synthese_depassements_par_region(df, plafonds, region_col="Région"):
         )
     colonnes = ["Région", "Plafond", "Opérations", "Dépassements", "Part", "Excédent UE"]
     return pd.DataFrame(lignes, columns=colonnes).sort_values("Dépassements", ascending=False, ignore_index=True)
+
+
+def synthese_depassements_par_region_2014_2020(df, categories_periode, region_col="Région"):
+    """synthese_depassements_par_region avec les règles 2014-2020 du décompte régional de la
+    page 5, pour son périmètre « Ensemble national » (#169) :
+
+    - les fonds hors plafond (REACT-EU, IEJ, FEAD) sont retirés, et leur nombre retourné
+      pour être dit à l'écran ;
+    - le plafond est la borne **haute** de la fourchette de la région
+      (plafond_intervalle_2014_2020) : une région mixte n'a pas un plafond mais deux, selon
+      l'ancienne région de l'opération, que le fichier ne porte pas. Compter sur la borne
+      basse signalerait des opérations peut-être régulières. La borne basse est gardée
+      (« Plafond bas ») pour afficher la fourchette.
+
+    `categories_periode` : categories_ue_2014_2020.json (région → catégorie de la période).
+    Retourne (synthèse, nb d'opérations hors plafond, régions sans plafond déterminable)."""
+    df_plafonnees, nb_hors_plafond = filtrer_fonds_plafonnes(df)
+    intervalles = {
+        region: plafond_intervalle_2014_2020(categories_periode.get(region)) for region in df_plafonnees[region_col].unique()
+    }
+    synthese = synthese_depassements_par_region(
+        df_plafonnees, {region: intervalle and intervalle[1] for region, intervalle in intervalles.items()}, region_col
+    )
+    synthese.insert(1, "Plafond bas", synthese["Région"].map(lambda region: intervalles[region][0]))
+    regions_sans_plafond = sorted(region for region, intervalle in intervalles.items() if intervalle is None)
+    return synthese, nb_hors_plafond, regions_sans_plafond
 
 
 def detect_incoherent_cofinancement(df, amount_col="Montant UE", depenses_col="Total des dépenses éligibles"):
