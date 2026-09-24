@@ -743,6 +743,51 @@ def operations_perimetre_2014_2020(perimetre, ops_synergie, ops_hors_synergie_pa
     return pd.concat([ops, ops_pon_fse_perimetre], ignore_index=True)
 
 
+def ventiler_par_region_d_execution(ops, montant_col=MONTANT_UE):
+    """Montant et nombre d'opérations par région d'exécution (`regions_modernes`), et nombre
+    d'opérations sans région — pour la ventilation régionale du PON FSE et de l'IEJ national,
+    rattachés au Volet national mais dont chaque opération porte sa région (#102).
+
+    Une opération multi-régions compte dans chacune. `count` ne compte que les montants
+    renseignés, un montant manquant vaut 0 dans la somme : comportement de la page avant
+    extraction (#157), conservé tel quel."""
+    par_region = (
+        # dropna=True : une liste vide ou absente explose en NaN, écarté ici et compté à part.
+        ops.explode("regions_modernes")
+        .groupby("regions_modernes", dropna=True)
+        .agg(montant_ue_total=(montant_col, lambda x: x.fillna(0).sum()), count=(montant_col, "count"))
+        .to_dict("index")
+    )
+    nb_sans_region = int(ops["regions_modernes"].apply(lambda r: not isinstance(r, list) or len(r) == 0).sum())
+    return par_region, nb_sans_region
+
+
+def taux_reference_react_eu(detail_programmes, cle_enveloppe, fonds_selectionnes):
+    """Part justifiée des maquettes REACT-EU (évaluation ANCT), par fonds : un taux de
+    référence indépendant des opérations Synergie (#96).
+
+    Filtré sur les fonds **sélectionnés** et non sur les fonds rapprochables : c'est pour le
+    FEDER REACT-EU fondu en métropole (MENTION_REACT_EU_FONDU) que la référence compte le
+    plus. `detail_programmes` : programme_detail_2014_2020.json ; un périmètre sans maquette
+    transcrite donne {}."""
+    brut = detail_programmes["react_eu"].get(cle_enveloppe, {})
+    justifie = detail_programmes["react_eu_justifie"].get(cle_enveloppe, {})
+    return {f: justifie[f] / brut[f] for f in brut if f in justifie and f in fonds_selectionnes}
+
+
+def regions_couvertes_par_programme(ops, table_reference):
+    """{libellé de programme: régions couvertes} pour le périmètre Interrégional.
+
+    D'abord la table de référence des cinq massifs et bassins (`regions_interregional` de
+    programme_detail_2014_2020.json) ; à défaut, l'union triée des `regions_modernes` des
+    opérations — cas d'une opération dont le champ région liste plusieurs régions sous un
+    autre programme (#71, #77 : même flag `is_interregional` pour deux causes)."""
+    par_operations = ops.groupby("Libellé Programme")["regions_modernes"].agg(
+        lambda listes: sorted({r for regions in listes for r in (regions or [])})
+    )
+    return {libelle: table_reference.get(libelle) or regions for libelle, regions in par_operations.items()}
+
+
 def enveloppes_ensemble_national_2014_2020(fonds_engages_par_perimetre, totaux_2014_2020):
     """Enveloppes programmées agrégées au national — jumeau Python de `v_enveloppes_2014_2020`,
     pour le pilotage du périmètre « Ensemble national » (arbitrage Phase 4, issue #121).

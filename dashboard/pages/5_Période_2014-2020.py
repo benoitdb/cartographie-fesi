@@ -25,12 +25,14 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from utils.analyses_controle import (
+    montant_col_config,
     render_coherence_montants,
     render_concentration_beneficiaires,
     render_dispersion,
     render_introduction_distribution,
     render_montants_atypiques,
     render_taux_cofinancement,
+    taux_col_config,
 )
 from utils.carte_nationale import DROM_COM, render_carte_nationale
 from utils.cofinancement import (
@@ -100,7 +102,10 @@ from utils.periodes import (
     normaliser_operations,
     operations_perimetre_2014_2020,
     pilotage_disponible,
+    regions_couvertes_par_programme,
     router_pon_fse,
+    taux_reference_react_eu,
+    ventiler_par_region_d_execution,
 )
 from utils.pilotage import (
     build_ranking_programme_vs_engage,
@@ -247,8 +252,6 @@ resume = {
     "montant_ue_moyen": montant_total_perimetre / count_perimetre if count_perimetre else 0,
 }
 
-montant_col_config = st.column_config.NumberColumn(format="%,d €")
-taux_col_config = st.column_config.NumberColumn(format="percent")
 
 
 def _fmt_millions(montant):
@@ -455,19 +458,9 @@ elif perimetre == INTERREGIONAL:
         "revient à chaque région qu'il couvre, une répartition inventée serait trompeuse."
     )
 
-    # Régions couvertes par programme : la table de référence pour les 5 massifs connus
-    # (montant groupé, jamais ventilé — cf. caption ci-dessus) ; à défaut, l'union des
-    # `regions_modernes` déjà posées par le pipeline sur les opérations elles-mêmes —
-    # cas d'une opération dont le champ région brut liste directement plusieurs régions,
-    # sous un programme qui n'est pas l'un des cinq massifs (issue #71/#77, même flag
-    # `is_interregional` pour deux causes différentes).
-    regions_par_operation = (
-        df_ops.groupby("Libellé Programme")["regions_modernes"]
-        .agg(lambda listes: sorted({r for regions in listes for r in (regions or [])}))
-    )
-
-    def _regions_couvertes(libelle):
-        return regions_par_programme.get(libelle) or regions_par_operation.get(libelle, [])
+    # Table de référence des massifs d'abord, régions portées par les opérations à défaut :
+    # voir `regions_couvertes_par_programme`. Montant groupé, jamais ventilé (légende ci-dessus).
+    regions_couvertes = regions_couvertes_par_programme(df_ops, regions_par_programme)
 
     df_programmes = (
         df_ops.groupby("Libellé Programme")
@@ -476,7 +469,7 @@ elif perimetre == INTERREGIONAL:
         .sort_values("Montant UE total", ascending=False)
     )
     df_programmes["Régions couvertes"] = df_programmes["Libellé Programme"].map(
-        lambda libelle: " · ".join(_regions_couvertes(libelle))
+        lambda libelle: " · ".join(regions_couvertes.get(libelle, []))
     )
     st.dataframe(
         df_programmes,
@@ -484,7 +477,7 @@ elif perimetre == INTERREGIONAL:
         width='stretch',
         column_config={
             **text_widths("Libellé Programme", "Régions couvertes"),
-            "Montant UE total": montant_col_config,
+            "Montant UE total": montant_col_config(),
         },
     )
 
@@ -841,19 +834,7 @@ with tab_ensemble:
             "par région — **sans taux de consommation**, faute d'enveloppe régionale à opposer."
         )
 
-        df_pon_exploded = ops_pon_fse_perimetre.explode("regions_modernes")
-        df_pon_with_region = df_pon_exploded[df_pon_exploded["regions_modernes"].notna()]
-        by_region_pon = (
-            df_pon_with_region.groupby("regions_modernes")
-            .agg(montant_ue_total=(MONTANT, lambda x: x.fillna(0).sum()), count=(MONTANT, "count"))
-            .to_dict("index")
-        )
-
-        ops_sans_region = int(
-            ops_pon_fse_perimetre["regions_modernes"].apply(
-                lambda r: not isinstance(r, list) or len(r) == 0
-            ).sum()
-        )
+        by_region_pon, ops_sans_region = ventiler_par_region_d_execution(ops_pon_fse_perimetre)
 
         if by_region_pon:
             geojson_pon = load_geojson()
@@ -957,12 +938,7 @@ with tab_pilotage:
             # explicite de fonds (`selected_fonds`) et non sur `fonds_rapprochables` : c'est
             # justement pour le FEDER REACT-EU fondu en métropole (MENTION_REACT_EU_FONDU,
             # absent de `part_react_eu` ci-dessus) que cette référence a le plus de valeur.
-            part_react_eu_justifie = detail_react_eu["react_eu_justifie"].get(cle_enveloppe, {})
-            taux_reference = {
-                f: part_react_eu_justifie[f] / part_react_eu_brut[f]
-                for f in part_react_eu_brut
-                if f in part_react_eu_justifie and f in selected_fonds
-            }
+            taux_reference = taux_reference_react_eu(detail_react_eu, cle_enveloppe, selected_fonds)
             if taux_reference:
                 detail_taux = ", ".join(f"{f} {t:.0%}" for f, t in sorted(taux_reference.items()))
                 st.caption(MENTION_REACT_EU_TAUX_REFERENCE.format(detail=detail_taux))
@@ -1142,9 +1118,9 @@ with tab_audit:
                 hide_index=True,
                 column_config={
                     **text_widths("Intitulé du projet", BENEFICIAIRE),
-                    "Total des dépenses éligibles": montant_col_config,
-                    MONTANT: montant_col_config,
-                    "Taux de cofinancement": taux_col_config,
+                    "Total des dépenses éligibles": montant_col_config(),
+                    MONTANT: montant_col_config(),
+                    "Taux de cofinancement": taux_col_config(),
                 },
             )
 
