@@ -1,0 +1,4 @@
+# Instance Dagster locale du spike #183. DAGSTER_HOME=orchestration/.
+concurrency:
+  pools:
+    default_limit: 1
