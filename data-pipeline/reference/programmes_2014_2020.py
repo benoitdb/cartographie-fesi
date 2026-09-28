@@ -53,7 +53,7 @@ from collections import namedtuple
 # nationaux FSE/IEJ). Ce rattachement ne peut pas se contrôler ici — cette table-là est
 # indexée par libellé Synergie, pas par CCI : il est éprouvé dans
 # tests/test_programmes_2014_2020.py contre un relevé indépendant, saisi à la main,
-# comme l'exige déjà le schéma de source (voir CLAUDE.md).
+# comme l'exige déjà le schéma de source (voir AGENTS.md).
 Programme = namedtuple("Programme", "cci nom region")
 
 # Une ligne de la table 1.6 : un programme, un fonds, le total sur la période et sa
