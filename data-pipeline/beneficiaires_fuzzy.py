@@ -1,7 +1,8 @@
 """
 Précalcule les rapprochements approchés (fuzzy) de noms de bénéficiaires entre régions
 disjointes (voir beneficiaire_matching.py et issue #23), à partir des opérations déjà
-harmonisées dans data.json.
+harmonisées dans data.parquet — et non data.json, qui ne porte plus les opérations
+depuis la PR #132 (lire l'ancien emplacement levait KeyError : issue #184).
 
 Écrit data/processed/beneficiaires_fuzzy.json : {nom_de_beneficiaire: cluster_id}, restreint
 aux noms dont le cluster contient au moins un autre nom. Lu par le dashboard
@@ -13,22 +14,26 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+import pandas as pd
 from beneficiaire_matching import build_fuzzy_clusters
 
-DATA_PATH = Path(__file__).parent.parent / "data" / "processed" / "data.json"
+DATA_PATH = Path(__file__).parent.parent / "data" / "processed" / "data.parquet"
 OUTPUT_PATH = Path(__file__).parent.parent / "data" / "processed" / "beneficiaires_fuzzy.json"
 
 
 def main():
-    with open(DATA_PATH, encoding="utf-8") as f:
-        data = json.load(f)
+    operations = pd.read_parquet(DATA_PATH, columns=["Nom du bénéficiaire", "regions_modernes"])
 
     nom_to_regions = defaultdict(set)
-    for op in data["operations"]:
-        nom = op.get("Nom du bénéficiaire")
-        if not nom:
+    for nom, regions in operations.itertuples(index=False):
+        # Un nom manquant revient du Parquet en NaN, que `not nom` laisse passer
+        # (NaN est vrai) jusqu'à un TypeError dans normalize_nom.
+        if pd.isna(nom) or not nom:
             continue
-        nom_to_regions[nom].update(op.get("regions_modernes") or [])
+        # `regions_modernes` revient du Parquet en numpy.ndarray : `regions or []`
+        # lèverait « truth value is ambiguous » sur un tableau non vide.
+        if regions is not None:
+            nom_to_regions[nom].update(regions)
 
     clusters = build_fuzzy_clusters(dict(nom_to_regions))
 
