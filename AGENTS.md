@@ -472,6 +472,18 @@ suggère une accusation. Un écart de cofinancement est un point à expliquer, p
 un délit. (Les identifiants internes type `render_region_audit` sont
 historiques et sans importance : c'est le texte affiché qui compte.)
 
+**Registre des financements** : parler comme les gestionnaires — « fonds »,
+« crédits », « montants », « financements ». Pas de terme familier pour désigner
+les financements publics, ni dans l'interface, ni dans les commentaires, issues,
+commits et docs. Quand on corrige une formulation de ce genre, le message de
+commit décrit le registre adopté sans citer le mot retiré.
+
+**Source de recoupement** : le portail open data de la Commission sur la
+politique de cohésion, page France
+([cohesiondata.ec.europa.eu/countries/FR](https://cohesiondata.ec.europa.eu/countries/FR)),
+pour vérifier un total national ou par fonds contre une source indépendante des
+fichiers ministériels. Pas encore exploité à ce jour.
+
 **Cohérence visuelle** : les couleurs par fonds et par objectif stratégique
 sont centralisées dans `utils/themes.py` (`FONDS_COLORS`,
 `OBJECTIF_STRATEGIQUE_COLORS`). Toujours les réutiliser, ne jamais laisser

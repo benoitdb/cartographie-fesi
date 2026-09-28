@@ -425,7 +425,7 @@ SOURCES = {
     },
     # Deuxième source hors-Synergie (issue #68) : liste régionale Nouvelle-
     # Aquitaine, l'autorité de gestion n'utilisant SynergieCDM que pour 25
-    # opérations à la marge (voir CLAUDE.md). Sortie séparée, comme le PON FSE :
+    # opérations à la marge (voir AGENTS.md). Sortie séparée, comme le PON FSE :
     # fusionner ces sources à `data_2014-2020.json` attend un consommateur
     # (#83) qui recalculerait les agrégats sur leur union.
     "2014-2020-nouvelle-aquitaine": {

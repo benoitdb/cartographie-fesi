@@ -122,7 +122,7 @@ COLONNES_PON_FSE_2014_2020 = [
 # Fichier Nouvelle-Aquitaine hors-Synergie (issue #68) : liste régionale publiée
 # par europe-en-nouvelle-aquitaine.eu, l'autorité de gestion n'utilisant pas
 # SynergieCDM pour l'essentiel de ses opérations (25 seulement y apparaissent,
-# à la marge — voir CLAUDE.md). Colonnes bilingues anglais/français, ce fichier
+# à la marge — voir AGENTS.md). Colonnes bilingues anglais/français, ce fichier
 # n'a ni numéro CCI, ni code postal, ni département, ni objectif stratégique.
 # Deux colonnes portent la même valeur (le code du programme de rattachement,
 # une des trois anciennes régions pré-2016) : `libelle_prog` et `territoire`

@@ -1,7 +1,7 @@
 """Le cycle de la donnée FESI décrit comme un graphe d'assets Dagster (spike #183).
 
 La question du spike : peut-on voir d'un seul tenant, du XLSX jusqu'à
-PostgreSQL, ce que le CLAUDE.md décrit aujourd'hui en listes de commandes ?
+PostgreSQL, ce que l'AGENTS.md décrit aujourd'hui en listes de commandes ?
 
 Règle du spike : **rien n'est réécrit**. Chaque asset appelle le script
 existant, dans un sous-process, exactement comme la commande documentée. Dagster
@@ -127,9 +127,8 @@ ingestion = [_asset_ingestion(source_id) for source_id in SOURCES]
 
 # ------------------------------------------------------------------ référentiels
 # Ces scripts ne lisent AUCUNE sortie d'ingest.py : ils dérivent de modules
-# committés dans data-pipeline/reference/. Le graphe le montre — le CLAUDE.md,
-# qui dit « ingest.py d'abord car les autres scripts en dépendent », ne vaut
-# que pour beneficiaires_fuzzy.py, déclaré à part plus bas.
+# committés dans data-pipeline/reference/. Le graphe l'a montré (spike #183) :
+# seul beneficiaires_fuzzy.py dépend d'ingest.py, et il est déclaré à part plus bas.
 
 REFERENTIELS = {
     "programme_totals": ["programme_totals.json", "programme_detail.json"],

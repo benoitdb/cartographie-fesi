@@ -12,7 +12,7 @@ voir :
 
 **Les valeurs attendues sont un relevé indépendant, saisi à la main depuis les PDF**, et
 non dérivées des tables testées : un test qui lit sa réponse dans ce qu'il contrôle ne
-peut pas voir une transcription fausse (constaté deux fois sur ce dépôt, cf. CLAUDE.md).
+peut pas voir une transcription fausse (constaté deux fois sur ce dépôt, cf. AGENTS.md).
 """
 
 import pytest
