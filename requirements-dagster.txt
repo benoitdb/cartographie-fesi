@@ -1,0 +1,10 @@
+# Dépendances du spike Dagster (issue #183) — un cinquième environnement,
+# VOLONTAIREMENT séparé de dashboard/requirements.txt pour la même raison que
+# dbt : Streamlit Cloud ne régénère aucune donnée, l'orchestration n'y a rien à
+# faire. Dagster exécute le pipeline et dbt dans son propre process : il lui
+# faut donc leurs dépendances, tirées ici plutôt que recopiées.
+-r data-pipeline/requirements.txt
+-r requirements-dbt.txt
+dagster
+dagster-webserver
+dagster-dbt

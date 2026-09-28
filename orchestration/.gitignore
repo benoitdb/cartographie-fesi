@@ -1,0 +1,10 @@
+# Instance Dagster locale (DAGSTER_HOME=orchestration/) : runs, logs, événements.
+venv/
+storage/
+logs/
+history/
+schedules/
+.telemetry/
+.nux/
+.logs_queue/
+__pycache__/
