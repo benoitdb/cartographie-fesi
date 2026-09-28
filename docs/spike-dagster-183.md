@@ -72,7 +72,8 @@ chaîne manuelle de référence, `beneficiaires_fuzzy.py` échoue : il lit
 `data["operations"]`, qui n'existe plus dans `data.json` depuis le passage au
 Parquet (PR #132). Rien ne le lance en CI. Au prochain millésime, les
 regroupements de bénéficiaires n'auraient pas été recalculés. Le script est
-volontairement absent du graphe tant que #184 est ouverte.
+volontairement absent de la première version du graphe ; ajouté après la
+fusion de la correction (PR #187).
 
 **2. Deux dépendances n'étaient écrites nulle part.**
 - Le staging DuckDB lit les Parquet par `read_parquet(...)` et non par
@@ -148,10 +149,13 @@ contredit l'intuition qu'un orchestrateur « accélère ».
 
 Conditions avant d'en faire la voie documentée de régénération :
 
-1. corriger #184, puis ajouter `beneficiaires_fuzzy` au graphe ;
-2. décider du raccord Parquet → staging : l'accepter en le documentant, ou
-   ouvrir le chantier `external_location` ;
-3. corriger la phrase fausse du `CLAUDE.md` sur l'ordre des scripts.
+1. corriger #184, puis ajouter `beneficiaires_fuzzy` au graphe — **fait** :
+   PR #187 fusionnée, asset `enrichissement/beneficiaires_fuzzy` ajouté (59
+   assets), sortie identique au fichier committé ;
+2. décider du raccord Parquet → staging — **arbitré** : chantier
+   `external_location` ouvert (#186) ;
+3. corriger la phrase fausse du `CLAUDE.md` sur l'ordre des scripts — **fait**,
+   sur cette branche.
 
 **Pour l'angle portfolio**, le résultat le plus parlant n'est pas le graphe, ce
 sont les découvertes : trois dépendances mal connues et un script cassé,

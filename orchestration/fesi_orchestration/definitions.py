@@ -129,7 +129,7 @@ ingestion = [_asset_ingestion(source_id) for source_id in SOURCES]
 # Ces scripts ne lisent AUCUNE sortie d'ingest.py : ils dérivent de modules
 # committés dans data-pipeline/reference/. Le graphe le montre — le CLAUDE.md,
 # qui dit « ingest.py d'abord car les autres scripts en dépendent », ne vaut
-# que pour beneficiaires_fuzzy.py (volontairement absent : cassé, issue #184).
+# que pour beneficiaires_fuzzy.py, déclaré à part plus bas.
 
 REFERENTIELS = {
     "programme_totals": ["programme_totals.json", "programme_detail.json"],
@@ -167,6 +167,20 @@ region_metadata = AssetSpec(
     group_name="referentiels",
     description="region_metadata.json — Wikidata, one-shot annuel, committé.",
 )
+
+
+# Le seul script qui lit une sortie d'ingest.py (data.parquet, 2021-2027) :
+# rapprochements approchés de bénéficiaires entre régions (issue #23). Absent de
+# la première version du spike parce que cassé (#184, corrigé par la PR #187).
+@asset(
+    key=AssetKey(["enrichissement", "beneficiaires_fuzzy"]),
+    deps=[_cle_parquet("2021-2027-conventionnees")],
+    group_name="ingestion",
+    description="`python beneficiaires_fuzzy.py` → beneficiaires_fuzzy.json",
+    kinds={"python", "json"},
+)
+def beneficiaires_fuzzy(context: AssetExecutionContext) -> None:
+    _lancer(context, ["beneficiaires_fuzzy.py"], PIPELINE)
 
 
 # --------------------------------------------------------------------- codegen
@@ -273,6 +287,7 @@ cycle_duckdb = define_asset_job(
     selection=[
         *(a.key for a in ingestion),
         *(a.key for a in referentiels),
+        beneficiaires_fuzzy.key,
         CLE_CODEGEN,
         *modeles_dbt.keys,
     ],
@@ -285,6 +300,7 @@ defs = Definitions(
         region_metadata,
         *ingestion,
         *referentiels,
+        beneficiaires_fuzzy,
         dbt_codegen,
         modeles_dbt,
         postgres_operations,
