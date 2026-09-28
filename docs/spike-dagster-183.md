@@ -99,6 +99,15 @@ le PID fautif. Dagster **localise** l'échec, et c'est un vrai gain par rapport
 à la chaîne manuelle, mais il **ne l'empêche pas** : le pool de concurrence ne
 sérialise que les runs qu'il lance lui-même.
 
+**5. Un graphe vide que les tests du spike ne pouvaient pas voir.** Première
+ouverture de l'interface : « Empty graph ». Sous `dagster dev`, et seulement
+là, `DbtProject.prepare_if_dev()` recompile le manifest avec une ressource dbt
+qu'il construit lui-même et qui cherche `dbt` dans le `PATH`, où le venv
+n'est pas. Tous les contrôles précédents chargeaient le module directement, et
+ce chemin-là n'est jamais emprunté. Corrigé en plaçant le `bin/` du venv en
+tête du `PATH` au chargement. Même leçon qu'au point 1 : un contrôle qui ne
+passe pas par le chemin réel de l'utilisateur ne l'atteste pas.
+
 ## La réserve qui reste, et elle est réelle
 
 **Les deux raccords manuels peuvent se périmer sans bruit.** Si `generer.py`

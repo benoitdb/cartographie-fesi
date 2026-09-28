@@ -13,6 +13,7 @@ Lancer (port 3001 : 3000 est Metabase, 8501/8502 les deux Streamlit) :
     cd orchestration && venv/bin/dagster dev -m fesi_orchestration.definitions -p 3001
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -200,6 +201,13 @@ def dbt_codegen(context: AssetExecutionContext) -> None:
 
 
 # -------------------------------------------------------------------------- dbt
+# `dagster dev` n'active pas le venv, et `prepare_if_dev()` construit SA PROPRE
+# ressource dbt, qui cherche `dbt` dans le PATH sans accepter de chemin : sans
+# cette ligne, le code se charge en Python mais l'interface affiche un graphe
+# vide (constaté pendant le spike — le chargement direct du module ne le voit pas).
+BIN_VENV = str(Path(sys.executable).parent)
+os.environ["PATH"] = BIN_VENV + os.pathsep + os.environ.get("PATH", "")
+
 projet_dbt = DbtProject(project_dir=DBT_DIR, profiles_dir=DBT_DIR, target="duckdb")
 projet_dbt.prepare_if_dev()
 
@@ -283,9 +291,6 @@ defs = Definitions(
     ],
     jobs=[cycle_duckdb],
     resources={
-        # Le binaire du venv, pas celui du PATH : dagster dev ne l'active pas.
-        "dbt": DbtCliResource(
-            project_dir=projet_dbt, dbt_executable=str(Path(sys.executable).parent / "dbt")
-        )
+        "dbt": DbtCliResource(project_dir=projet_dbt, dbt_executable=f"{BIN_VENV}/dbt")
     },
 )

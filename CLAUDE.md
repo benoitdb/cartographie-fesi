@@ -144,8 +144,12 @@ lit des Parquet committés.
   RAG UE ; 5432-5436 déjà pris sur le poste).
 - **Lancer le dashboard** : `./outils.sh dashboard` (depuis `dashboard/` en
   interne, les imports `utils.*` en dépendent).
-- **Régénérer les données** — depuis `data-pipeline/`, `ingest.py` d'abord car
-  les autres scripts en dépendent :
+- **Régénérer les données** — depuis `data-pipeline/`. Seul
+  `beneficiaires_fuzzy.py` lit une sortie d'`ingest.py` (`data.parquet`) et doit
+  passer après lui ; les six scripts de totaux dérivent de
+  `data-pipeline/reference/` et ne dépendent d'aucune ingestion (établi par le
+  graphe du spike Dagster, #183 — l'ancienne consigne « `ingest.py` d'abord car
+  les autres en dépendent » était fausse pour eux) :
   ```
   python ingest.py                        # XLSX 2021-2027 -> data.json
   python ingest.py 2014-2020-synergie     # XLSX Synergie  -> data_2014-2020.json
