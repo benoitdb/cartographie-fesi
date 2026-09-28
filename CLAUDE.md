@@ -117,12 +117,13 @@ renvoie vers `dashboard/requirements.txt` pour éviter la duplication.
 
 ## Commandes
 
-Quatre environnements, chacun avec son `requirements.txt` : `dashboard/venv/`
+Cinq environnements, chacun avec son `requirements.txt` : `dashboard/venv/`
 pour l'application, le pipeline (pandas, pyarrow, openpyxl, rapidfuzz), `venv/` à
-la racine pour les tests (`requirements-dev.txt`), et `dbt/venv/` pour la couche
-dbt (`requirements-dbt.txt`). **dbt ne doit jamais entrer dans
-`dashboard/requirements.txt`** : Streamlit Cloud ne régénère aucune donnée, il
-lit des Parquet committés.
+la racine pour les tests (`requirements-dev.txt`), `dbt/venv/` pour la couche
+dbt (`requirements-dbt.txt`), et `orchestration/venv/` pour Dagster
+(`requirements-dagster.txt`, qui tire le pipeline et dbt). **Ni dbt ni Dagster
+ne doivent jamais entrer dans `dashboard/requirements.txt`** : Streamlit Cloud
+ne régénère aucune donnée, il lit des Parquet committés.
 
 - **Outils locaux : un port fixe par outil, tous sur 127.0.0.1** (issue #188),
   lancés par `./outils.sh`, qui porte seul la table des ports :
@@ -324,6 +325,14 @@ lit des Parquet committés.
 - `dbt/` — la couche dbt (issue #135). `models/staging/` est **généré**, ne pas
   l'éditer à la main ; `models/marts/` est écrit à la main ; `generer.py` fait le
   pont avec le Python. `dbt/venv/`, `dbt/target/` et `dbt/logs/` sont gitignorés.
+- `orchestration/` — Dagster (spike #183, rapport `docs/spike-dagster-183.md`) :
+  **outil local** de visualisation et d'exécution du cycle XLSX → PostgreSQL,
+  sans planification ni CI. Chaque asset appelle le script existant, rien n'est
+  réécrit. **Deux liens y sont déclarés à la main** (Parquet → staging, JSON lus
+  par `generer.py`) : ajouter une source ou une lecture à `generer.py` sans les
+  reporter rend le graphe faux sans que rien ne rougisse (#186).
+  `verifier_fidelite.py` compare les contenus régénérés à `HEAD`. Le venv et
+  l'instance (`storage/`, historique des runs) sont gitignorés.
 - `docs/sources/` — notes de travail sur les documents de référence, non versionné
 
 ## Pièges non devinables
