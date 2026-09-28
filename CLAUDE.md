@@ -135,7 +135,7 @@ lit des Parquet committés.
   ```
   python ingest.py                        # XLSX 2021-2027 -> data.json
   python ingest.py 2014-2020-synergie     # XLSX Synergie  -> data_2014-2020.json
-  python beneficiaires_fuzzy.py           # lit data.json, écrit beneficiaires_fuzzy.json
+  python beneficiaires_fuzzy.py           # lit data.parquet, écrit beneficiaires_fuzzy.json
   python programme_totals.py              # Tableau 9B  -> programme_totals.json + programme_detail.json
   python dotations_os_totals.py           # Tableau 8   -> dotations_os.json
   python interreg_totals.py               # Tableau 10  -> interreg.json
