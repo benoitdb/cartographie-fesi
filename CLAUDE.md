@@ -124,12 +124,26 @@ dbt (`requirements-dbt.txt`). **dbt ne doit jamais entrer dans
 `dashboard/requirements.txt`** : Streamlit Cloud ne régénère aucune donnée, il
 lit des Parquet committés.
 
-- **Lancer le dashboard** (depuis `dashboard/`, les imports `utils.*` en
-  dépendent) :
+- **Outils locaux : un port fixe par outil, tous sur 127.0.0.1** (issue #188),
+  lancés par `./outils.sh`, qui porte seul la table des ports :
   ```
-  cd dashboard && venv/bin/streamlit run Accueil.py --server.port 8501
+  ./outils.sh ports       # table des ports, et ce qui écoute déjà
+  ./outils.sh dashboard   # 8501  Streamlit
+  ./outils.sh metabase    # 3000  Metabase + 5437 PostgreSQL (docker compose)
+  ./outils.sh dbt-docs    # 8081  graphe et documentation dbt
+  ./outils.sh duckdb-ui   # 4213  carnet SQL sur dbt/target/fesi.duckdb
+  ./outils.sh dagster     # 3001  graphe d'assets (spike #183)
   ```
-  (8502 est occupé par le projet Assistant RAG UE)
+  Le script **refuse un port déjà pris** plutôt que de laisser l'outil glisser
+  sur le suivant. **Ne jamais publier un port Docker sans `127.0.0.1:`** :
+  Docker ouvre alors toutes les interfaces en contournant le pare-feu, et la
+  base (mot de passe par défaut) devient joignable depuis le réseau local.
+  **Le carnet DuckDB tient le verrou du fichier** : tant qu'il est ouvert,
+  `dbt build` et Dagster échouent (constaté pendant #183).
+  Registre des ports tous projets : `../docs/ports-locaux.md` (8502 = Assistant
+  RAG UE ; 5432-5436 déjà pris sur le poste).
+- **Lancer le dashboard** : `./outils.sh dashboard` (depuis `dashboard/` en
+  interne, les imports `utils.*` en dépendent).
 - **Régénérer les données** — depuis `data-pipeline/`, `ingest.py` d'abord car
   les autres scripts en dépendent :
   ```
