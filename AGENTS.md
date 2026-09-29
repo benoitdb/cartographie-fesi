@@ -502,6 +502,27 @@ Toute modification touchant un calcul ou un affichage se vérifie donc toujours
 en lançant réellement l'application et en regardant le résultat. Ne pas
 annoncer qu'un changement fonctionne parce que la suite est verte.
 
+Ce **contrôle visuel**, le demander à l'utilisateur plutôt que de piloter un
+navigateur sans tête : les clés dynamiques des composants Streamlit rendent les
+sélecteurs fragiles et coûteux à mettre au point.
+
+Un **chiffre soumis à arbitrage** (issue, choix entre options) se calcule par le
+même chemin que l'écran — `operations_perimetre_2014_2020` sur les sources
+filtrées par les fonds du sélecteur — ou se lit dans un rendu `AppTest`, en
+disant sur quel périmètre il porte. Deux arbitrages ont été faussés par un
+calcul fait sur une seule source ou sans le filtre des fonds (#166, #169).
+
+**Refactoring d'affichage** : instantané `AppTest` avant/après sur les données
+réelles — texte, empreinte des DataFrame et des specs Plotly, clés de widgets —,
+lancé depuis `dashboard/`, une instance `AppTest` neuve par périmètre. Il prouve
+« mêmes données », pas la mise en page (le contrôle visuel reste nécessaire).
+Le déterminisme est établi, ne pas le recontrôler. Par défaut, un **échantillon
+qui passe par chaque chemin** (page 2014-2020 : Ensemble national, Volet
+national, Interrégional, une région Synergie, une région à fichier propre, un
+DROM avec PON FSE — 22 s) ; le balayage complet (26 rendus, ~100 s) seulement
+pour un changement de règle de routage ou de calcul. Pour un changement couvert
+par des tests unitaires, l'instantané ne vérifie que le câblage.
+
 Sur un changement touchant le pipeline, la vérification qui compte reste de
 **régénérer `data.json` et de le comparer au bit près** à une copie prise avant
 modification (`aggregates` et `operations`). Les tests couvrent désormais le
