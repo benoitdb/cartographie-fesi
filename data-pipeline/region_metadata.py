@@ -44,7 +44,7 @@ REGION_QID = {
 }
 
 SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
-USER_AGENT = "CartographieFESI/1.0 (dashboard FESI ; contact: benoit.dejeandelabatie@gmail.com)"
+USER_AGENT = "CartographieFESI/1.0 (+https://github.com/benoitdb/cartographie-fesi)"
 
 QUERY = """
 SELECT ?item ?pop ?popDate ?area ?capitalLabel WHERE {{
