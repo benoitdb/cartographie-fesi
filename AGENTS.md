@@ -106,12 +106,13 @@ mais **il n'est pas mort** : le dashboard lit ses fichiers géographiques
 (`frontend/public/geo/`). Ne pas supprimer ce dossier, et voir
 `frontend/public/geo/SOURCES.md` pour la provenance de chaque contour.
 
-**Déploiement Streamlit Community Cloud** (issue #119) : l'app est déployée sur
-[share.streamlit.io](https://share.streamlit.io) — repo `benoitdb/cartographie-fesi`,
-branche `main`, fichier `dashboard/Accueil.py`. Les 8 fichiers de données
-principaux (~120 Mo, open data) sont committés dans le repo pour que Streamlit
-Cloud les trouve directement. **Mise à jour des données** : quand un nouveau XLSX
-sort (~5×/an), régénérer les JSON localement, committer et pousser — Streamlit
+**Déploiement Streamlit Community Cloud** (issue #119) : l'app est en ligne sur
+[sid-fesi.streamlit.app](https://sid-fesi.streamlit.app/) — repo
+`benoitdb/cartographie-fesi`, branche `main`, fichier `dashboard/Accueil.py`. Les
+fichiers de données (JSON et Parquet, ~23 Mo, open data) sont committés dans le
+repo pour que Streamlit Cloud les trouve directement. **Mise à jour des
+données** : quand un nouveau XLSX sort (~5×/an), régénérer les fichiers
+localement, committer et pousser — Streamlit
 Cloud redéploie automatiquement sur push `main`. Le `requirements.txt` racine
 renvoie vers `dashboard/requirements.txt` pour éviter la duplication.
 
@@ -343,6 +344,16 @@ ne régénère aucune donnée, il lit des Parquet committés.
 - **Source du XLSX** :
   [europe-en-france.gouv.fr — liste des opérations FEDER/FSE+/FTJ 2021-2027](https://www.europe-en-france.gouv.fr/fr/ressources/liste-operations-feder-fse-ftj-2021-2027).
   Version utilisée : `20260316_liste_operations_conventionnees_FEDER_FSE_FTJ_0.xlsx`.
+- **`DataFrame.to_dict("records")` change les manquants en `NaN`, pas en
+  `None`** — et `NaN` est vrai en Python : `if x and x.startswith(...)` plante.
+  Garder par `isinstance(x, str)` toute valeur passée par une conversion
+  DataFrame → dicts, et tester par le même chemin que la page (les dicts bruts
+  de `data.json` ont `None`, eux).
+- **Nouveau chemin de données dans `data_loader.py`** : l'ajouter aussi au
+  `monkeypatch` de `donnees_fixture()` (`tests/test_dashboard_pages.py`). Sinon
+  la suite passe en local, où le vrai fichier traîne, et échoue en CI sur un
+  clone nu. Pour vérifier vraiment : déplacer le vrai fichier le temps de
+  relancer la suite.
 - **Le fichier est republié 5 fois par an, en « annule et remplace »** — nouveau
   nom de fichier daté à chaque fois. `ingest.py` retient désormais le millésime
   le plus récent de `data/raw/` et **affiche lequel** au démarrage
@@ -490,6 +501,31 @@ sont centralisées dans `utils/themes.py` (`FONDS_COLORS`,
 Plotly choisir ses couleurs par défaut — un même fonds doit avoir la même
 couleur sur toutes les pages.
 
+**Conventions d'interface** (établies en août, toujours en usage) :
+- widgets natifs Streamlit + Plotly seulement, **pas de CSS sur mesure** ;
+- encadré KPI = `st.container(border=True)` avec une ligne markdown
+  `**Libellé :** valeur`, pas `st.metric` (tronque, empile sur deux lignes) ;
+- **jamais d'agrégat entre fonds quand l'un peut dépasser 100 %** (FSE+) : le
+  dépassement masque le reste à engager des autres — détailler par fonds avant
+  de sommer (#6) ;
+- jauge par fonds = `build_fonds_mini_bar`, pas `st.progress`, qui plafonne à
+  100 % et cacherait un dépassement ;
+- petites cartes côte à côte (DROM-COM) : **une seule échelle de couleur**,
+  calculée sur l'ensemble — sinon un petit territoire paraît aussi financé
+  qu'une grande région ;
+- deux graphiques appariés sur la même grandeur : calculer une plage Y commune
+  et l'appliquer aux deux ;
+- champ de recherche sur une page qui porte des graphiques coûteux :
+  `st.fragment` avec une clé de widget propre à la dimension qui varie ;
+- `ProgressColumn` : garder `max_value` par `if len(df) else 1` (table vide) ;
+- découpage métier d'une page qui a son propre sélecteur : `st.tabs` dans la
+  page, pas une navigation entre pages.
+
+**Poste** : après une modification d'un module de `dashboard/utils/`, redémarrer
+complètement Streamlit — le rechargement à chaud ne suit que les scripts de page.
+Un `curl` qui rend 200 ne prouve pas que la page s'exécute (le script tourne sur
+le WebSocket) : c'est `AppTest` qui attrape l'exception.
+
 **Vérification** : le pipeline a des tests (harmonisation des régions,
 rapprochement des bénéficiaires, schéma du fichier source) — les lancer et les
 étendre.
@@ -499,8 +535,7 @@ rendent les 4 pages en headless via `streamlit.testing.v1.AppTest` et
 n'attrapent que l'exception — import cassé, colonne renommée, fichier manquant.
 **Ils ne disent rien de la justesse des chiffres ni de l'allure des pages.**
 Toute modification touchant un calcul ou un affichage se vérifie donc toujours
-en lançant réellement l'application et en regardant le résultat. Ne pas
-annoncer qu'un changement fonctionne parce que la suite est verte.
+en lançant réellement l'application et en regardant le résultat.
 
 Ce **contrôle visuel**, le demander à l'utilisateur plutôt que de piloter un
 navigateur sans tête : les clés dynamiques des composants Streamlit rendent les
@@ -529,13 +564,9 @@ modification (`aggregates` et `operations`). Les tests couvrent désormais le
 calcul d'agrégats, mais sur des cas construits : seule la régénération éprouve
 le pipeline sur les 16 625 opérations réelles.
 
-**GitHub issues — AI-driven dev, pas du vibe-coding** : toute limitation
-connue, gotcha, piste d'évolution ou choix technique non trivial pris de façon
-autonome est loggé comme issue sur `benoitdb/cartographie-fesi`, par défaut,
-sans attendre qu'on le demande. Objectif : que l'utilisateur reste le décideur
-capable d'expliquer et de ré-arbitrer un choix plus tard. Les issues servent
-aussi de backlog de pistes explorées et bloquées (source manquante, donnée
-absente) — les documenter comme telles plutôt que de les abandonner en silence.
+**Issues** : elles servent aussi de backlog de pistes explorées et bloquées
+(source manquante, donnée absente) — les documenter comme telles plutôt que de
+les abandonner en silence.
 
 **Couverture de test, état** : le pipeline est couvert sur ses points de
 rupture silencieuse — schéma du fichier source, harmonisation des régions,
@@ -565,3 +596,22 @@ Restent hors couverture, sciemment : la mise en forme des figures (couleurs,
 libellés, survols) hors des cas où elle porte un calcul, et les fonctions de
 `stats.py` purement graphiques (histogramme, boîte à moustaches, nuages,
 Pareto, Lorenz) — leur justesse se voit à l'écran, pas dans une assertion.
+
+## Pistes écartées
+
+Arbitrées ; ne pas les reproposer sans élément nouveau.
+
+- **Taux REACT-EU du rapport ANCT comme référence par région** (#96) : déclinée,
+  la règle de fusion en place et documentée à l'écran suffit.
+- **Normaliser `NUMCCI` à l'écriture du JSON** (#91, point 1) : reporté tant
+  qu'aucun lecteur ne l'utilise — normaliser sans consommateur serait une
+  abstraction prématurée. Aucune autre colonne ne diverge entre périodes au-delà
+  de ce qui est connu.
+- **Unifier carte, classement et KPI dans `montant_par_region()`** (#110) : non
+  nécessaire tant que les trois affichages restent cohérents ; à reprendre si une
+  4ᵉ région hors Synergie apparaît.
+- **Fond de carte terre/océan** (`showland`, `showocean`) sur les cartes DROM-COM :
+  essayé et rejeté, contour transparent seul.
+- **Détection des valeurs atypiques au-delà de l'IQR par fonds** (IQR
+  log-transformé, boîte à moustaches ajustée par le medcouple) : en attente d'un
+  retour des opérateurs métier ; l'analyse est faite, la reprendre sans refaire.
