@@ -19,7 +19,13 @@ from utils.departments import (
 )
 from utils.detail_departement import render_detail_departement
 from utils.dromcom_localisation import build_bubbles_localisation
-from utils.filters import FONDS_OPTIONS, render_fonds_filter, summarize_ops
+from utils.filters import (
+    FONDS_OPTIONS,
+    MAX_RECHERCHE_PROJET_CHARS,
+    filtrer_liste_projets,
+    render_fonds_filter,
+    summarize_ops,
+)
 from utils.millesime import render_millesime
 from utils.pilotage import build_ranking_programme_vs_engage, build_trajectoire, render_kpi_pilotage
 from utils.plot_style import MAP_CONFIG
@@ -47,7 +53,9 @@ def render_liste_complete_projets(df_region_ops, region):
     st.subheader("Liste complète des projets")
 
     recherche_projet = st.text_input(
-        "Rechercher (intitulé du projet ou bénéficiaire)", key=f"recherche_projets_liste_complete_{region}"
+        "Rechercher (intitulé du projet ou bénéficiaire)",
+        key=f"recherche_projets_liste_complete_{region}",
+        max_chars=MAX_RECHERCHE_PROJET_CHARS,
     )
     df_projets = df_region_ops[
         [
@@ -60,10 +68,7 @@ def render_liste_complete_projets(df_region_ops, region):
         ]
     ].sort_values("Montant UE", ascending=False)
     if recherche_projet:
-        masque_recherche = df_projets["Intitulé du projet"].str.contains(
-            recherche_projet, case=False, na=False
-        ) | df_projets["Nom du bénéficiaire"].str.contains(recherche_projet, case=False, na=False)
-        df_projets = df_projets[masque_recherche]
+        df_projets = filtrer_liste_projets(df_projets, recherche_projet)
     st.caption(f"{len(df_projets):,}".replace(",", " ") + f" / {len(df_region_ops):,}".replace(",", " ") + " projet(s).")
 
     st.dataframe(

@@ -2,6 +2,19 @@ import streamlit as st
 
 FONDS_OPTIONS = ["FEDER", "FSE+", "FTJ"]
 
+MAX_RECHERCHE_PROJET_CHARS = 200
+
+
+def filtrer_liste_projets(df, recherche):
+    """Filtre les projets par texte littéral dans leur intitulé ou leur bénéficiaire."""
+    recherche = recherche[:MAX_RECHERCHE_PROJET_CHARS]
+    masque_recherche = df["Intitulé du projet"].str.contains(
+        recherche, case=False, regex=False, na=False
+    ) | df["Nom du bénéficiaire"].str.contains(recherche, case=False, regex=False, na=False)
+    return df[masque_recherche]
+
+
+
 
 def render_fonds_filter(options=None, key="filtre_fonds"):
     """Widget sidebar Fonds, partagé entre les pages via une key commune (state préservé
