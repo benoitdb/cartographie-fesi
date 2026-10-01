@@ -50,22 +50,26 @@ SOURCE_2021_2027 = "2021-2027-conventionnees"
 # 0 % sur les cinq autres). C'est ce qui borne la trajectoire de la période —
 # voir la carte `pilotage_trajectoire_2014_2020`.
 SOURCE_SYNERGIE_2014_2020 = "2014-2020-synergie"
+GEOJSON_REVISION = "61829816a1733cbdecc452ef29b17e0f1fa43c78"
 GEOJSON_METROPOLE_URL = (
-    "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/"
+    "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/"
+    f"{GEOJSON_REVISION}/"
     "frontend/public/geo/regions-metropole.geojson"
 )
 GEOJSON_DROMCOM_URL = (
-    "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/"
+    "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/"
+    f"{GEOJSON_REVISION}/"
     "frontend/public/geo/regions-dromcom.geojson"
 )
 
 env = {}
 env_path = SCRIPT_DIR / ".env"
-for line in env_path.read_text().splitlines():
-    line = line.strip()
-    if line and not line.startswith("#") and "=" in line:
-        k, v = line.split("=", 1)
-        env[k] = v
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            env[k] = v
 
 FONDS_2021_2027 = ["FEDER", "FSE+", "FTJ"]
 

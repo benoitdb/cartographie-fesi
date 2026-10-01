@@ -2,6 +2,10 @@
 
 - `regions-metropole.geojson`, `departements.geojson` : contours IGN (licence Etalab Open License),
   via le dépôt open source [france-geojson](https://github.com/gregoiredavid/france-geojson).
+- Le provisionnement Metabase référence les deux contours régionaux à la révision Git
+  `61829816a1733cbdecc452ef29b17e0f1fa43c78` de ce dépôt, et non à une branche : l'URL
+  récupérée reste ainsi identique lors d'une exécution ultérieure. Toute mise à jour des
+  contours doit épingler une nouvelle révision dans `metabase/setup_metabase.py`.
 - `regions-dromcom.geojson` : Guadeloupe, Martinique, Guyane, La Réunion, Mayotte — même source
   `france-geojson` (`regions.geojson`), même précision/format que `regions-metropole.geojson`.
   Saint-Martin (collectivité d'outre-mer, pas une région — absente des découpages INSEE/IGN
