@@ -10,7 +10,6 @@ vue.
 """
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -24,23 +23,8 @@ DATA_DIR = SCRIPT_DIR.parent / "data" / "processed"
 PIPELINE_DIR = SCRIPT_DIR.parent / "data-pipeline"
 sys.path.insert(0, str(PIPELINE_DIR))
 
+import configuration  # noqa: E402
 import sources as sources_module  # noqa: E402
-
-env_path = SCRIPT_DIR / ".env"
-if env_path.exists():
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
-
-DB_PARAMS = dict(
-    host="localhost",
-    port=int(os.environ.get("POSTGRES_PORT", 5437)),
-    dbname=os.environ.get("POSTGRES_DB", "fesi"),
-    user=os.environ.get("POSTGRES_USER", "fesi"),
-    password=os.environ.get("POSTGRES_PASSWORD", "fesi_local"),
-)
 
 RELATIVE_TOLERANCE = 1e-6  # ordre de sommation différent (pandas pairwise vs SQL
 # séquentiel) sur le même flottant source : jamais plus qu'un artefact de
@@ -168,7 +152,7 @@ def check_by_objectif_strategique(cur, source_id, agg_by_objectif):
 
 
 def main():
-    conn = psycopg2.connect(**DB_PARAMS)
+    conn = psycopg2.connect(**configuration.connexion_fesi("reader"))
     cur = conn.cursor()
 
     total_errors = 0

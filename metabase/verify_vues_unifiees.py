@@ -26,7 +26,6 @@ Usage : metabase/venv/bin/python metabase/verify_vues_unifiees.py
 """
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -37,19 +36,9 @@ sys.path.insert(0, str(DASHBOARD_DIR))
 
 # La règle de plafond n'est pas retranscrite ici : elle est importée de
 # Streamlit, comme load_data.py le fait pour la remplir (contrôle 8).
-from utils.cofinancement import plafond_categorie  # noqa: E402
+import configuration  # noqa: E402
 
-env = {}
-_env_path = SCRIPT_DIR / ".env"
-if _env_path.exists():
-    for _line in _env_path.read_text().splitlines():
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _v = _line.split("=", 1)
-            env[_k] = _v
-for _k in ("POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_PORT"):
-    if _k not in env and _k in os.environ:
-        env[_k] = os.environ[_k]
+from utils.cofinancement import plafond_categorie  # noqa: E402
 
 # Import tardif, comme load_data.py : le module reste importable sans base.
 try:
@@ -59,13 +48,7 @@ except ImportError:
 
 
 def connect():
-    return psycopg2.connect(
-        host="localhost",
-        port=int(env.get("POSTGRES_PORT", 5437)),
-        dbname=env.get("POSTGRES_DB", "fesi"),
-        user=env.get("POSTGRES_USER", "fesi"),
-        password=env.get("POSTGRES_PASSWORD", "fesi_local"),
-    )
+    return psycopg2.connect(**configuration.connexion_fesi("reader"))
 
 
 def fetch(cur, sql):
