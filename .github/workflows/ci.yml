@@ -68,6 +68,12 @@ jobs:
       POSTGRES_USER: fesi
       POSTGRES_PASSWORD: fesi_local
       POSTGRES_PORT: "5432"
+      METABASE_APP_USER: metabase_app_ci
+      METABASE_APP_PASSWORD: metabase_app_ci
+      FESI_LOADER_USER: fesi_loader_ci
+      FESI_LOADER_PASSWORD: fesi_loader_ci
+      FESI_READER_USER: fesi_reader_ci
+      FESI_READER_PASSWORD: fesi_reader_ci
     steps:
       - uses: actions/checkout@v4
 
@@ -86,6 +92,13 @@ jobs:
           for f in metabase/init/*.sql; do
             psql -h localhost -U fesi -d fesi -f "$f"
           done
+        env:
+          PGPASSWORD: fesi_local
+
+      - name: Provisionner les rôles techniques
+        run: |
+          createdb -h localhost -U "$POSTGRES_USER" metabase
+          python metabase/provision_roles.py
         env:
           PGPASSWORD: fesi_local
 
