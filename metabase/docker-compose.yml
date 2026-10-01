@@ -25,8 +25,8 @@ services:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabase
       MB_DB_PORT: 5432
-      MB_DB_USER: ${POSTGRES_USER}
-      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_USER: ${METABASE_APP_USER}
+      MB_DB_PASS: ${METABASE_APP_PASSWORD}
       MB_DB_HOST: postgres
     ports:
       - "127.0.0.1:3000:3000"

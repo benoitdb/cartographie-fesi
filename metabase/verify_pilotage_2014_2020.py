@@ -19,7 +19,6 @@ des règles de fusion côté dashboard.
 """
 
 import json
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -33,6 +32,7 @@ PIPELINE_DIR = SCRIPT_DIR.parent / "data-pipeline"
 sys.path.insert(0, str(DASHBOARD_DIR))
 sys.path.insert(0, str(PIPELINE_DIR))
 
+import configuration  # noqa: E402
 import schema_source  # noqa: E402
 import sources as sources_module  # noqa: E402
 
@@ -47,22 +47,6 @@ from utils.periodes import (  # noqa: E402
     normaliser_fichiers_hors_synergie,
     normaliser_operations,
     operations_perimetre_2014_2020,
-)
-
-env_path = SCRIPT_DIR / ".env"
-if env_path.exists():
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
-
-DB_PARAMS = dict(
-    host="localhost",
-    port=int(os.environ.get("POSTGRES_PORT", 5437)),
-    dbname=os.environ.get("POSTGRES_DB", "fesi"),
-    user=os.environ.get("POSTGRES_USER", "fesi"),
-    password=os.environ.get("POSTGRES_PASSWORD", "fesi_local"),
 )
 
 # Même tolérance et même raison qu'en Phase 0 (verify_aggregates.py) : ordre de
@@ -300,7 +284,7 @@ def main():
     except ImportError:
         sys.exit("psycopg2 requis : metabase/venv/bin/pip install psycopg2-binary")
 
-    conn = psycopg2.connect(**DB_PARAMS)
+    conn = psycopg2.connect(**configuration.connexion_fesi("reader"))
     cur = conn.cursor()
 
     engage = engage_python()
