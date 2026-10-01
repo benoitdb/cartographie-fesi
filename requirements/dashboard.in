@@ -1,4 +1,6 @@
-# Dépendances directes du dashboard Streamlit.
+# Dépendances directes du dashboard Streamlit. Lockfile : requirements.txt à la
+# racine, le fichier que Streamlit Community Cloud installe (issue #119).
+# Ni dbt ni Dagster ici : Streamlit Cloud ne régénère aucune donnée.
 streamlit>=1.38.0
 plotly>=5.24.0
 pandas>=2.0.0

@@ -16,9 +16,9 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -51,7 +51,10 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        # Même image et même digest que metabase/docker-compose.yml (ADR 001).
+        # Dependabot ne suit pas les images de service d'un workflow : ce digest
+        # se met à jour à la main, en même temps que celui du compose.
+        image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
         env:
           POSTGRES_DB: fesi
           POSTGRES_USER: fesi
@@ -75,17 +78,17 @@ jobs:
       FESI_READER_USER: fesi_reader_ci
       FESI_READER_PASSWORD: fesi_reader_ci
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
 
+      # psycopg2 est dans requirements-dev.txt : verrouillé et hashé comme le
+      # reste (ADR 001).
       - name: Installer les dépendances
-        run: |
-          pip install -r requirements-dev.txt
-          pip install psycopg2-binary
+        run: pip install -r requirements-dev.txt
 
       - name: Appliquer le schéma et les vues SQL
         run: |
@@ -132,9 +135,9 @@ jobs:
   equivalence-dbt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip

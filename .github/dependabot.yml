@@ -1,5 +1,7 @@
+# Mises à jour hebdomadaires, chacune en PR soumise à la CI (ADR 001).
 version: 2
 updates:
+  # Lockfiles pip-compile : sources dans requirements/*.in.
   - package-ecosystem: pip
     directory: "/"
     schedule:
@@ -8,7 +10,9 @@ updates:
     directory: "/frontend"
     schedule:
       interval: weekly
-  - package-ecosystem: docker
+  # `docker` ne lit que les Dockerfile, et le dépôt n'en a aucun : c'est
+  # l'écosystème `docker-compose` qui suit les images de metabase/.
+  - package-ecosystem: docker-compose
     directory: "/metabase"
     schedule:
       interval: weekly

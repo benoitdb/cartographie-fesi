@@ -1,5 +1,12 @@
-# Environnement de test : dashboard et pipeline sont tous deux exercés.
+# Environnement de test, à la racine du dépôt : les tests couvrent le pipeline ET
+# le dashboard (streamlit est nécessaire aux tests de fumée des pages,
+# streamlit.testing.v1.AppTest). Lockfile : requirements-dev.txt.
 -r dashboard.in
 -r pipeline.in
 pytest>=9.0
+# Épinglé : la CI et le poste local doivent signaler les mêmes écarts de lint.
 ruff==0.16.3
+# Pilote PostgreSQL des scripts metabase/ (chargement, rôles, vérifications) :
+# le job CI verify-metabase en a besoin, et test_metabase_load_data.py est sauté
+# sans lui. Même contrainte que dans dbt.in.
+psycopg2-binary~=2.9

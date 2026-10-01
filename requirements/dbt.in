@@ -1,7 +1,14 @@
-# Environnement dbt, volontairement séparé du dashboard Streamlit.
+# Dépendances de la couche dbt (issue #135) — VOLONTAIREMENT séparées du
+# dashboard : dbt ne doit jamais partir sur Streamlit Cloud, qui ne régénère
+# aucune donnée (les Parquet sont committés). Lockfile : requirements-dbt.txt.
+# pandas et pyarrow sont déclarés ICI, explicitement, et non hérités du
+# pipeline : `generer.py` lit les Parquet pour apparier les libellés réels, et
+# `verifier_equivalence.py` rejoue `calculer_agregats` dessus.
 pandas>=2.0.0
 pyarrow>=15.0.0
 dbt-core~=1.9
 dbt-duckdb~=1.9
 dbt-postgres~=1.9
+# Recoupement contre les vues PostgreSQL (verifier_vues_postgres.py). Pas
+# nécessaire au job CI, qui ne cible que DuckDB.
 psycopg2-binary~=2.9
