@@ -93,3 +93,6 @@ dbt/venv/
 dbt/target/
 dbt/logs/
 dbt/.user.yml
+
+# Rapports d'audit locaux : documents de travail non publiables.
+docs/audits/
