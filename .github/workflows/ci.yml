@@ -97,7 +97,6 @@ jobs:
 
       - name: Provisionner les rôles techniques
         run: |
-          createdb -h localhost -U "$POSTGRES_USER" metabase
           python metabase/provision_roles.py
         env:
           PGPASSWORD: fesi_local
