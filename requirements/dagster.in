@@ -1,0 +1,6 @@
+# Environnement local d'orchestration : il réunit le pipeline et dbt.
+-r pipeline.in
+-r dbt.in
+dagster
+dagster-webserver
+dagster-dbt

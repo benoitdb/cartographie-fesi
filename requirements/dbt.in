@@ -1,0 +1,7 @@
+# Environnement dbt, volontairement séparé du dashboard Streamlit.
+pandas>=2.0.0
+pyarrow>=15.0.0
+dbt-core~=1.9
+dbt-duckdb~=1.9
+dbt-postgres~=1.9
+psycopg2-binary~=2.9

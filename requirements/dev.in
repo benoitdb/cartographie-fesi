@@ -1,0 +1,5 @@
+# Environnement de test : dashboard et pipeline sont tous deux exercés.
+-r dashboard.in
+-r pipeline.in
+pytest>=9.0
+ruff==0.16.3

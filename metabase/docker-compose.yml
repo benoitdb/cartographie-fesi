@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -12,7 +12,7 @@ services:
       - "127.0.0.1:5437:5432"
 
   geojson:
-    image: python:3.11-slim
+    image: python:3.11-slim@sha256:e41613d42d4891e4930f79523f93f81bbc7632584ec65e36ab055f41a800b41e
     command: python -m http.server 80 --directory /geo
     volumes:
       - ../frontend/public/geo:/geo:ro
@@ -20,7 +20,7 @@ services:
       - "80"
 
   metabase:
-    image: metabase/metabase:latest
+    image: metabase/metabase:latest@sha256:7324f83713df9851c6c7b6c8247098de14c0924fc3b868202f886df4877cd4ff
     environment:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabase

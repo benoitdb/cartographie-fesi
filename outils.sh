@@ -53,6 +53,14 @@ port_libre() {
 }
 
 case "${1:-}" in
+    verrouiller-dependances)
+        venv/bin/pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file requirements/pip-tools.txt requirements/pip-tools.in
+        venv/bin/pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file requirements.txt requirements/dashboard.in
+        venv/bin/pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file data-pipeline/requirements.txt requirements/pipeline.in
+        venv/bin/pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file requirements-dev.txt requirements/dev.in
+        venv/bin/pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file requirements-dbt.txt requirements/dbt.in
+        venv/bin/pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file requirements-dagster.txt requirements/dagster.in
+        ;;
     ports)
         ports
         ;;
