@@ -12,7 +12,7 @@ services:
       - "127.0.0.1:5437:5432"
 
   geojson:
-    image: python:3.11-slim@sha256:e41613d42d4891e4930f79523f93f81bbc7632584ec65e36ab055f41a800b41e
+    image: python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
     command: python -m http.server 80 --directory /geo
     volumes:
       - ../frontend/public/geo:/geo:ro
