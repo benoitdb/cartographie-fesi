@@ -1,4 +1,5 @@
 # Mises à jour hebdomadaires, chacune en PR soumise à la CI (ADR 001).
+# Tri des PR : routine décrite dans AGENTS.md (issue #224).
 version: 2
 updates:
   # Lockfiles pip-compile : sources dans requirements/*.in.
@@ -6,16 +7,22 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-  - package-ecosystem: npm
-    directory: "/frontend"
-    schedule:
-      interval: weekly
+  # Pas d'écosystème npm : le prototype frontend/ n'est ni exécuté ni testé en
+  # CI, ses PR ne seraient validées par rien. À rétablir si #198 le conserve.
+  #
   # `docker` ne lit que les Dockerfile, et le dépôt n'en a aucun : c'est
   # l'écosystème `docker-compose` qui suit les images de metabase/.
   - package-ecosystem: docker-compose
     directory: "/metabase"
     schedule:
       interval: weekly
+    ignore:
+      # Une version majeure de PostgreSQL change le format des fichiers : le
+      # volume metabase_pgdata deviendrait illisible sans export et
+      # restauration. Aucun job CI n'utilise le compose, donc rien ne
+      # l'attraperait. Les mineures (correctifs de sécurité) passent. #224
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
