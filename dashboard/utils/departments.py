@@ -11,7 +11,7 @@ import plotly.express as px
 from utils.plot_style import disable_map_interaction, style_hover, style_map_background
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEPARTEMENTS_GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "departements.geojson"
+DEPARTEMENTS_GEOJSON_PATH = REPO_ROOT / "data" / "geo" / "departements.geojson"
 
 # Alias pour variantes/coquilles observées dans le champ "Département de l'opération"
 NAME_ALIASES = {

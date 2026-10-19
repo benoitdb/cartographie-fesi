@@ -7,9 +7,8 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-# `dashboard/venv` : environnement virtuel. `frontend` : prototype React abandonné
-# (mais pas mort, cf. CLAUDE.md — le dashboard lit ses fichiers géographiques).
-exclude = ["dashboard/venv", "frontend"]
+# `dashboard/venv` : environnement virtuel.
+exclude = ["dashboard/venv"]
 
 [tool.ruff.lint]
 # Défaut de ruff (E4/E7/E9 + F) plus I (tri des imports), UP (modernisation),

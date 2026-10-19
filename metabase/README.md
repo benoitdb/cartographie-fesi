@@ -373,9 +373,11 @@ démarrée, appliquer un nouveau fichier à la main :
 
 Metabase bloque les URL internes (protection SSRF) — les hostnames Docker
 et les IP privées ne passent pas. `setup_metabase.py` enregistre la carte
-métropole (`fesi_metropole`) via son URL GitHub Raw publique
-(`https://raw.githubusercontent.com/benoitdb/cartographie-fesi/main/
-frontend/public/geo/regions-metropole.geojson`), identifiant de région `nom`
+métropole (`fesi_metropole`) via son URL GitHub Raw publique, épinglée sur
+une révision git (`GEOJSON_REVISION`, #203) : le chemin
+`frontend/public/geo/regions-metropole.geojson` y reste valide même si le
+fichier vit aujourd'hui dans `data/geo/` (#198), une révision ne changeant
+jamais. Identifiant de région `nom`
 des deux côtés (correspond exactement à la colonne `region` en base).
 
 Seule la carte métropole est en scope Phase 1 (cf. issue #121). Les cartes

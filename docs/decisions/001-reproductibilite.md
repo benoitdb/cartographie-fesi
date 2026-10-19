@@ -95,3 +95,9 @@ Après le premier passage de Dependabot (#211) :
   format des fichiers de données, et la CI, qui n'utilise pas le compose, ne
   l'attraperait pas. Une majeure se décide et se migre à la main.
 - **Tri hebdomadaire des PR** : routine décrite dans `AGENTS.md`.
+
+## Amendement du 2026-10-19 — issue #198
+
+Le prototype `frontend/` est retiré du dépôt (archive : tag `archive/frontend-react`) ;
+ses contours géographiques vivent dans `data/geo/`. Le dépôt n'a plus de dépendance
+npm : l'écosystème npm reste hors de Dependabot, définitivement.
