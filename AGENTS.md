@@ -113,18 +113,23 @@ fichiers de données (JSON et Parquet, ~23 Mo, open data) sont committés dans l
 repo pour que Streamlit Cloud les trouve directement. **Mise à jour des
 données** : quand un nouveau XLSX sort (~5×/an), régénérer les fichiers
 localement, committer et pousser — Streamlit
-Cloud redéploie automatiquement sur push `main`. Le `requirements.txt` racine
-renvoie vers `dashboard/requirements.txt` pour éviter la duplication.
+Cloud redéploie automatiquement sur push `main`. Il installe le `requirements.txt`
+racine, qui est le lockfile du dashboard (ADR 001).
 
 ## Commandes
 
-Cinq environnements, chacun avec son `requirements.txt` : `dashboard/venv/`
-pour l'application, le pipeline (pandas, pyarrow, openpyxl, rapidfuzz), `venv/` à
-la racine pour les tests (`requirements-dev.txt`), `dbt/venv/` pour la couche
-dbt (`requirements-dbt.txt`), et `orchestration/venv/` pour Dagster
-(`requirements-dagster.txt`, qui tire le pipeline et dbt). **Ni dbt ni Dagster
-ne doivent jamais entrer dans `dashboard/requirements.txt`** : Streamlit Cloud
-ne régénère aucune donnée, il lit des Parquet committés.
+Cinq environnements, chacun avec son lockfile : `dashboard/venv/` pour
+l'application (`requirements.txt` à la racine), le pipeline
+(`data-pipeline/requirements.txt`), `venv/` à la racine pour les tests
+(`requirements-dev.txt`), `dbt/venv/` pour la couche dbt
+(`requirements-dbt.txt`), et `orchestration/venv/` pour Dagster
+(`requirements-dagster.txt`, qui tire le pipeline et dbt). **Ces fichiers sont
+générés, épinglés et hashés : ne jamais les éditer à la main.** Les dépendances
+directes se déclarent dans `requirements/*.in`, puis
+`./outils.sh verrouiller-dependances` (ADR 001,
+`docs/decisions/001-reproductibilite.md`). **Ni dbt ni Dagster ne doivent
+jamais entrer dans `requirements/dashboard.in`** : Streamlit Cloud ne régénère
+aucune donnée, il lit des Parquet committés.
 
 - **Outils locaux : un port fixe par outil, tous sur 127.0.0.1** (issue #188),
   lancés par `./outils.sh`, qui porte seul la table des ports :
@@ -247,9 +252,9 @@ ne régénère aucune donnée, il lit des Parquet committés.
   pipeline éprouvent la logique sur des cas construits ; ceux du dashboard
   lisent les fixtures committées dans `tests/fixtures/` (**une par période** —
   voir son README, **à régénérer quand le schéma d'un `data*.json` change**).
-  Environnement de test à la racine : `requirements-dev.txt`, qui tire
-  maintenant *aussi* `dashboard/requirements.txt` (streamlit est nécessaire aux
-  tests de fumée).
+  Environnement de test à la racine : `requirements-dev.txt`, compilé depuis
+  `requirements/dev.in`, qui tire le pipeline *et* le dashboard (streamlit est
+  nécessaire aux tests de fumée) ainsi que psycopg2 (scripts `metabase/`).
 - **Lint** : `ruff check .` (config dans `pyproject.toml`), lancé en CI sur
   chaque PR. **`ruff format` n'est volontairement pas activé** : reformater 29
   fichiers sur 38 (~3 300 lignes) sur une couche dashboard sans tests produirait

@@ -1,0 +1,9 @@
+# Dépendances de l'orchestration Dagster (issue #183), séparées du dashboard
+# pour la même raison que dbt. Dagster exécute le pipeline et dbt dans son
+# propre process : il lui faut leurs dépendances, tirées ici plutôt que
+# recopiées. Lockfile : requirements-dagster.txt.
+-r pipeline.in
+-r dbt.in
+dagster
+dagster-webserver
+dagster-dbt
