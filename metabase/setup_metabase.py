@@ -50,6 +50,9 @@ SOURCE_2021_2027 = "2021-2027-conventionnees"
 # 0 % sur les cinq autres). C'est ce qui borne la trajectoire de la période —
 # voir la carte `pilotage_trajectoire_2014_2020`.
 SOURCE_SYNERGIE_2014_2020 = "2014-2020-synergie"
+# Le chemin `frontend/public/geo/` ci-dessous est celui de CETTE révision : les
+# fichiers vivent aujourd'hui dans `data/geo/` (#198), mais une révision ne change
+# jamais, donc l'URL reste valide. Changer de révision = changer de chemin.
 GEOJSON_REVISION = "61829816a1733cbdecc452ef29b17e0f1fa43c78"
 GEOJSON_METROPOLE_URL = (
     "https://raw.githubusercontent.com/benoitdb/cartographie-fesi/"

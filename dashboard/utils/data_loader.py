@@ -19,9 +19,11 @@ DATA_2014_2020_BRETAGNE_JSON_PATH = PROCESSED_DIR / "data_2014-2020_bretagne_off
 DATA_2014_2020_BRETAGNE_PARQUET_PATH = PROCESSED_DIR / "data_2014-2020_bretagne_officiel.parquet"
 DATA_2014_2020_PON_FSE_JSON_PATH = PROCESSED_DIR / "data_2014-2020_pon_fse.json"
 DATA_2014_2020_PON_FSE_PARQUET_PATH = PROCESSED_DIR / "data_2014-2020_pon_fse.parquet"
-GEOJSON_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-metropole.geojson"
-GEOJSON_DROMCOM_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "regions-dromcom.geojson"
-DROMCOM_CODES_POSTAUX_PATH = REPO_ROOT / "frontend" / "public" / "geo" / "dromcom_codes_postaux.json"
+# Contours géographiques (#198) : provenance de chaque fichier dans data/geo/SOURCES.md.
+GEO_DIR = REPO_ROOT / "data" / "geo"
+GEOJSON_PATH = GEO_DIR / "regions-metropole.geojson"
+GEOJSON_DROMCOM_PATH = GEO_DIR / "regions-dromcom.geojson"
+DROMCOM_CODES_POSTAUX_PATH = GEO_DIR / "dromcom_codes_postaux.json"
 REGION_METADATA_PATH = PROCESSED_DIR / "region_metadata.json"
 CATEGORIES_UE_2014_2020_PATH = PROCESSED_DIR / "categories_ue_2014_2020.json"
 PROGRAMME_TOTALS_PATH = PROCESSED_DIR / "programme_totals.json"
@@ -149,7 +151,7 @@ def load_geojson():
 @st.cache_data
 def load_dromcom_geojson():
     """Contours des DROM-COM (Guadeloupe, Martinique, Guyane, La Réunion, Mayotte,
-    Saint-Martin) — voir frontend/public/geo/SOURCES.md pour la provenance de chaque contour
+    Saint-Martin) — voir data/geo/SOURCES.md pour la provenance de chaque contour
     (Saint-Martin vient d'une source différente, absente des découpages IGN/INSEE)."""
     with open(GEOJSON_DROMCOM_PATH, encoding="utf-8") as f:
         return json.load(f)
@@ -158,7 +160,7 @@ def load_dromcom_geojson():
 @st.cache_data
 def load_dromcom_codes_postaux():
     """Centroïde commune(s) par code postal pour les 6 territoires DROM-COM — voir
-    frontend/public/geo/SOURCES.md pour la provenance (dataset La Poste/data.gouv.fr, sauf
+    data/geo/SOURCES.md pour la provenance (dataset La Poste/data.gouv.fr, sauf
     Saint-Martin sourcé séparément depuis Wikidata)."""
     with open(DROMCOM_CODES_POSTAUX_PATH, encoding="utf-8") as f:
         return json.load(f)

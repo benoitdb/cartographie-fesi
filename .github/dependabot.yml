@@ -7,8 +7,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-  # Pas d'écosystème npm : le prototype frontend/ n'est ni exécuté ni testé en
-  # CI, ses PR ne seraient validées par rien. À rétablir si #198 le conserve.
+  # Pas d'écosystème npm : le dépôt n'a plus de code JavaScript depuis le
+  # retrait du prototype frontend/ (#198).
   #
   # `docker` ne lit que les Dockerfile, et le dépôt n'en a aucun : c'est
   # l'écosystème `docker-compose` qui suit les images de metabase/.

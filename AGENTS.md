@@ -101,10 +101,10 @@ de `main` et travailler sur une branche dédiée (`feat/...`, `fix/...`,
 `test/...`), fusionnée par PR une fois la CI verte — pas de commit direct sur
 `main` pour du code (les corrections de doc peuvent y aller directement).
 
-`frontend/` est un **prototype React/Vite abandonné** au profit de Streamlit —
-mais **il n'est pas mort** : le dashboard lit ses fichiers géographiques
-(`frontend/public/geo/`). Ne pas supprimer ce dossier, et voir
-`frontend/public/geo/SOURCES.md` pour la provenance de chaque contour.
+**Contours géographiques** : `data/geo/` (lus par le dashboard et servis à la
+stack Metabase), provenance de chaque fichier dans `data/geo/SOURCES.md`.
+L'ancien prototype React/Vite, abandonné au profit de Streamlit, a été retiré
+(#198) ; il reste consultable par le tag `archive/frontend-react`.
 
 **Déploiement Streamlit Community Cloud** (issue #119) : l'app est en ligne sur
 [sid-fesi.streamlit.app](https://sid-fesi.streamlit.app/) — repo
