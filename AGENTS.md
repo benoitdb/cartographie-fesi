@@ -131,6 +131,29 @@ directes se déclarent dans `requirements/*.in`, puis
 jamais entrer dans `requirements/dashboard.in`** : Streamlit Cloud ne régénère
 aucune donnée, il lit des Parquet committés.
 
+- **Tri hebdomadaire des PR Dependabot** (issue #224) : Dependabot passe chaque
+  semaine (pip, docker-compose, Actions) ; rien ne monte plus de version tout
+  seul, une PR laissée sans suite est un correctif non appliqué. Lister avec
+  `gh pr list --author app/dependabot`, puis :
+  - **pip et Actions** : la CI teste vraiment la mise à jour. Verte = fusion,
+    **une PR à la fois** — plusieurs touchent les mêmes lockfiles, attendre que
+    Dependabot recale les suivantes et que leur CI repasse. Version majeure :
+    lire les notes de version avant.
+  - **docker-compose** (`metabase/`) : **aucun job CI n'utilise le compose, une
+    CI verte n'y prouve rien.** Avant fusion : sauvegarder le volume (ci-dessous),
+    lancer `./outils.sh metabase` sur la branche, puis les scripts de
+    vérification Metabase. Une montée de l'image `postgres` se reporte à la main
+    dans le service de `.github/workflows/ci.yml` (même tag, même digest) :
+    Dependabot ne suit pas les images de service d'un workflow. Les majeures de
+    `postgres` sont ignorées exprès (format de fichiers incompatible).
+  - **Sauvegarde de `metabase_pgdata`**, stack arrêtée, hors du dépôt :
+    ```
+    docker run --rm --network none -v metabase_pgdata:/data:ro \
+        -v ~/sauvegardes/cartographie-fesi:/backup postgres:16-alpine \
+        tar czf /backup/metabase_pgdata-AAAA-MM-JJ.tar.gz -C /data .
+    ```
+    Restauration : dans un volume vide, `tar xzf … -C /data`, puis
+    `chown -R postgres:postgres /data`.
 - **Outils locaux : un port fixe par outil, tous sur 127.0.0.1** (issue #188),
   lancés par `./outils.sh`, qui porte seul la table des ports :
   ```

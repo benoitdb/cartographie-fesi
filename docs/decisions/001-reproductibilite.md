@@ -84,3 +84,14 @@ Les mises à jour sont explicites et révisables : un même commit résout les m
 versions partout, et toute montée de version laisse une trace dans le diff. En
 contrepartie, rien ne monte de version tout seul : une PR Dependabot laissée
 sans suite est un correctif de sécurité non appliqué.
+
+## Amendement du 2026-10-19 — issue #224
+
+Après le premier passage de Dependabot (#211) :
+
+- **npm retiré** de Dependabot tant que le devenir du prototype `frontend/` n'est
+  pas tranché (#198) : aucun job CI ne valide ses mises à jour.
+- **Versions majeures de l'image `postgres` ignorées** : elles changent le
+  format des fichiers de données, et la CI, qui n'utilise pas le compose, ne
+  l'attraperait pas. Une majeure se décide et se migre à la main.
+- **Tri hebdomadaire des PR** : routine décrite dans `AGENTS.md`.
