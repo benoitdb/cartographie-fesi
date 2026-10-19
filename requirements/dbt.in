@@ -5,7 +5,7 @@
 # pipeline : `generer.py` lit les Parquet pour apparier les libellés réels, et
 # `verifier_equivalence.py` rejoue `calculer_agregats` dessus.
 pandas>=2.0.0
-pyarrow>=15.0.0
+pyarrow>=26.0.0
 dbt-core~=1.12
 dbt-duckdb~=1.9
 dbt-postgres~=1.9
