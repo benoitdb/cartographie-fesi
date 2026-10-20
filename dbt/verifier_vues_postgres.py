@@ -109,18 +109,11 @@ COMPARAISONS = [
         "periode, region, fonds, n_operations, n_depassements, montant_depassements",
         None,
     ),
+    # Les trois partitions d'`agregats.py` (mono-région, interrégional, national).
+    # La vue a longtemps perdu l'interrégional, 13 opérations et 1,625 M€ (#138) ;
+    # depuis sa correction, elle doit égaler le mart comme les autres (#230).
+    ("engage_by_perimetre_fonds", "v_engage_by_perimetre_fonds", "perimetre, fonds, engage", P2127),
 ]
-
-# DIVERGENCE ATTENDUE, et elle va dans le bon sens (issue #138) :
-# `engage_by_perimetre_fonds` porte les TROIS partitions d'`agregats.py`, la vue
-# d'origine n'en porte que deux et perd l'interrégional — 13 opérations,
-# 1,625 M€. Le mart dbt retombe sur `v_by_fonds` au centime, la vue non. Tant que
-# #138 n'est pas corrigée, ce contrôle vérifie que l'écart est EXACTEMENT
-# celui-là : ni plus, ni autre chose.
-ECART_ATTENDU_INTERREGIONAL = {
-    ("interregional", "FEDER"),
-    ("interregional", "FSE+"),
-}
 
 
 def comparer(cur, mart, vue, colonnes, filtre):
@@ -150,28 +143,7 @@ def main():
             else:
                 print(f"✅ {mart} vs {vue}")
 
-        # Le cas particulier de #138.
-        en_trop, manquantes = comparer(
-            cur,
-            "engage_by_perimetre_fonds",
-            "v_engage_by_perimetre_fonds",
-            "perimetre, fonds, engage",
-            P2127,
-        )
-        observe = {(ligne[0], ligne[1]) for ligne in en_trop}
-        if manquantes or observe != ECART_ATTENDU_INTERREGIONAL:
-            echecs.append(("engage_by_perimetre_fonds", "v_engage_by_perimetre_fonds", en_trop, manquantes))
-            print(
-                "❌ engage_by_perimetre_fonds vs v_engage_by_perimetre_fonds : "
-                f"écart inattendu — en trop {observe}, manquantes {len(manquantes)}"
-            )
-        else:
-            print(
-                "✅ engage_by_perimetre_fonds vs v_engage_by_perimetre_fonds "
-                "(écart interrégional attendu, cf. #138)"
-            )
-
-    print(f"\n{len(COMPARAISONS) + 1} comparaisons.")
+    print(f"\n{len(COMPARAISONS)} comparaisons.")
     if echecs:
         print(f"❌ {len(echecs)} divergence(s) — les deux implémentations ont dérivé.")
         for mart, vue, en_trop, manquantes in echecs:
