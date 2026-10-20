@@ -450,7 +450,9 @@ docker compose down -v
 | `date_premiere_convention` | DATE | `Date première convention` |
 | `is_interregional` | BOOLEAN | `is_interregional` |
 | `is_national` | BOOLEAN | `is_national` |
-| ... | | (27 colonnes au total) |
+| `dept` | TEXT | `dept`, département rattaché par le pipeline (#232) |
+| `dept_source` | TEXT | `dept_source`, étape de la cascade qui a tranché |
+| ... | | |
 
 ### Table `programme_totals`
 

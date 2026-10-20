@@ -27,6 +27,9 @@ CREATE TABLE operations (
     cp_operation TEXT,
     zone TEXT,
     departement TEXT,
+    dept TEXT,                      -- département rattaché par le pipeline (code INSEE,
+                                     -- data-pipeline/departements.py, #232)
+    dept_source TEXT,               -- étape de la cascade qui a tranché (DEPT_SOURCES)
     region_source TEXT,             -- valeur brute avant harmonisation (colonne Région,
                                      -- souvent peu remplie en 2014-2020 — cf. CLAUDE.md)
     region TEXT,                    -- région moderne retenue (regions_modernes[0] si mono-région)

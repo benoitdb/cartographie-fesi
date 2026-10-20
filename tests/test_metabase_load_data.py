@@ -227,3 +227,40 @@ def test_regions_modernes_supporte_le_test_de_verite(fichier, fixture_comme_sour
     for op in load_data.lire_operations("source", fichier):
         regions = op.get("regions_modernes") or []
         _ = regions[0] if regions else None
+
+
+# --- load_operations_for_source : colonnes posées par le pipeline (#232) --------
+
+
+class CurseurInsertion:
+    def __init__(self):
+        self.requete, self.lignes = None, []
+
+    def executemany(self, requete, lignes):
+        self.requete, self.lignes = requete, list(lignes)
+
+
+@besoin_parquet
+def test_le_departement_du_pipeline_a_ses_colonnes_et_ne_part_pas_dans_extra(fixture_comme_source):
+    import sources as sources_module
+
+    cur = CurseurInsertion()
+    n = load_data.load_operations_for_source(
+        cur, "2014-2020-normandie", sources_module.SOURCES["2014-2020-normandie"]
+    )
+
+    colonnes = load_data.OPERATIONS_COLUMNS
+    assert n == len(cur.lignes) > 0
+    assert all(len(ligne) == len(colonnes) for ligne in cur.lignes)  # rien de décalé
+    attendu = pd.read_parquet(FIXTURE / "data_2014-2020_normandie.parquet")
+    lignes = [dict(zip(colonnes, ligne, strict=True)) for ligne in cur.lignes]
+    assert [ligne["dept"] for ligne in lignes] == [load_data.valeur_python(v) for v in attendu["dept"]]
+    assert [ligne["dept_source"] for ligne in lignes] == attendu["dept_source"].tolist()
+    assert not any(
+        "dept" in json.loads(ligne["extra"]) or "dept_source" in json.loads(ligne["extra"])
+        for ligne in lignes
+        if ligne["extra"]
+    )
+    # Le découpage des colonnes de schéma s'arrête bien avant 'region_source' :
+    # un indice fixe aurait glissé avec les deux colonnes ajoutées.
+    assert lignes[0]["montant_ue"] is not None and lignes[0]["region"] is not None

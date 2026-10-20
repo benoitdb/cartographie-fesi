@@ -93,6 +93,9 @@ COLONNES_HARMONISEES = [
     ("regions_modernes", "regions_modernes"),
     ("is_interregional", "is_interregional"),
     ("is_national", "is_national"),
+    # Rattachement départemental, calculé par le pipeline (#232).
+    ("dept", "dept"),
+    ("dept_source", "dept_source"),
 ]
 
 ENTETE = """-- FICHIER GÉNÉRÉ par dbt/generer.py — ne pas éditer à la main.

@@ -30,7 +30,8 @@ la source ne porte pas (#82).
 **Le rattachement départemental est calculé par le pipeline** depuis #232 (ADR 002,
 étape 2) : `data-pipeline/departements.py`, appelé par `ingest.py`, écrit les
 colonnes `dept` et `dept_source` dans chaque Parquet ; Streamlit et dbt/Metabase
-les lisent sans recalculer. Les colonnes d'entrée viennent de `schema_source`
+les lisent sans recalculer (`load_data.py` les charge dans `operations`, le
+staging dbt les porte sur les deux cibles). Les colonnes d'entrée viennent de `schema_source`
 (clés `departement`, `zone`, `cp_beneficiaire`, `nom_benef`). Seul import du
 pipeline par le dashboard : `DEPT_SOURCES`, les libellés d'origine affichés.
 **Il utilise le champ Zone en repli** (issue #92) : avant le code postal du
