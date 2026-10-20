@@ -104,3 +104,18 @@ comparées que par un script local (`dbt/verifier_vues_postgres.py`).
 - Les commentaires qui servaient de consigne (« à faire évoluer ensemble »)
   désignent désormais les marts ; le seuil de 0,01 du taux divergent et la
   tolérance de 1e-6 restent écrits en dur dans les marts `cofinancement_*`.
+
+## Amendement du 2026-10-20 — étape 2, rattachement départemental (#232)
+
+- Décidé : la cascade vit dans `data-pipeline/departements.py` ; `ingest.py`
+  écrit `dept` et `dept_source` dans chaque Parquet ; deux PR. Seule
+  importation du pipeline par le dashboard : `DEPT_SOURCES`.
+- PR #240 : Streamlit lit les colonnes au lieu de recalculer ; résultat
+  identique au calcul précédent sur les 72 675 opérations des six sources
+  commitées.
+- PR 2 : colonnes ajoutées à `operations` (`01_schema.sql`, `ALTER TABLE` sur la
+  base locale sans recréer le volume), chargées par `load_data.py`, portées par
+  le staging dbt des deux cibles (`generer.py`). Metabase voit la colonne ;
+  aucune carte ne l'utilise encore.
+- Le rattachement au périmètre 2014-2020 n'est pas matérialisé : il fera l'objet
+  d'un spike borné avant toute décision.

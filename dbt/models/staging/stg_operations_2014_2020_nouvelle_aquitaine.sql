@@ -42,7 +42,9 @@ SELECT
     regions_modernes[1] AS region,
     regions_modernes AS regions_modernes,
     is_interregional AS is_interregional,
-    is_national AS is_national
+    is_national AS is_national,
+    dept AS dept,
+    dept_source AS dept_source
 FROM read_parquet('{{ var("chemin_data") }}/data_2014-2020_nouvelle_aquitaine.parquet')
 {% else %}
 SELECT
@@ -75,7 +77,9 @@ SELECT
     region,
     regions_modernes,
     is_interregional,
-    is_national
+    is_national,
+    dept,
+    dept_source
 FROM {{ source('fesi', 'operations') }}
 WHERE source_id = '2014-2020-nouvelle-aquitaine'
 {% endif %}

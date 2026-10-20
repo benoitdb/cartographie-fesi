@@ -80,8 +80,18 @@ OPERATIONS_COLUMNS = [
     "regions_modernes",
     "is_interregional",
     "is_national",
+    # Posées par ingest.py (#232) : le rattachement départemental, calculé une
+    # fois par le pipeline et chargé tel quel.
+    "dept",
+    "dept_source",
     "extra",
 ]
+
+# Colonnes portées par chaque opération quelle que soit la source (ingest.py),
+# hors de tout schéma : jamais versées dans `extra`.
+COLONNES_DU_PIPELINE = (
+    "regions_modernes", "is_interregional", "is_national", "regions_source", "dept", "dept_source",
+)
 
 
 def parse_date(val):
@@ -205,7 +215,7 @@ def load_operations_for_source(cur, source_id, descriptor):
         by_internal_key = {}
         extra = {}
         for raw_label, raw_val in op.items():
-            if raw_label in ("regions_modernes", "is_interregional", "is_national", "regions_source"):
+            if raw_label in COLONNES_DU_PIPELINE:
                 continue
             internal_key = raw_to_internal.get(raw_label)
             if internal_key and internal_key in INTERNAL_KEY_TO_COLUMN:
@@ -216,14 +226,14 @@ def load_operations_for_source(cur, source_id, descriptor):
                 extra[raw_label] = raw_val
         # Sécurité : toute clé du JSON non couverte par le schéma déclaré de la
         # source signale un schema_source désynchronisé de sources.SOURCES.
-        unexpected = set(op) - known_raw_labels - {
-            "regions_modernes", "is_interregional", "is_national", "regions_source"
-        }
+        unexpected = set(op) - known_raw_labels - set(COLONNES_DU_PIPELINE)
         if unexpected and unexpected - set(extra):
             pass  # déjà versé dans extra ci-dessus, juste documenté pour lecture du code
 
         vals = [source_id, periode]
-        for col in OPERATIONS_COLUMNS[2:-6]:  # entre 'periode' et 'region_source'
+        # Entre 'periode' et 'region_source', borné par le nom et non par un indice
+        # fixe : ajouter une colonne en fin de liste ne décale rien (#232).
+        for col in OPERATIONS_COLUMNS[2:OPERATIONS_COLUMNS.index("region_source")]:
             raw = by_internal_key.get(col)
             if col in DATE_COLUMNS:
                 vals.append(parse_date(raw))
@@ -238,6 +248,8 @@ def load_operations_for_source(cur, source_id, descriptor):
         vals.append(regions_modernes if regions_modernes else None)
         vals.append(bool(op.get("is_interregional", False)))
         vals.append(bool(op.get("is_national", False)))
+        vals.append(op.get("dept"))
+        vals.append(op.get("dept_source"))
         vals.append(json.dumps(extra, ensure_ascii=False) if extra else None)
         rows.append(vals)
 
