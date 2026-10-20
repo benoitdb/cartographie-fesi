@@ -117,35 +117,77 @@ def get_session():
     return r.json()["id"]
 
 
+# Schémas que Metabase synchronise : les tables chargées (`public`) et les marts
+# dbt qu'il lit (`marts`, ADR 002). `staging` et `reference` restent hors de sa
+# vue, en plus d'être fermés au lecteur (#231, #235).
+SCHEMAS_LUS = "public,marts"
+
+
+def details_lecteur():
+    """Ce que la connexion FESI doit porter : le compte lecteur (#197) et le
+    filtre de schémas (#235)."""
+    return {
+        "user": env["FESI_READER_USER"],
+        "password": env["FESI_READER_PASSWORD"],
+        "schema-filters-type": "inclusion",
+        "schema-filters-patterns": SCHEMAS_LUS,
+    }
+
+
+def ecarts_connexion(details):
+    """Écarts entre la connexion réelle et celle attendue, mot de passe exclu
+    (l'API le masque). Liste vide : la connexion est conforme."""
+    attendus = details_lecteur()
+    return sorted(k for k, v in attendus.items() if k != "password" and details.get(k) != v)
+
+
 def ensure_database(session):
+    """Crée la connexion FESI, ou réaligne une connexion existante (#235).
+
+    Une connexion créée avant #197 utilisait le compte propriétaire : la
+    réutiliser telle quelle laissait Metabase écrire en base et voir tous les
+    schémas. Elle est donc remise sur le lecteur, avec le filtre de schémas, puis
+    resynchronisée — même base, même identifiant, les cartes restent branchées.
+    Le provisionnement échoue si l'état relu n'est pas conforme : c'est l'état
+    effectif qui fait foi, pas le code qui l'a écrit."""
     dbs = session.get(f"{MB_URL}/api/database").json()
     existing = next((d for d in dbs["data"] if d["name"] == "FESI"), None)
     if existing:
-        return existing["id"]
-    r = session.post(
-        f"{MB_URL}/api/database",
-        json={
-            "engine": "postgres",
-            "name": "FESI",
-            "details": {
-                "host": "postgres",
-                "port": 5432,
-                "dbname": env["POSTGRES_DB"],
-                "user": env["FESI_READER_USER"],
-                "password": env["FESI_READER_PASSWORD"],
-                "ssl": False,
+        db_id = existing["id"]
+        details = session.get(f"{MB_URL}/api/database/{db_id}").json()["details"]
+        if ecarts_connexion(details):
+            session.put(
+                f"{MB_URL}/api/database/{db_id}",
+                json={"details": {**details, **details_lecteur()}},
+            ).raise_for_status()
+            session.post(f"{MB_URL}/api/database/{db_id}/sync_schema").raise_for_status()
+    else:
+        r = session.post(
+            f"{MB_URL}/api/database",
+            json={
+                "engine": "postgres",
+                "name": "FESI",
+                "details": {
+                    "host": "postgres",
+                    "port": 5432,
+                    "dbname": env["POSTGRES_DB"],
+                    "ssl": False,
+                    **details_lecteur(),
+                },
+                "is_full_sync": True,
             },
-            "is_full_sync": True,
-        },
-    )
-    r.raise_for_status()
-    db_id = r.json()["id"]
-    deadline = time.time() + 60
-    while time.time() < deadline:
-        status = session.get(f"{MB_URL}/api/database/{db_id}").json()["initial_sync_status"]
-        if status == "complete":
-            break
-        time.sleep(3)
+        )
+        r.raise_for_status()
+        db_id = r.json()["id"]
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            status = session.get(f"{MB_URL}/api/database/{db_id}").json()["initial_sync_status"]
+            if status == "complete":
+                break
+            time.sleep(3)
+    ecarts = ecarts_connexion(session.get(f"{MB_URL}/api/database/{db_id}").json()["details"])
+    if ecarts:
+        raise RuntimeError(f"connexion Metabase FESI non conforme après provisionnement : {ecarts} (#235)")
     return db_id
 
 

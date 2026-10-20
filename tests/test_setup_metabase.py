@@ -123,3 +123,69 @@ def test_une_table_listee_sans_ses_colonnes_n_est_pas_encore_synchronisee():
     assert not setup._synchronisees({"marts.engage_all": {}}, ("marts.engage_all",))
     assert not setup._synchronisees({}, ("marts.engage_all",))
     assert setup._synchronisees({"marts.engage_all": {"periode": 1}}, ("marts.engage_all",))
+
+
+class SessionBase:
+    """Une base FESI existante ; `put` applique (ou non) les nouveaux détails."""
+
+    def __init__(self, details, applique=True):
+        self.details = dict(details)
+        self.applique = applique
+        self.ecritures = []
+
+    def get(self, url):
+        if url.endswith("/api/database"):
+            return Reponse({"data": [{"id": 4, "name": "FESI"}]})
+        assert url.endswith("/api/database/4")
+        return Reponse({"details": dict(self.details)})
+
+    def put(self, url, json):
+        self.ecritures.append(("put", json))
+        if self.applique:
+            self.details = {k: v for k, v in json["details"].items() if k != "password"}
+        return Reponse()
+
+    def post(self, url):
+        self.ecritures.append(("post", url))
+        return Reponse()
+
+
+@pytest.fixture
+def env_lecteur(monkeypatch):
+    monkeypatch.setattr(setup, "env", {"FESI_READER_USER": "lecteur", "FESI_READER_PASSWORD": "secret-lecteur"})
+
+
+def test_une_connexion_heritee_du_compte_proprietaire_est_realignee(env_lecteur):
+    # Connexion créée avant #197 : compte propriétaire, aucun filtre (#235).
+    session = SessionBase({"host": "postgres", "user": "proprietaire", "password": "**MetabasePass**"})
+
+    assert setup.ensure_database(session) == 4
+
+    put = [j for genre, j in session.ecritures if genre == "put"]
+    assert len(put) == 1
+    envoye = put[0]["details"]
+    assert envoye["user"] == "lecteur" and envoye["password"] == "secret-lecteur"
+    assert envoye["schema-filters-type"] == "inclusion"
+    assert envoye["schema-filters-patterns"] == "public,marts"
+    assert envoye["host"] == "postgres"  # le reste de la connexion est conservé
+    assert any(genre == "post" and u.endswith("/sync_schema") for genre, u in session.ecritures)
+
+
+def test_une_connexion_conforme_n_est_pas_reecrite(env_lecteur):
+    session = SessionBase({
+        "user": "lecteur",
+        "schema-filters-type": "inclusion",
+        "schema-filters-patterns": "public,marts",
+    })
+
+    setup.ensure_database(session)
+
+    assert session.ecritures == []
+
+
+def test_le_provisionnement_echoue_si_la_connexion_reste_non_conforme(env_lecteur):
+    # La santé du service ne prouve rien : c'est l'état relu qui fait foi (#235).
+    session = SessionBase({"user": "proprietaire"}, applique=False)
+
+    with pytest.raises(RuntimeError, match="non conforme"):
+        setup.ensure_database(session)

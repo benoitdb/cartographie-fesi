@@ -225,6 +225,10 @@ aucune donnée, il lit des Parquet committés.
                                           # par l'API, filtres appliqués) vs le dashboard
                                           # Streamlit — venv RACINE, pas metabase/venv
   ```
+  **La connexion Metabase « FESI » utilise le compte lecteur** (#197), limitée aux
+  schémas `public` et `marts` : `setup_metabase.ensure_database()` réaligne une
+  connexion existante et **échoue si l'état relu n'est pas conforme** (#235 ; une
+  connexion antérieure à #197 était restée sur le compte propriétaire).
   **Metabase lit les marts dbt** du schéma `marts` (ADR 002, #231), construits
   par `./outils.sh marts` : à relancer après tout rechargement des données, ce
   sont des tables. Les vues de `metabase/init/02` à `05` restent en place,
