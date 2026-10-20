@@ -11,7 +11,6 @@ from utils.data_loader import (
 )
 from utils.departments import (
     DEPT_TO_REGION,
-    assign_departments_df,
     build_department_choropleth,
     build_dromcom_outline,
     build_dromcom_projects_map,
@@ -116,7 +115,7 @@ if region_ops.empty:
 # dessous, donc pas de "Détail par département" pour ces régions).
 region_meta = load_region_metadata().get(region)
 est_metropole = region in DEPT_TO_REGION.values()
-df_region_dept = assign_departments_df(region_ops) if est_metropole else None
+df_region_dept = region_ops if est_metropole else None
 
 if not est_metropole:
     bubbles_df, couverture_localisation = build_bubbles_localisation(region_ops, region, load_dromcom_codes_postaux())
@@ -229,7 +228,7 @@ with tab_ensemble:
     if region in DEPT_TO_REGION.values():
         st.subheader("Détail par département")
 
-        df_region_dept = assign_departments_df(df_region_ops)
+        df_region_dept = df_region_ops
         coverage = department_coverage_summary(df_region_dept)
 
         depts_region = {code for code, r in DEPT_TO_REGION.items() if r == region}

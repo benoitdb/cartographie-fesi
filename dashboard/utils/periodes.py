@@ -142,7 +142,8 @@ COLONNES_PAR_SOURCE = {
     # colonne réelle (`Code Postal`) est celle de l'**opération**, pas du siège du
     # bénéficiaire comme pour Normandie/Nouvelle-Aquitaine — probablement plus
     # fiable pour le rattachement départemental que l'approximation utilisée
-    # ailleurs, mais ce n'est pas la même chose et `assign_departement` ne fait pas
+    # ailleurs, mais ce n'est pas la même chose et la règle de rattachement
+    # (`data-pipeline/departements.py`) ne fait pas
     # la différence entre les deux à l'écran (source affichée : « approximé »).
     SOURCE_BRETAGNE_2014_2020: {
         "libelle_prog": "Libellé programme",

@@ -1,8 +1,14 @@
-"""Rattachement des opérations à un département, à partir de champs dont le format
-est hétérogène (cf. commentaires dans parse_departement_field) — le pipeline de données
-n'est pas modifié, cette normalisation est propre à l'affichage du dashboard."""
+"""Affichage par département : cartes, tableau et couverture du rattachement.
+
+Le rattachement lui-même (colonnes `dept` et `dept_source`) est calculé par le
+pipeline et écrit dans les Parquet (`data-pipeline/departements.py`, #232) : ce
+module le lit, il ne le recalcule plus. Jusqu'à #232, la cascade vivait ici,
+« propre à l'affichage » ; ADR 002 (étape 2) l'a déplacée pour que Metabase ait
+aussi le département.
+"""
 
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -10,49 +16,14 @@ import plotly.express as px
 
 from utils.plot_style import disable_map_interaction, style_hover, style_map_background
 
+# Seul import du pipeline : les libellés d'origine du rattachement, contrat entre
+# ce qui les écrit et ce qui les affiche (#232). Une constante, un seul endroit.
+# En fin de chemin : les modules du pipeline ne doivent masquer aucun autre.
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "data-pipeline"))
+from departements import DEPT_SOURCES
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEPARTEMENTS_GEOJSON_PATH = REPO_ROOT / "data" / "geo" / "departements.geojson"
-
-# Alias pour variantes/coquilles observées dans le champ "Département de l'opération"
-NAME_ALIASES = {
-    "Haute Loire": "Haute-Loire",
-    "Pyrénées-Orientiales": "Pyrénées-Orientales",
-}
-
-DOM_NAME_TO_CODE = {
-    "Guadeloupe": "971",
-    "Martinique": "972",
-    "Guyane": "973",
-    "La Réunion": "974",
-    "Mayotte": "976",
-}
-
-# Dernier repli quand ni le champ pipeline ni le code postal du bénéficiaire ne permettent de
-# rattacher un département (typiquement la Corse : cp_to_dept renvoie None pour tout code postal
-# préfixé "20", ambigu entre 2A/2B) : mention explicite et non ambiguë d'une ville/du département
-# dans le nom du bénéficiaire. Volontairement restreint aux cas évidents (préfectures, noms de
-# département explicites) plutôt qu'une géolocalisation approximative de toutes les communes.
-NAME_KEYWORDS_TO_DEPT = {
-    "corse-du-sud": "2A",
-    "corse du sud": "2A",
-    "haute-corse": "2B",
-    "haute corse": "2B",
-    "ajaccio": "2A",
-    "bastia": "2B",
-    "porto-vecchio": "2A",
-    "porto vecchio": "2A",
-    "corte": "2B",
-}
-
-
-def _dept_from_name(nom_beneficiaire):
-    if not nom_beneficiaire or not isinstance(nom_beneficiaire, str):
-        return None
-    nom_lower = nom_beneficiaire.lower()
-    for keyword, dept in NAME_KEYWORDS_TO_DEPT.items():
-        if keyword in nom_lower:
-            return dept
-    return None
 
 DEPT_TO_REGION = {}
 _REGIONS_DEPTS = {
@@ -75,129 +46,9 @@ for _region, _depts in _REGIONS_DEPTS.items():
         DEPT_TO_REGION[_dept] = _region
 
 
-def _load_name_to_code():
-    with open(DEPARTEMENTS_GEOJSON_PATH, encoding="utf-8") as f:
-        geojson = json.load(f)
-    name_to_code = {f["properties"]["nom"]: f["properties"]["code"] for f in geojson["features"]}
-    name_to_code.update(DOM_NAME_TO_CODE)
-    return name_to_code
-
-
-NAME_TO_CODE = _load_name_to_code()
-
-
 def load_departements_geojson():
     with open(DEPARTEMENTS_GEOJSON_PATH, encoding="utf-8") as f:
         return json.load(f)
-
-
-def _normalize_numeric_code(code):
-    if code.isdigit():
-        if len(code) == 3 and code.startswith("0"):
-            return code[1:]
-        return code
-    return code.upper().lstrip("0") or code.upper()
-
-
-def parse_departement_field(raw):
-    """Parse le champ "Département de l'opération". Deux formats coexistent dans les
-    données : "CODE/Nom | CODE/Nom" (segments avec code explicite) et des segments sans
-    code, listant un ou plusieurs noms séparés par des virgules ("Ain, Loire"). Retourne
-    la liste des codes département identifiés (dédupliqués), ou [] si vide/non reconnu."""
-    if not raw or not isinstance(raw, str):
-        return []
-
-    codes = []
-    for segment in raw.split("|"):
-        segment = segment.strip()
-        if not segment:
-            continue
-        if "/" in segment:
-            code = segment.split("/", 1)[0].strip()
-            codes.append(_normalize_numeric_code(code))
-        else:
-            for name in segment.split(","):
-                name = name.strip()
-                name = NAME_ALIASES.get(name, name)
-                if name in NAME_TO_CODE:
-                    codes.append(NAME_TO_CODE[name])
-
-    return sorted(set(codes))
-
-
-def _commune_code_to_dept(code):
-    """Déduit le département depuis un code INSEE commune (5 caractères, DOM inclus,
-    Corse en 2A/2B) — même convention que cp_to_dept, avec la Corse en plus."""
-    if code[:2] == "97":
-        return _normalize_numeric_code(code[:3])
-    return _normalize_numeric_code(code[:2])
-
-
-def zone_dept(raw):
-    """Parse le champ "Zone" (Synergie), un champ hiérarchique à préfixe couvrant plusieurs
-    granularités : REG/xx (région), DEPT/xxx (département), COMM/xxxxx (commune, code INSEE
-    réel), ARRDT/CANT/QUAR (arrondissement/canton/quartier, sous forme de codes eux aussi
-    dérivés de l'INSEE — un chiffre/deux chiffres de moins que la commune selon le niveau) —
-    plus PAYS, hors de portée. Retourne le département si tous les segments ≥ département
-    s'accordent sur un seul, None sinon (vide, seulement REG/PAYS, ou désaccord entre
-    segments — cas non observé sur les données réelles mais pas exclu par le format).
-
-    Validé sur les 24 908 opérations 2014-2020 et les 16 625 de 2021-2027 : accord à 100 %
-    (3 219 + 665 cas comparables, zéro désaccord) avec "Département de l'opération", le champ
-    pipeline déjà tenu pour fiable — Zone porte donc la même localisation (lieu du projet),
-    pas celle du bénéficiaire. Contrairement à cp_to_dept, résout la Corse sans ambiguïté
-    (COMM/2A004, DEPT/02A... : l'alpha est déjà dans le code source, pas déduit).
-    """
-    if not raw or not isinstance(raw, str):
-        return None
-    codes = set()
-    for segment in raw.split("|"):
-        segment = segment.strip()
-        if "/" not in segment:
-            continue
-        prefix, rest = segment.split("/", 1)
-        code = rest.split("/", 1)[0]
-        if prefix == "DEPT":
-            codes.add(_normalize_numeric_code(code))
-        elif prefix == "COMM":
-            codes.add(_commune_code_to_dept(code))
-        elif prefix == "ARRDT":
-            codes.add(_normalize_numeric_code(code[:-1]))
-        elif prefix == "CANT":
-            codes.add(_normalize_numeric_code(code[:3]))
-        elif prefix == "QUAR":
-            codes.add(_commune_code_to_dept(code[:5]))
-        # REG, PAYS : granularité insuffisante pour un département, segment ignoré.
-    return codes.pop() if len(codes) == 1 else None
-
-
-def cp_to_dept(code_postal):
-    """Déduit le code département depuis un code postal français. Approximation : la
-    Corse (préfixe "20") n'est pas résolue en 2A/2B à partir du seul code postal."""
-    if not code_postal or not isinstance(code_postal, str):
-        return None
-    cp = code_postal.strip()
-    if not cp.isdigit():
-        return None
-    cp = cp.zfill(5)
-    if cp[:2] == "97":
-        return cp[:3]
-    if cp[:2] == "20":
-        return None
-    return cp[:2]
-
-
-def assign_departments_df(df):
-    """Ajoute les colonnes 'dept' et 'dept_source' à un DataFrame d'opérations."""
-    df = df.copy()
-    assigned = df.apply(assign_departement, axis=1)
-    # strict=True : assign_departement doit renvoyer un (code, source) pour chaque ligne —
-    # un retour à l'arité différente tronquerait les deux colonnes sans rien signaler.
-    df["dept"], df["dept_source"] = zip(*assigned, strict=True) if len(df) else ([], [])
-    return df
-
-
-DEPT_SOURCES = ("opération", "zone", "approximé", "nom du bénéficiaire", "inconnu")
 
 
 NON_REPARTI = "Non réparti (région entière)"
@@ -208,7 +59,7 @@ def tableau_departements(df_dept, region, montant_col="Montant UE"):
     """Tableau du « Détail par département » (pages 1 et 5, issue #157 écart D3) et échelle
     de couleur de la carte qui l'accompagne.
 
-    `df_dept` : opérations de la région passées par `assign_departments_df` (colonne `dept`).
+    `df_dept` : opérations de la région, avec la colonne `dept` écrite par le pipeline.
     Une ligne par département de la région, du plus doté au moins doté, puis deux lignes qui
     complètent le tableau à 100 % de la région (#100) : « Non réparti » (aucun département
     identifié) et « Hors périmètre » (département d'une autre région — siège du porteur,
@@ -248,38 +99,9 @@ def department_coverage_summary(df):
     return {source: counts.get(source, 0) / total for source in DEPT_SOURCES}
 
 
-def assign_departement(op):
-    """Rattache une opération à un département. Priorité au champ pipeline
-    "Département de l'opération" quand il désigne un département unique (fiable) ; à défaut,
-    au champ "Zone" (fiable aussi — cf. zone_dept, même localisation que le champ pipeline
-    quand les deux sont présents) ; à défaut, approxime via le code postal du bénéficiaire
-    (siège du bénéficiaire, pas nécessairement le lieu du projet) ; en dernier recours, déduit
-    du nom du bénéficiaire quand il mentionne explicitement une ville/le département (cas de
-    la Corse notamment, où le code postal seul ne permet pas de distinguer 2A/2B — Zone la
-    résout déjà à l'étape précédente quand elle est renseignée). Retourne
-    (code_departement | None, source) avec source dans DEPT_SOURCES."""
-    codes = parse_departement_field(op.get("Département de l’opération"))
-    if len(codes) == 1:
-        return codes[0], "opération"
-
-    dept = zone_dept(op.get("Zone"))
-    if dept:
-        return dept, "zone"
-
-    dept = cp_to_dept(op.get("Code postal du bénéficiaire"))
-    if dept:
-        return dept, "approximé"
-
-    dept = _dept_from_name(op.get("Nom du bénéficiaire"))
-    if dept:
-        return dept, "nom du bénéficiaire"
-
-    return None, "inconnu"
-
-
 def build_department_choropleth(df_dept_assigned, region, amount_col="Montant UE", show_colorbar=True, annotation=None):
     """Carte des départements d'une région métropolitaine, colorée par montant UE total.
-    df_dept_assigned doit déjà porter les colonnes 'dept'/'dept_source' (assign_departments_df).
+    df_dept_assigned porte les colonnes 'dept'/'dept_source' écrites par le pipeline (#232).
     show_colorbar=False désactive la légende intégrée à la carte — à utiliser quand la carte est
     affichée à côté d'une légende autonome (build_standalone_colorbar) dans une colonne séparée,
     même principe que la carte nationale d'Accueil.py.

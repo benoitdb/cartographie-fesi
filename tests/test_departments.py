@@ -1,6 +1,7 @@
-"""Rattachement départemental (`dashboard/utils/departments.py`) — la cascade dont
-dépendent toutes les cartes par département, sur les deux périodes (`assign_departement`
-est une fonction partagée, pas propre à 2014-2020).
+"""Rattachement départemental (`data-pipeline/departements.py`, #232) — la cascade dont
+dépendent toutes les cartes par département, sur les deux périodes. Calculée par le
+pipeline et écrite dans les Parquet ; le dashboard en garde l'affichage
+(`dashboard/utils/departments.py`, tableau testé plus bas).
 
 `zone_dept` est la brique qui a motivé l'issue #92 : le champ Zone (Synergie) porte le
 lieu réel du projet, validé à 100 % d'accord avec le champ pipeline "Département de
@@ -15,8 +16,15 @@ import pandas as pd
 
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "dashboard"))
+sys.path.insert(0, str(RACINE / "data-pipeline"))
 
-from utils.departments import DEPT_SOURCES, assign_departement, cp_to_dept, zone_dept  # noqa: E402
+from departements import (  # noqa: E402
+    DEPT_SOURCES,
+    ajouter_departements,
+    cp_to_dept,
+    rattacher_departement,
+    zone_dept,
+)
 
 
 def test_zone_dept_segment_dept_simple():
@@ -69,38 +77,68 @@ def test_zone_dept_vide_ou_absent():
     assert zone_dept(None) is None
 
 
-def test_assign_departement_priorite_au_champ_pipeline_sur_zone():
-    op = {"Département de l’opération": "42/Loire", "Zone": "DEPT/075/Paris"}
-    assert assign_departement(op) == ("42", "opération")
+def test_rattacher_departement_priorite_au_champ_pipeline_sur_zone():
+    assert rattacher_departement(departement="42/Loire", zone="DEPT/075/Paris") == ("42", "opération")
 
 
-def test_assign_departement_zone_avant_code_postal():
-    op = {"Zone": "DEPT/075/Paris", "Code postal du bénéficiaire": "13001"}
-    assert assign_departement(op) == ("75", "zone")
+def test_rattacher_departement_zone_avant_code_postal():
+    assert rattacher_departement(zone="DEPT/075/Paris", cp_beneficiaire="13001") == ("75", "zone")
 
 
-def test_assign_departement_zone_resout_corse_la_ou_le_code_postal_echoue():
-    op = {"Zone": "COMM/2A004/Ajaccio", "Code postal du bénéficiaire": "20000"}
+def test_rattacher_departement_zone_resout_corse_la_ou_le_code_postal_echoue():
     assert cp_to_dept("20000") is None  # le cas que Zone débloque
-    assert assign_departement(op) == ("2A", "zone")
+    assert rattacher_departement(zone="COMM/2A004/Ajaccio", cp_beneficiaire="20000") == ("2A", "zone")
 
 
-def test_assign_departement_repli_sur_code_postal_si_zone_absente():
-    op = {"Code postal du bénéficiaire": "13001"}
-    assert assign_departement(op) == ("13", "approximé")
+def test_rattacher_departement_repli_sur_code_postal_si_zone_absente():
+    assert rattacher_departement(cp_beneficiaire="13001") == ("13", "approximé")
 
 
-def test_assign_departement_repli_sur_nom_si_rien_dautre():
-    op = {"Nom du bénéficiaire": "Ville de Bastia"}
-    assert assign_departement(op) == ("2B", "nom du bénéficiaire")
+def test_rattacher_departement_repli_sur_nom_si_rien_dautre():
+    assert rattacher_departement(nom_benef="Ville de Bastia") == ("2B", "nom du bénéficiaire")
 
 
-def test_assign_departement_inconnu_si_rien_ne_resout():
-    assert assign_departement({}) == (None, "inconnu")
+def test_rattacher_departement_inconnu_si_rien_ne_resout():
+    assert rattacher_departement() == (None, "inconnu")
 
 
 def test_dept_sources_contient_zone():
     assert "zone" in DEPT_SOURCES
+
+
+def test_ajouter_departements_lit_les_colonnes_nommees_par_schema_source():
+    # Chaque source nomme ses colonnes à sa façon : la cascade passe par `cols`
+    # (clé schema_source -> colonne réelle), pas par des libellés fixes (#232).
+    df = pd.DataFrame({
+        "Dépt op.": ["42/Loire", None, None],
+        "CP / zip code": ["13001", "75011", None],
+        "Montant UE": [1.0, 2.0, 3.0],
+    })
+    cols = {"departement": "Dépt op.", "cp_beneficiaire": "CP / zip code", "zone": "Absente"}
+
+    resultat = ajouter_departements(df, cols)
+
+    # Le manquant peut sortir en None ou en NaN selon le type que pandas infère :
+    # le dashboard le teste par notna(), le test fait de même.
+    assert resultat["dept"].iloc[:2].tolist() == ["42", "75"]
+    assert pd.isna(resultat["dept"].iloc[2])
+    assert resultat["dept_source"].tolist() == ["opération", "approximé", "inconnu"]
+    assert resultat["Montant UE"].tolist() == [1.0, 2.0, 3.0]  # le reste est conservé
+    assert "dept" not in df.columns  # pas de modification en place
+
+
+def test_ajouter_departements_sur_une_source_sans_aucun_champ_de_localisation():
+    # Nouvelle-Aquitaine 2014-2020 : ni département, ni code postal (#95).
+    resultat = ajouter_departements(pd.DataFrame({"Montant UE": [1.0, 2.0]}), {})
+    assert resultat["dept"].isna().all()
+    assert resultat["dept_source"].tolist() == ["inconnu", "inconnu"]
+
+
+def test_le_dashboard_affiche_les_libelles_du_pipeline():
+    # Contrat des libellés d'origine : une seule constante, importée par l'affichage.
+    from utils import departments as affichage
+
+    assert affichage.DEPT_SOURCES is DEPT_SOURCES
 
 
 # --- Tableau « Détail par département » (issue #157, écart D3) ----------------------
