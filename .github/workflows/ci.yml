@@ -93,7 +93,7 @@ jobs:
       - name: Installer les dépendances
         run: pip install -r requirements-dev.txt
 
-      - name: Appliquer le schéma et les vues SQL
+      - name: Appliquer le schéma SQL (tables)
         run: |
           for f in metabase/init/*.sql; do
             psql -h localhost -U fesi -d fesi -f "$f"

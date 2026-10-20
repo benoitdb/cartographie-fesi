@@ -195,6 +195,12 @@ pas apparaître en dépassement à cause d'un arrondi à la centime côté sourc
 
 ### Historique de construction — les écrans des Phases 1-3
 
+> **Les vues SQL citées dans cet historique n'existent plus** (#231, ADR 002) :
+> leur logique vit dans les marts dbt homonymes, sans le préfixe `v_`
+> (`v_engage_all` → `marts.engage_all`), que Metabase lit. Les fichiers
+> `metabase/init/02` à `05` ont été retirés ; `01_schema.sql` ne porte plus que
+> les tables.
+
 > Les cinq sections qui suivent décrivent les dashboards des Phases 1-3, **dissous
 > par [#129](https://github.com/benoitdb/cartographie-fesi/issues/129)** au profit
 > de l'organisation par usage ci-dessus. `setup_metabase.archive_legacy()` les
@@ -328,7 +334,7 @@ retranscrire la règle.
 
 **Vues SQL** (`metabase/init/05_vues_unifiees.sql`) — ajoutées en Phase B. Depuis
 #231 (ADR 002), Metabase lit les marts dbt homonymes du schéma `marts`
-(`repartition_all`, `engage_all`…) ; ces vues restent jusqu'à leur retrait :
+(`repartition_all`, `engage_all`…), et ces vues ont été retirées. Pour mémoire :
 - `v_repartition_all` — répartition thématique par (période, périmètre, fonds,
   niveau1, niveau2). Les deux périodes ne décrivent pas la même chose :
   2021-2027 a objectif stratégique → objectif spécifique, 2014-2020 a domaine
@@ -374,11 +380,10 @@ granularité, pas une surconsommation) ; Auvergne-Rhône-Alpes FEDER affiche
 740 072 469 € programmés, soit bien la somme FEDER + maquette REACT-EU fondue,
 quand La Réunion garde ses deux lignes séparées.
 
-**Init scripts appliqués sur une base déjà provisionnée** : les fichiers de
-`metabase/init/` ne s'exécutent automatiquement qu'à la création du volume
-Docker (`docker compose up` sur un volume vierge). Sur une instance déjà
-démarrée, appliquer un nouveau fichier à la main :
-`psql -h localhost -p 5437 -U <user> -d <db> -f metabase/init/04_periode_2014_2020.sql`.
+**Schéma sur une base déjà provisionnée** : `metabase/init/01_schema.sql` ne
+s'exécute automatiquement qu'à la création du volume Docker. Une table ajoutée
+ensuite s'applique à la main sur une instance existante ; les marts, eux, se
+reconstruisent par `./outils.sh marts`.
 
 ## GeoJSON
 
@@ -402,15 +407,10 @@ chaque territoire nécessiterait sa propre question.
 metabase/
   docker-compose.yml    — PostgreSQL 16 + Metabase + serveur GeoJSON
   .env                  — credentials locaux (gitignoré)
-  init/                 — Metabase ne lit plus les vues 02 à 05 (marts dbt, #231)
-    01_schema.sql       — schéma fesi : tables operations, programme_totals, region_metadata
-    02_views.sql        — vues d'agrégats scopées (source_id, periode)
-    03_pilotage.sql     — vues pilotage (programmé vs engagé, taux, reste à engager) — Phase 2
-    04_periode_2014_2020.sql — fusion des six sources 14-20, pilotage et
-                          cofinancement de la période, table categories_ue — Phase 3
-    05_vues_unifiees.sql — vues unifiées par période (v_engage_all, v_pilotage_all,
-                          v_repartition_all, v_cofinancement_*), table allocations_rup,
-                          colonne plafond_cofinancement — Phase A/B #129
+  init/
+    01_schema.sql       — tables seulement : operations, programme_totals, dotations_os,
+                          region_metadata, categories_ue_2014_2020, allocations_rup.
+                          Les vues 02 à 05 sont retirées : Metabase lit les marts dbt (#231)
   load_data.py          — charge les JSON de data/processed/ dans PostgreSQL
   provision_roles.py    — rôles techniques ; schéma `marts` ouvert au lecteur (#197, #231)
   verify_aggregates.py  — recoupe les marts vs JSON, source 2021-2027 (Phase 0, #231)

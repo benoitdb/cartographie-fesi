@@ -78,7 +78,7 @@ programme combiné FEDER-FSE, seule dotation FSE que porte Mayotte.
 Le pilotage 14-20 n'est plus masqué sur aucun périmètre agrégé depuis l'arbitrage
 Phase 4 (issue #121) : « Ensemble national » fusionne désormais les trois régions
 hors-Synergie ET le PON FSE (`dashboard/utils/periodes.fusionner_ensemble_national_2014_2020`,
-jumeau Python de `metabase/init/04_periode_2014_2020.sql`), comme « Volet national »
+jumeau Python du mart dbt `perimetre_2014_2020`), comme « Volet national »
 depuis que PON FSE et IEJ national y sont fusionnés — c'était la seule pièce qui
 manquait à chacun. Un taux calculé sur un engagé partiel afficherait une donnée
 manquante comme une sous-consommation. Normandie, Nouvelle-Aquitaine et Bretagne
@@ -231,8 +231,8 @@ aucune donnée, il lit des Parquet committés.
   connexion antérieure à #197 était restée sur le compte propriétaire).
   **Metabase lit les marts dbt** du schéma `marts` (ADR 002, #231), construits
   par `./outils.sh marts` : à relancer après tout rechargement des données, ce
-  sont des tables. Les vues de `metabase/init/02` à `05` restent en place,
-  inutilisées, jusqu'à leur retrait (PR 2 de #231).
+  sont des tables. Les vues SQL de `metabase/init/` ont été retirées (#231) :
+  `01_schema.sql` ne porte plus que les tables.
   Les trois scripts de vérification se recouvrent volontairement peu : les deux
   premiers valident les **marts** en attaquant PostgreSQL, le troisième valide ce
   qu'un utilisateur **lit** (SQL de la carte, template-tag, `parameter_mapping`),
@@ -322,21 +322,17 @@ aucune donnée, il lit des Parquet committés.
   fait rougir la CI, qui exige `git diff --exit-code` sur `dbt/` après
   régénération.
 
-- **Vérifier la couche dbt** — deux harnais qui se recouvrent volontairement peu :
+- **Vérifier la couche dbt** :
   ```
   dbt/venv/bin/python dbt/verifier_equivalence.py     # vs agregats.py, sur DuckDB
-  dbt/venv/bin/python dbt/verifier_vues_postgres.py   # vs les 19 vues SQL
   ```
-  Le premier tourne **en CI** (job `equivalence-dbt`) : la cible DuckDB ne
-  demande aucune infrastructure et les Parquet sont committés, donc un clone nu
-  suffit. C'est ce qui débloque le garde-fou que l'issue #125 décrivait comme
-  impossible à mettre en CI. Le second a besoin d'un PostgreSQL chargé, des vues
-  de `metabase/init/` et d'un `dbt build --target postgres` préalable : c'est le
-  filet de la période de recouvrement, à relancer à chaque nouveau millésime
-  tant que les deux implémentations coexistent (fin prévue par l'ADR 002, #231).
-  **Aucune divergence n'est attendue** : les 19 comparaisons doivent être
-  exactes. L'écart interrégional de `v_engage_by_perimetre_fonds` (1,625 M€,
-  #138) est corrigé dans la vue depuis le 8 septembre 2026 (#230).
+  Il tourne **en CI** (job `equivalence-dbt`) : la cible DuckDB ne demande
+  aucune infrastructure et les Parquet sont committés, donc un clone nu suffit.
+  C'est ce qui débloque le garde-fou que l'issue #125 décrivait comme impossible
+  à mettre en CI. Côté PostgreSQL, les marts sont vérifiés par les scripts de
+  `metabase/` (job `verify-metabase`). Le filet de la période de recouvrement,
+  `dbt/verifier_vues_postgres.py`, a disparu avec les vues (#231), après être
+  resté vert sur les 19 comparaisons (#230).
 
 ## Quoi (repo map)
 
@@ -465,8 +461,8 @@ aucune donnée, il lit des Parquet committés.
     l'écran s'il diverge de plus d'un point — un signal de qualité de source,
     jamais une seconde vérité. La comparaison au plafond applique une
     **tolérance relative de 1e-6** (`utils/stats.TOLERANCE_RELATIVE_PLAFOND`,
-    et sa contrepartie dans `metabase/init/04_periode_2014_2020.sql` — les deux
-    doivent rester alignées) : de nombreuses opérations sont programmées pile
+    et sa contrepartie écrite en dur dans les marts dbt `cofinancement_*` — les
+    deux doivent rester alignées) : de nombreuses opérations sont programmées pile
     au plafond, arrondies à la centime côté source, ce qui laisse un écart
     résiduel de quelques 10⁻⁷ en relatif que ni le flottant ni le calcul
     décimal exact n'absorbent tout seuls (issue #126) ;

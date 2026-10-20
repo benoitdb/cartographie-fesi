@@ -299,8 +299,8 @@ def load_region_metadata(cur):
     count = 0
     for region, meta in data.items():
         # `plafond_cofinancement` (2021-2027) est résolu ICI, par la fonction
-        # Streamlit elle-même, et non dans la vue SQL qui s'en sert
-        # (v_cofinancement_2021_2027, init/05_vues_unifiees.sql) : une région
+        # Streamlit elle-même, et non dans le SQL qui s'en sert (mart dbt
+        # `cofinancement_2021_2027`) : une région
         # sur dix-neuf porte une catégorie mixte dont le plafond est une
         # moyenne pondérée extraite du libellé par regex. Même arbitrage que
         # `load_categories_ue_2014_2020` ci-dessous, et pour la même raison —
@@ -366,9 +366,8 @@ def load_categories_ue_2014_2020(cur):
     """Catégories de cohésion UE 2014-2020 par région moderne (Phase 3, #121),
     avec le plafond de cofinancement déjà résolu en (min, max) — appelle
     directement `dashboard/utils/cofinancement.plafond_intervalle_2014_2020`
-    plutôt que de dupliquer la règle en Python : seule la vue SQL
-    `v_cofinancement_2014_2020` (04_periode_2014_2020.sql) duplique
-    `FONDS_HORS_PLAFOND`, faute de pouvoir importer du Python dans une vue."""
+    plutôt que de dupliquer la règle. `FONDS_HORS_PLAFOND` parvient au mart dbt
+    `cofinancement_2014_2020` par une variable générée (`dbt/generer.py`)."""
     path = DATA_DIR / "categories_ue_2014_2020.json"
     if not path.exists():
         print("  categories_ue_2014_2020.json non trouvé, skip")

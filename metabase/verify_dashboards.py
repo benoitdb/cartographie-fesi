@@ -716,7 +716,7 @@ def check_periode_2014_2020(session, terr, pil, analyses, categories):
     resume_cofi, erreurs_cofi = cofinancement_python(operations, categories)
 
     # Dossiers sans fonds renseigné exclus des deux côtés (arbitrage Phase 4,
-    # #121) : `v_engage_2014_2020` filtre `fonds IS NOT NULL`, comme le filtre
+    # #121) : le mart `engage_2014_2020` filtre `fonds IS NOT NULL`, comme le filtre
     # Fonds de Streamlit qui les écartait déjà quel que soit le fonds coché
     # (26 dossiers Normandie, 24,6 M€).
     totaux = defaultdict(lambda: {"montant": 0.0, "count": 0})
@@ -899,7 +899,7 @@ def check_structure_phase_c(session, struct, agg, region_metadata, programme_det
             for k, v in agg["by_region_objectif"].items()
             if v["region"] == region
         }
-        # `v_repartition_all` remplace un objectif absent par 'Non renseigné'
+        # Le mart `repartition_all` remplace un objectif absent par 'Non renseigné'
         # (arbitrage #129 : rendre l'asymétrie visible plutôt que filtrer), là
         # où `by_region_objectif` omet simplement ces opérations. Les objectifs
         # NOMMÉS se comparent donc un à un, et le résidu est contrôlé juste

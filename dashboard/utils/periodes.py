@@ -248,8 +248,9 @@ TAUX_COFINANCEMENT_DIVERGENT = "Taux de cofinancement divergent"
 
 # Écart entre le taux déclaré par une source régionale 2014-2020 et le taux
 # recalculé (montant / dépenses) à partir duquel l'écart est signalé plutôt
-# qu'ignoré (arbitrage Phase 4, #127) — même seuil que la vue SQL
-# `v_cofinancement_2014_2020.taux_divergent`, à faire évoluer ensemble.
+# qu'ignoré (arbitrage Phase 4, #127) — même seuil, écrit en dur, que
+# `taux_divergent` dans les marts dbt `cofinancement_2014_2020` et
+# `cofinancement_2021_2027`, à faire évoluer ensemble.
 SEUIL_ECART_TAUX_DECLARE = 0.01
 
 # Le libellé affiché du montant, lui, ne se normalise pas : cf. piège 1 de la
@@ -789,7 +790,7 @@ def regions_couvertes_par_programme(ops, table_reference):
 
 
 def enveloppes_ensemble_national_2014_2020(fonds_engages_par_perimetre, totaux_2014_2020):
-    """Enveloppes programmées agrégées au national — jumeau Python de `v_enveloppes_2014_2020`,
+    """Enveloppes programmées agrégées au national — jumeau Python du mart dbt `enveloppes_2014_2020`,
     pour le pilotage du périmètre « Ensemble national » (arbitrage Phase 4, issue #121).
 
     `totaux_2014_2020` : sortie de `load_programme_totals_2014_2020()`, `{périmètre: {fonds:
