@@ -315,16 +315,13 @@ aucune donnée, il lit des Parquet committés.
   Le premier tourne **en CI** (job `equivalence-dbt`) : la cible DuckDB ne
   demande aucune infrastructure et les Parquet sont committés, donc un clone nu
   suffit. C'est ce qui débloque le garde-fou que l'issue #125 décrivait comme
-  impossible à mettre en CI. Le second a besoin d'un PostgreSQL chargé **et des
-  vues, qui vivent sur la branche `feat/metabase-121`, pas sur `main`** : c'est
-  le filet de la période de recouvrement, à relancer à chaque nouveau millésime
-  tant que les deux implémentations coexistent.
-
-  **Une divergence est attendue, et vérifiée comme telle** :
-  `engage_by_perimetre_fonds` porte les trois partitions d'`agregats.py` là où
-  `v_engage_by_perimetre_fonds` en perd une (interrégional, 1,625 M€ —
-  issue #138). Le script contrôle que l'écart est exactement celui-là, ni plus ni
-  autre chose.
+  impossible à mettre en CI. Le second a besoin d'un PostgreSQL chargé, des vues
+  de `metabase/init/` et d'un `dbt build --target postgres` préalable : c'est le
+  filet de la période de recouvrement, à relancer à chaque nouveau millésime
+  tant que les deux implémentations coexistent (fin prévue par l'ADR 002, #231).
+  **Aucune divergence n'est attendue** : les 19 comparaisons doivent être
+  exactes. L'écart interrégional de `v_engage_by_perimetre_fonds` (1,625 M€,
+  #138) est corrigé dans la vue depuis le 8 septembre 2026 (#230).
 
 ## Quoi (repo map)
 
