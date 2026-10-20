@@ -1,10 +1,11 @@
 """Recoupe les marts dbt contre les 19 vues SQL de `metabase/init/`.
 
-LE FILET DE LA PÉRIODE DE RECOUVREMENT (issue #135, point 3). Les deux
-implémentations coexistent volontairement : les vues restent la vérité pour
-Metabase, dbt écrit dans son propre schéma (`dbt_spike`), et ce script vérifie
-qu'elles disent la même chose à chaque régénération de données. On ne supprime
-les vues qu'une fois ce filet resté vert sur plusieurs millésimes.
+LE FILET DE LA PÉRIODE DE RECOUVREMENT (issue #135, point 3). Depuis #231
+(ADR 002), Metabase lit les marts dbt du schéma `marts` ; les vues restent en
+place, inutilisées, jusqu'à leur retrait (PR 2 de #231). Ce script vérifie que
+les deux disent la même chose, et disparaîtra avec les vues. Les vues `v_by_*`
+et `v_pilotage` sont comparées sur 2021-2027 seulement : les marts
+correspondants ne couvrent que cette période (#231, option A).
 
 Complémentaire de `verifier_equivalence.py`, qui compare aux agrégats PYTHON sur
 DuckDB, sans infrastructure. Celui-ci compare aux vues SQL sur PostgreSQL, et ne
@@ -34,7 +35,7 @@ DSN = dict(
     password=os.environ.get("POSTGRES_PASSWORD", "fesi_local"),
 )
 
-SCHEMA_DBT = os.environ.get("DBT_SCHEMA", "dbt_spike")
+SCHEMA_DBT = os.environ.get("DBT_SCHEMA", "marts")
 
 # (mart dbt, vue SQL, colonnes comparées, filtre éventuel sur la vue).
 #

@@ -1,19 +1,22 @@
-"""Vérifie les vues unifiées par période (issue #129, init/05_vues_unifiees.sql).
+"""Vérifie les marts unifiés par période (issue #129 ; marts dbt depuis #231,
+qui remplacent les vues de init/05_vues_unifiees.sql).
 
 Script de vérification ponctuelle, pas un test pytest : il lui faut PostgreSQL,
 comme `verify_aggregates.py` et `verify_pilotage_2014_2020.py` (cf. #125).
 
 Ce qu'il verrouille, dans l'ordre d'importance :
 
-1. **Le piège du double-comptage.** `v_pilotage` et `v_engage_by_perimetre_fonds`
-   produisent aussi des lignes 2014-2020, en sommant les six sources qui se
-   chevauchent — c'est faux pour cette période. Les vues `_all` doivent donc
-   scoper leur côté 21-27 par `WHERE periode = '2021-2027'`. Ce script échoue si
-   quelqu'un retire ce filtre : les totaux 2014-2020 doubleraient.
-2. **La fidélité aux vues de période** : `v_pilotage_all` restreinte à une
+1. **Le piège du double-comptage.** Les vues `marts.pilotage` et
+   `marts.engage_by_perimetre_fonds` produisaient aussi des lignes 2014-2020, en
+   sommant les six sources qui se chevauchent — c'est faux pour cette période.
+   Les marts dbt partent du staging de la seule source 2021-2027 et n'en
+   produisent plus (#135, #231) : ce script échoue si `marts.pilotage` en porte
+   de nouveau, ou si le total 2014-2020 de `marts.pilotage_all` s'écarte de
+   `marts.pilotage_2014_2020`.
+2. **La fidélité aux vues de période** : `marts.pilotage_all` restreinte à une
    période doit être identique, ligne à ligne, à la vue de cette période.
-3. **La complétude de la répartition thématique** (phase B) : `v_repartition_all`
-   regroupée par (période, périmètre, fonds) doit redonner `v_engage_all` ligne
+3. **La complétude de la répartition thématique** (phase B) : `marts.repartition_all`
+   regroupée par (période, périmètre, fonds) doit redonner `marts.engage_all` ligne
    à ligne. C'est ce qui interdit de « nettoyer » la vue en filtrant les
    opérations sans dimension thématique — elles font 90 % du montant 2014-2020,
    et les écarter rendrait un treemap muet sur l'essentiel de la période.
@@ -77,68 +80,71 @@ def main():
     with connect() as conn, conn.cursor() as cur:
         print("1. Fidélité aux vues de période")
 
-        # v_pilotage_all / 2021-2027 == v_pilotage restreinte à 2021-2027
+        # marts.pilotage_all / 2021-2027 == marts.pilotage restreinte à 2021-2027
         compare(
-            "v_pilotage_all[2021-2027] == v_pilotage[2021-2027]",
+            "marts.pilotage_all[2021-2027] == marts.pilotage[2021-2027]",
             fetch(cur, """
                 SELECT perimetre, fonds, round(programme::numeric, 2), round(engage::numeric, 2)
-                FROM v_pilotage WHERE periode = '2021-2027' ORDER BY 1, 2
+                FROM marts.pilotage WHERE periode = '2021-2027' ORDER BY 1, 2
             """),
             fetch(cur, """
                 SELECT perimetre, fonds, round(programme::numeric, 2), round(engage::numeric, 2)
-                FROM v_pilotage_all WHERE periode = '2021-2027' ORDER BY 1, 2
+                FROM marts.pilotage_all WHERE periode = '2021-2027' ORDER BY 1, 2
             """),
         )
 
-        # v_pilotage_all / 2014-2020 == v_pilotage_2014_2020 (la vue de fusion,
-        # PAS v_pilotage, qui est fausse sur cette période)
+        # marts.pilotage_all / 2014-2020 == marts.pilotage_2014_2020 (la vue de fusion,
+        # PAS marts.pilotage, qui est fausse sur cette période)
         compare(
-            "v_pilotage_all[2014-2020] == v_pilotage_2014_2020",
+            "marts.pilotage_all[2014-2020] == marts.pilotage_2014_2020",
             fetch(cur, """
                 SELECT perimetre, fonds, round(programme::numeric, 2), round(engage::numeric, 2)
-                FROM v_pilotage_2014_2020 ORDER BY 1, 2
+                FROM marts.pilotage_2014_2020 ORDER BY 1, 2
             """),
             fetch(cur, """
                 SELECT perimetre, fonds, round(programme::numeric, 2), round(engage::numeric, 2)
-                FROM v_pilotage_all WHERE periode = '2014-2020' ORDER BY 1, 2
+                FROM marts.pilotage_all WHERE periode = '2014-2020' ORDER BY 1, 2
             """),
         )
 
         compare(
-            "v_engage_all[2014-2020] == v_engage_2014_2020",
+            "marts.engage_all[2014-2020] == marts.engage_2014_2020",
             fetch(cur, """
                 SELECT perimetre, fonds, n_operations, round(engage::numeric, 2)
-                FROM v_engage_2014_2020 ORDER BY 1, 2
+                FROM marts.engage_2014_2020 ORDER BY 1, 2
             """),
             fetch(cur, """
                 SELECT perimetre, fonds, n_operations, round(engage::numeric, 2)
-                FROM v_engage_all WHERE periode = '2014-2020' ORDER BY 1, 2
+                FROM marts.engage_all WHERE periode = '2014-2020' ORDER BY 1, 2
             """),
         )
 
         print("\n2. Absence de double-comptage 2014-2020")
         # Le total 2014-2020 des vues `_all` ne doit JAMAIS approcher la somme
-        # v_pilotage[2014-2020] + v_pilotage_2014_2020 : ce serait le signe que
+        # marts.pilotage[2014-2020] + marts.pilotage_2014_2020 : ce serait le signe que
         # le filtre de période a sauté du côté 21-27 de l'union.
         piege = float(fetch(cur, """
-            SELECT COALESCE(SUM(engage), 0) FROM v_pilotage WHERE periode = '2014-2020'
+            SELECT COALESCE(SUM(engage), 0) FROM marts.pilotage WHERE periode = '2014-2020'
         """)[0][0])
         reel = float(fetch(cur, """
-            SELECT COALESCE(SUM(engage), 0) FROM v_pilotage_all WHERE periode = '2014-2020'
+            SELECT COALESCE(SUM(engage), 0) FROM marts.pilotage_all WHERE periode = '2014-2020'
         """)[0][0])
-        attendu = float(fetch(cur, "SELECT COALESCE(SUM(engage), 0) FROM v_pilotage_2014_2020")[0][0])
+        attendu = float(fetch(cur, "SELECT COALESCE(SUM(engage), 0) FROM marts.pilotage_2014_2020")[0][0])
 
-        print(f"  v_pilotage[2014-2020]      (source du piège) : {piege / 1e6:>10,.0f} M€")
-        print(f"  v_pilotage_2014_2020       (référence)       : {attendu / 1e6:>10,.0f} M€")
-        print(f"  v_pilotage_all[2014-2020]  (mesuré)          : {reel / 1e6:>10,.0f} M€")
+        print(f"  marts.pilotage[2014-2020]      (source du piège) : {piege / 1e6:>10,.0f} M€")
+        if piege != 0:
+            ecarts.append("marts.pilotage porte des lignes 2014-2020 : le piège du double-comptage revient")
+            print("  ÉCART : marts.pilotage ne doit couvrir que 2021-2027 (#231)")
+        print(f"  marts.pilotage_2014_2020       (référence)       : {attendu / 1e6:>10,.0f} M€")
+        print(f"  marts.pilotage_all[2014-2020]  (mesuré)          : {reel / 1e6:>10,.0f} M€")
         if abs(reel - attendu) > 1:
-            ecarts.append("v_pilotage_all[2014-2020] ne vaut pas v_pilotage_2014_2020")
+            ecarts.append("marts.pilotage_all[2014-2020] ne vaut pas marts.pilotage_2014_2020")
             print("  ÉCART : le côté 21-27 de l'union n'est pas scopé par période")
         else:
             print("  OK   pas de double-comptage")
 
         print("\n3. Complétude 2021-2027 : la somme des périmètres == la source")
-        # `v_engage_all` sert de socle aux KPI unifiés (montant, opérations) des
+        # `marts.engage_all` sert de socle aux KPI unifiés (montant, opérations) des
         # dashboards par usage : sans filtre de périmètre, la carte doit rendre
         # le total de la période, exactement ce que lit Streamlit. Or les trois
         # partitions d'`agregats.py` (mono-région, interrégional, national) sont
@@ -147,23 +153,23 @@ def main():
         # manquantes), d'où la troisième branche de l'union.
         (ops_src, eur_src), = fetch(cur, """
             SELECT SUM(n_operations), round(SUM(montant_ue_total)::numeric, 2)
-            FROM v_by_fonds WHERE periode = '2021-2027'
+            FROM marts.by_fonds WHERE periode = '2021-2027'
         """)
         (ops_all, eur_all), = fetch(cur, """
             SELECT SUM(n_operations), round(SUM(engage)::numeric, 2)
-            FROM v_engage_all WHERE periode = '2021-2027'
+            FROM marts.engage_all WHERE periode = '2021-2027'
         """)
-        print(f"  v_by_fonds[2021-2027]  (source)  : {ops_src:>6} op., {float(eur_src) / 1e6:>10,.3f} M€")
-        print(f"  v_engage_all[2021-2027] (mesuré) : {ops_all:>6} op., {float(eur_all) / 1e6:>10,.3f} M€")
+        print(f"  marts.by_fonds[2021-2027]  (source)  : {ops_src:>6} op., {float(eur_src) / 1e6:>10,.3f} M€")
+        print(f"  marts.engage_all[2021-2027] (mesuré) : {ops_all:>6} op., {float(eur_all) / 1e6:>10,.3f} M€")
         if (ops_src, eur_src) != (ops_all, eur_all):
-            ecarts.append("v_engage_all[2021-2027] ne couvre pas toute la source")
+            ecarts.append("marts.engage_all[2021-2027] ne couvre pas toute la source")
             print("  ÉCART : une partition manque à l'union (interrégional ? national ?)")
         else:
             print("  OK   somme des périmètres == total de la source")
 
-        print("\n3 bis. Complétude 2021-2027 de v_engage_by_perimetre_fonds")
+        print("\n3 bis. Complétude 2021-2027 de marts.engage_by_perimetre_fonds")
         # MÊME contrôle qu'au point 3, sur la vue dont il manquait (issue #138).
-        # `v_engage_all` avait ce garde-fou et `v_engage_by_perimetre_fonds` non,
+        # `marts.engage_all` avait ce garde-fou et `marts.engage_by_perimetre_fonds` non,
         # si bien que la correction de la partition interrégionale faite en #129
         # n'a jamais été reportée sur elle : elle est restée 1,625 M€ trop basse
         # pendant tout ce temps, sans que rien ne le dise.
@@ -175,18 +181,18 @@ def main():
         # ce contrôle ne prétend donc rien sur cette période-là.
         (eur_perim,), = fetch(cur, """
             SELECT round(SUM(engage)::numeric, 2)
-            FROM v_engage_by_perimetre_fonds WHERE periode = '2021-2027'
+            FROM marts.engage_by_perimetre_fonds WHERE periode = '2021-2027'
         """)
-        print(f"  v_by_fonds[2021-2027]                 (source)  : {float(eur_src) / 1e6:>10,.3f} M€")
-        print(f"  v_engage_by_perimetre_fonds[2021-2027] (mesuré) : {float(eur_perim) / 1e6:>10,.3f} M€")
+        print(f"  marts.by_fonds[2021-2027]                 (source)  : {float(eur_src) / 1e6:>10,.3f} M€")
+        print(f"  marts.engage_by_perimetre_fonds[2021-2027] (mesuré) : {float(eur_perim) / 1e6:>10,.3f} M€")
         if eur_src != eur_perim:
-            ecarts.append("v_engage_by_perimetre_fonds[2021-2027] ne couvre pas toute la source")
+            ecarts.append("marts.engage_by_perimetre_fonds[2021-2027] ne couvre pas toute la source")
             print("  ÉCART : une partition manque (interrégional ? national ?)")
         else:
             print("  OK   somme des périmètres == total de la source")
 
         print("\n4. Aucune période inattendue")
-        for vue in ("v_pilotage_all", "v_engage_all"):
+        for vue in ("marts.pilotage_all", "marts.engage_all"):
             periodes = [p for (p,) in fetch(cur, f"SELECT DISTINCT periode FROM {vue} ORDER BY 1")]
             if periodes != ["2014-2020", "2021-2027"]:
                 ecarts.append(f"{vue} : périodes {periodes}")
@@ -195,19 +201,19 @@ def main():
                 print(f"  OK   {vue} : {periodes}")
 
         print("\n5. Répartition thématique : la somme des dimensions == l'engagé")
-        # `v_repartition_all` détaille `v_engage_all` d'un cran (niveau1/niveau2).
+        # `marts.repartition_all` détaille `marts.engage_all` d'un cran (niveau1/niveau2).
         # Regroupée, elle doit lui être identique : c'est ce qui garantit qu'aucune
         # opération n'a été perdue en route par un filtre sur la dimension
         # thématique — le côté 2014-2020 en porte une sur dix seulement.
         compare(
-            "v_repartition_all regroupée == v_engage_all",
+            "marts.repartition_all regroupée == marts.engage_all",
             fetch(cur, """
                 SELECT periode, perimetre, fonds, n_operations, round(engage::numeric, 2)
-                FROM v_engage_all ORDER BY 1, 2, 3
+                FROM marts.engage_all ORDER BY 1, 2, 3
             """),
             fetch(cur, """
                 SELECT periode, perimetre, fonds, SUM(n_operations)::bigint, round(SUM(engage)::numeric, 2)
-                FROM v_repartition_all GROUP BY 1, 2, 3 ORDER BY 1, 2, 3
+                FROM marts.repartition_all GROUP BY 1, 2, 3 ORDER BY 1, 2, 3
             """),
         )
 
@@ -224,21 +230,21 @@ def main():
                     COALESCE(SUM(engage)       FILTER (WHERE niveau1 <> 'Non renseigné'), 0),
                     COALESCE(SUM(n_operations) FILTER (WHERE niveau1 =  'Non renseigné'), 0),
                     COALESCE(SUM(engage)       FILTER (WHERE niveau1 =  'Non renseigné'), 0)
-                FROM v_repartition_all WHERE periode = '{periode}'
+                FROM marts.repartition_all WHERE periode = '{periode}'
             """)
             total = float(eur_ren) + float(eur_non)
             pct = 100 * float(eur_ren) / total if total else 0
             print(f"  {periode} ({colonne}) : {n_ren} op. renseignées, "
                   f"{float(eur_ren) / 1e6:,.0f} M€ sur {total / 1e6:,.0f} M€ ({pct:.1f} %)")
             if n_non == 0 and n_ren == 0:
-                ecarts.append(f"v_repartition_all vide pour {periode}")
+                ecarts.append(f"marts.repartition_all vide pour {periode}")
                 print(f"  ÉCART aucune ligne pour {periode}")
         (n_14,), = fetch(cur, """
-            SELECT COUNT(*) FROM v_repartition_all
+            SELECT COUNT(*) FROM marts.repartition_all
             WHERE periode = '2014-2020' AND niveau1 = 'Non renseigné'
         """)
         if n_14 == 0:
-            ecarts.append("v_repartition_all[2014-2020] n'a plus de ligne 'Non renseigné'")
+            ecarts.append("marts.repartition_all[2014-2020] n'a plus de ligne 'Non renseigné'")
             print("  ÉCART : les opérations sans domaine d'intervention ont été filtrées "
                   "(90 % du montant de la période)")
         else:
@@ -246,27 +252,27 @@ def main():
 
         print("\n7. Cofinancement unifié : fidélité aux vues de période")
         compare(
-            "v_cofinancement_all[2014-2020] == v_cofinancement_2014_2020_summary",
+            "marts.cofinancement_all[2014-2020] == marts.cofinancement_2014_2020_summary",
             fetch(cur, """
                 SELECT region, fonds, n_operations, n_depassements, round(montant_depassements::numeric, 2)
-                FROM v_cofinancement_2014_2020_summary ORDER BY 1, 2
+                FROM marts.cofinancement_2014_2020_summary ORDER BY 1, 2
             """),
             fetch(cur, """
                 SELECT region, fonds, n_operations, n_depassements, round(montant_depassements::numeric, 2)
-                FROM v_cofinancement_all WHERE periode = '2014-2020' ORDER BY 1, 2
+                FROM marts.cofinancement_all WHERE periode = '2014-2020' ORDER BY 1, 2
             """),
         )
         compare(
-            "v_cofinancement_all[2021-2027] == v_cofinancement_2021_2027 agrégée",
+            "marts.cofinancement_all[2021-2027] == marts.cofinancement_2021_2027 agrégée",
             fetch(cur, """
                 SELECT region, fonds, COUNT(*)::bigint,
                        COUNT(*) FILTER (WHERE depasse_plafond)::bigint,
                        round(COALESCE(SUM(montant_ue) FILTER (WHERE depasse_plafond), 0)::numeric, 2)
-                FROM v_cofinancement_2021_2027 GROUP BY 1, 2 ORDER BY 1, 2
+                FROM marts.cofinancement_2021_2027 GROUP BY 1, 2 ORDER BY 1, 2
             """),
             fetch(cur, """
                 SELECT region, fonds, n_operations, n_depassements, round(montant_depassements::numeric, 2)
-                FROM v_cofinancement_all WHERE periode = '2021-2027' ORDER BY 1, 2
+                FROM marts.cofinancement_all WHERE periode = '2021-2027' ORDER BY 1, 2
             """),
         )
 

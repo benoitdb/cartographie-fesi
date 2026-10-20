@@ -70,3 +70,16 @@ def test_transfert_metabase_est_limite_aux_objets_public_et_idempotent():
         'ALTER VIEW "v_usage" OWNER TO "metabase_app"',
         'ALTER SCHEMA public OWNER TO "metabase_app"',
     ]
+
+
+def test_marts_ouvert_au_lecteur_y_compris_pour_les_tables_que_dbt_recreera():
+    cur = CurseurProprietes()
+
+    provision_roles.ouvrir_marts_au_lecteur(cur, "fesi", "lecteur", SQLSimule)
+
+    assert [requete for requete, _ in cur.executions] == [
+        'CREATE SCHEMA IF NOT EXISTS "marts"',
+        'GRANT USAGE ON SCHEMA "marts" TO "lecteur"',
+        'GRANT SELECT ON ALL TABLES IN SCHEMA "marts" TO "lecteur"',
+        'ALTER DEFAULT PRIVILEGES FOR ROLE "fesi" IN SCHEMA "marts" GRANT SELECT ON TABLES TO "lecteur"',
+    ]

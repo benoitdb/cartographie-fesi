@@ -141,8 +141,8 @@ aucune donnée, il lit des Parquet committés.
     lire les notes de version avant.
   - **docker-compose** (`metabase/`) : **aucun job CI n'utilise le compose, une
     CI verte n'y prouve rien.** Avant fusion : sauvegarder le volume (ci-dessous),
-    lancer `./outils.sh metabase` sur la branche, puis les scripts de
-    vérification Metabase. Une montée de l'image `postgres` se reporte à la main
+    lancer `./outils.sh metabase` puis `./outils.sh marts` sur la branche, puis
+    les scripts de vérification Metabase. Une montée de l'image `postgres` se reporte à la main
     dans le service de `.github/workflows/ci.yml` (même tag, même digest) :
     Dependabot ne suit pas les images de service d'un workflow. Les majeures de
     `postgres` sont ignorées exprès (format de fichiers incompatible).
@@ -212,19 +212,25 @@ aucune donnée, il lit des Parquet committés.
   stack tourne (`cd metabase && docker compose up -d`) :
   ```
   metabase/venv/bin/python metabase/load_data.py       # charge les 7 sources dans PostgreSQL
+  ./outils.sh marts                                     # construit les marts dbt que lit Metabase
   metabase/venv/bin/python metabase/verify_aggregates.py  # recoupe les agrégats SQL vs JSON
+                                          # (marts 2021-2027 seulement, #231)
   metabase/venv/bin/python metabase/verify_pilotage_2014_2020.py  # recoupe la fusion des
                                           # six sources 14-20 (substitution des trois régions
                                           # à fichier propre, addition du PON FSE) SQL vs dashboard
-  metabase/venv/bin/python metabase/verify_vues_unifiees.py  # vérifie les vues `_all`
-                                          # (union par période, issue #129) contre les vues
+  metabase/venv/bin/python metabase/verify_vues_unifiees.py  # vérifie les marts `_all`
+                                          # (union par période, issue #129) contre les marts
                                           # de période, et l'absence de double-comptage
   venv/bin/python metabase/verify_dashboards.py  # recoupe les cartes Metabase (interrogées
                                           # par l'API, filtres appliqués) vs le dashboard
                                           # Streamlit — venv RACINE, pas metabase/venv
   ```
+  **Metabase lit les marts dbt** du schéma `marts` (ADR 002, #231), construits
+  par `./outils.sh marts` : à relancer après tout rechargement des données, ce
+  sont des tables. Les vues de `metabase/init/02` à `05` restent en place,
+  inutilisées, jusqu'à leur retrait (PR 2 de #231).
   Les trois scripts de vérification se recouvrent volontairement peu : les deux
-  premiers valident les **vues** en attaquant PostgreSQL, le troisième valide ce
+  premiers valident les **marts** en attaquant PostgreSQL, le troisième valide ce
   qu'un utilisateur **lit** (SQL de la carte, template-tag, `parameter_mapping`),
   seule couche où une erreur passe en silence — un paramètre mal câblé n'échoue
   pas, le filtre est simplement ignoré.
@@ -232,24 +238,23 @@ aucune donnée, il lit des Parquet committés.
   uniquement — `docker compose down -v` puis `up` pour repartir d'un schéma
   modifié).
 
-  **`v_pilotage` et `v_engage_by_perimetre_fonds` ne sont pas scopées à
-  2021-2027** malgré leur usage : elles produisent aussi des lignes 2014-2020,
-  en sommant les six sources qui se chevauchent — le double-comptage que #68/#95
-  ont motivé. Elles sont justes sur 2021-2027 (source unique) et fausses sur
-  2014-2020, où seules les vues `v_*_2014_2020` le sont. Les vues unifiées
-  `v_pilotage_all` / `v_engage_all` (`init/05_vues_unifiees.sql`, issue #129)
-  filtrent donc explicitement leur côté 21-27 : **ce `WHERE periode = '2021-2027'`
-  n'est pas décoratif**, l'enlever double la période 2014-2020 (19 901 → 39 958 M€).
-  `verify_vues_unifiees.py` échoue si quelqu'un le retire.
+  **Le double-comptage 2014-2020.** Les vues `v_pilotage` et
+  `v_engage_by_perimetre_fonds` produisaient aussi des lignes 2014-2020, en
+  sommant les six sources qui se chevauchent (#68/#95) ; les vues unifiées
+  devaient filtrer leur côté 21-27 (`WHERE periode = '2021-2027'`), faute de quoi
+  la période doublait (19 901 → 39 958 M€). Les marts dbt partent du staging de
+  la seule source 2021-2027 et ne produisent plus ces lignes (#135).
+  `verify_vues_unifiees.py` échoue si `marts.pilotage` en porte de nouveau, ou si
+  `marts.pilotage_all` sur 2014-2020 s'écarte de `marts.pilotage_2014_2020`.
 
   **Les trois partitions d'`agregats.py` sont exclusives** (mono-région,
   interrégional, national) : une vue qui se veut le total d'une période doit
   porter les trois. `v_engage_all` en avait oublié une — 13 opérations, 1,625 M€
   sur 2021-2027, soit 0,02 %, assez peu pour passer inaperçu à l'oeil et assez
   pour faire mentir un KPI. Contrôle de complétude ajouté à
-  `verify_vues_unifiees.py` (somme des périmètres == `v_by_fonds`).
+  `verify_vues_unifiees.py` (somme des périmètres == `marts.by_fonds`).
 
-  **`v_repartition_all` porte `'Non renseigné'` et non un filtre** : la
+  **`repartition_all` porte `'Non renseigné'` et non un filtre** : la
   dimension thématique de 2014-2020 (`domaine_intervention`) n'est renseignée
   que sur 9,6 % du montant (trois fichiers régionaux). Filtrer les opérations
   sans domaine rendrait un treemap muet sur 90 % de la période — sans que rien
@@ -267,8 +272,9 @@ aucune donnée, il lit des Parquet committés.
   `"type": "text"` ne l'est pas.** C'est la limite qui avait imposé deux
   paramètres `region_a`/`region_b` en Phase 2, et sa levée fait disparaître
   l'écran Comparateur (#129). Un field filter suppose que Metabase ait
-  **synchronisé la vue** comme une table : une vue créée après la synchro
-  initiale n'a pas d'id de champ, d'où `setup_metabase.sync_views()`.
+  **synchronisé la table**, colonnes comprises : une table créée après la
+  synchro initiale n'a pas d'id de champ, d'où `setup_metabase.sync_views()`, qui
+  attend les colonnes et pas seulement la table (#231).
 
 - **Tests** : `venv/bin/python -m pytest -q` (376 tests, ~40 s). Ils tournent sur
   un clone nu et en CI : aucun ne lit le XLSX ni les JSON générés. Ceux du
@@ -291,13 +297,18 @@ aucune donnée, il lit des Parquet committés.
 
 - **Couche dbt** (issue #135) — 20 marts qui portent les 19 vues SQL de
   `metabase/init/`, sur deux cibles : DuckDB (embarqué, zéro infra) et PostgreSQL
-  (la stack Metabase). Lancer dbt **depuis `dbt/`** : DuckDB résout la variable
+  (la stack Metabase, qui les lit depuis #231). Sur PostgreSQL, un schéma par
+  couche (`staging`, `marts`, `reference` pour les seeds ;
+  `macros/generate_schema_name.sql`) ; DuckDB reste à plat dans `main`.
+  **Huit marts ne couvrent que 2021-2027** (`by_region`, `national`,
+  `interregional`, `by_fonds`, `by_region_fonds`, `by_objectif_strategique`,
+  `pilotage`, `cofinancement_2021_2027`) : la période 2014-2020 passe par ses
+  marts dédiés et les marts unifiés (#231, option A). Lancer dbt **depuis `dbt/`** : DuckDB résout la variable
   `chemin_data` contre le répertoire courant du process.
   ```
   dbt/venv/bin/python dbt/generer.py    # AVANT tout dbt build — voir ci-dessous
   cd dbt && venv/bin/dbt build --profiles-dir . --target duckdb
-  cd dbt && POSTGRES_USER=fesi POSTGRES_PASSWORD=fesi_local \
-      venv/bin/dbt build --profiles-dir . --target postgres
+  ./outils.sh marts                     # cible postgres : génère puis construit
   ```
   **`generer.py` n'est pas optionnel** : le SQL de staging, les seeds et les
   variables de règles de `dbt_project.yml` sont **générés** depuis le Python

@@ -52,6 +52,32 @@ def transferer_propriete_public(cur, proprietaire, sql_module):
     )
 
 
+def ouvrir_marts_au_lecteur(cur, proprietaire, lecteur, sql_module):
+    """Ouvre au lecteur Metabase le schéma ``marts``, et lui seul (#231, ADR 002).
+
+    dbt (cible postgres) y recrée ses tables à chaque build : un ``GRANT`` sur
+    les tables existantes se perdrait au build suivant. Les privilèges par défaut
+    du ``proprietaire``, le compte sous lequel dbt construit, couvrent les tables
+    futures. Les schémas ``staging`` et ``reference`` restent fermés au lecteur :
+    Metabase ne les synchronise donc pas.
+    """
+    marts = sql_module.Identifier("marts")
+    cur.execute(sql_module.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(marts))
+    cur.execute(
+        sql_module.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(marts, sql_module.Identifier(lecteur))
+    )
+    cur.execute(
+        sql_module.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO {}").format(
+            marts, sql_module.Identifier(lecteur)
+        )
+    )
+    cur.execute(
+        sql_module.SQL("ALTER DEFAULT PRIVILEGES FOR ROLE {} IN SCHEMA {} GRANT SELECT ON TABLES TO {}").format(
+            sql_module.Identifier(proprietaire), marts, sql_module.Identifier(lecteur)
+        )
+    )
+
+
 def main():
     import psycopg2
     from psycopg2 import sql
@@ -76,6 +102,7 @@ def main():
         cur.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {}").format(sql.Identifier(loader)))
         cur.execute(sql.SQL("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {}").format(sql.Identifier(loader)))
         cur.execute(sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA public TO {}").format(sql.Identifier(reader)))
+        ouvrir_marts_au_lecteur(cur, admin, reader, sql)
     with psycopg2.connect(host="localhost", port=int(env.get("POSTGRES_PORT", "5437")), dbname="metabase", user=admin, password=password) as conn, conn.cursor() as cur:
         transferer_propriete_public(cur, env["METABASE_APP_USER"], sql)
     print("OK : rôles techniques provisionnés.")
