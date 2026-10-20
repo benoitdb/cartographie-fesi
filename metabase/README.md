@@ -66,16 +66,25 @@ docker compose up -d
 # Vérifier que les trois containers tournent
 docker compose ps
 
+# Rôles techniques (chargeur, lecteur) et schéma `marts` ouvert au lecteur
+venv/bin/python provision_roles.py
+
 # Charger les données FESI dans PostgreSQL
 venv/bin/python load_data.py
+
+# Construire les marts dbt que lit Metabase (ADR 002, #231) : à relancer après
+# tout rechargement des données, ce sont des tables
+cd .. && ./outils.sh marts && cd metabase
 
 # Provisionner Metabase : connexion PostgreSQL, carte GeoJSON métropole,
 # les 5 dashboards (relançable sans effet de bord)
 venv/bin/python setup_metabase.py
 
-# Vérifier (facultatif) : agrégats SQL vs JSON, puis fusion 14-20 SQL vs dashboard
+# Vérifier (facultatif) : agrégats SQL vs JSON (marts 2021-2027), fusion 14-20
+# SQL vs dashboard, marts unifiés
 venv/bin/python verify_aggregates.py
 venv/bin/python verify_pilotage_2014_2020.py
+venv/bin/python verify_vues_unifiees.py
 
 # Vérification de bout en bout : chaque carte de chaque dashboard interrogée par
 # l'API, filtres appliqués, contre ce qu'affiche Streamlit. Se lance depuis la
@@ -317,7 +326,9 @@ retranscrire la règle.
 
 ### Vues unifiées par période (Phase B, issue #129)
 
-**Vues SQL** (`metabase/init/05_vues_unifiees.sql`) — ajoutées en Phase B :
+**Vues SQL** (`metabase/init/05_vues_unifiees.sql`) — ajoutées en Phase B. Depuis
+#231 (ADR 002), Metabase lit les marts dbt homonymes du schéma `marts`
+(`repartition_all`, `engage_all`…) ; ces vues restent jusqu'à leur retrait :
 - `v_repartition_all` — répartition thématique par (période, périmètre, fonds,
   niveau1, niveau2). Les deux périodes ne décrivent pas la même chose :
   2021-2027 a objectif stratégique → objectif spécifique, 2014-2020 a domaine
@@ -391,7 +402,7 @@ chaque territoire nécessiterait sa propre question.
 metabase/
   docker-compose.yml    — PostgreSQL 16 + Metabase + serveur GeoJSON
   .env                  — credentials locaux (gitignoré)
-  init/
+  init/                 — Metabase ne lit plus les vues 02 à 05 (marts dbt, #231)
     01_schema.sql       — schéma fesi : tables operations, programme_totals, region_metadata
     02_views.sql        — vues d'agrégats scopées (source_id, periode)
     03_pilotage.sql     — vues pilotage (programmé vs engagé, taux, reste à engager) — Phase 2
@@ -401,12 +412,13 @@ metabase/
                           v_repartition_all, v_cofinancement_*), table allocations_rup,
                           colonne plafond_cofinancement — Phase A/B #129
   load_data.py          — charge les JSON de data/processed/ dans PostgreSQL
-  verify_aggregates.py  — recoupe les agrégats SQL vs JSON, source par source (Phase 0)
+  provision_roles.py    — rôles techniques ; schéma `marts` ouvert au lecteur (#197, #231)
+  verify_aggregates.py  — recoupe les marts vs JSON, source 2021-2027 (Phase 0, #231)
   verify_pilotage_2014_2020.py — recoupe la fusion 14-20 SQL vs dashboard (Phase 3)
   verify_dashboards.py  — recoupe les cartes Metabase (via l'API, filtres appliqués)
                           vs le dashboard Streamlit, et contrôle les types `display`
                           de chaque dashcard (Phase F #129)
-  verify_vues_unifiees.py — 9 contrôles sur les vues unifiées : fidélité, double-comptage,
+  verify_vues_unifiees.py — 9 contrôles sur les marts unifiés : fidélité, double-comptage,
                           complétude thématique, cofinancement, plafond, RUP (Phase A/B #129)
   setup_metabase.py     — provisionne Metabase : connexion, carte GeoJSON, 5 dashboards
                           par usage + accueil (Phases 1-3 → réorganisés #129)

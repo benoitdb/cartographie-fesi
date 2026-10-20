@@ -1,12 +1,17 @@
 """Tests croisés Python vs SQL (Phase 0, issue #121).
 
 Compare les `aggregates` déjà écrits par `data-pipeline/agregats.py` dans
-chaque JSON source aux vues SQL équivalentes (`v_by_region`, `v_national`,
-`v_interregional`, `v_by_fonds`, `v_by_region_fonds`, `v_by_objectif_strategique`)
-— source par source, jamais blended sur toute une période (cf. commentaire de
-`init/02_views.sql`). Ce n'est pas un test pytest : script de vérification
-ponctuelle pour la Phase 0, à relancer après tout changement de schéma ou de
-vue.
+chaque JSON source aux marts dbt équivalents (`marts.by_region`,
+`marts.national`, `marts.interregional`, `marts.by_fonds`,
+`marts.by_region_fonds`, `marts.by_objectif_strategique`) — source par source,
+jamais blended sur toute une période. Ce n'est pas un test pytest : script de
+vérification ponctuelle, à relancer après tout changement de schéma ou de mart.
+
+**Période 2021-2027 seulement** (#231, option A). Ces marts partent du staging
+de la seule source 2021-2027 ; les vues `v_by_*` qu'ils remplacent portaient
+aussi les six sources 2014-2020, qu'aucune carte Metabase n'affichait. Ce que
+Metabase montre sur 2014-2020 est vérifié par `verify_pilotage_2014_2020.py`,
+`verify_vues_unifiees.py` et `verify_dashboards.py`.
 """
 
 import json
@@ -26,6 +31,10 @@ sys.path.insert(0, str(PIPELINE_DIR))
 import configuration  # noqa: E402
 import sources as sources_module  # noqa: E402
 
+# Période des marts `by_*` (#231) : les sources d'une autre période n'y ont pas
+# de ligne, et ne sont donc pas vérifiables ici.
+PERIODE_MARTS = "2021-2027"
+
 RELATIVE_TOLERANCE = 1e-6  # ordre de sommation différent (pandas pairwise vs SQL
 # séquentiel) sur le même flottant source : jamais plus qu'un artefact de
 # précision (~1e-10 relatif observé), une vraie erreur de données serait
@@ -43,7 +52,7 @@ def close_enough(a, b):
 
 def check_by_region(cur, source_id, agg_by_region):
     cur.execute(
-        "SELECT region, n_operations, montant_ue_total FROM v_by_region WHERE source_id = %s",
+        "SELECT region, n_operations, montant_ue_total FROM marts.by_region WHERE source_id = %s",
         (source_id,),
     )
     sql_rows = {r: (n, m) for r, n, m in cur.fetchall()}
@@ -85,7 +94,7 @@ def check_national_interregional(cur, source_id, agg, view, key):
 
 def check_by_fonds(cur, source_id, agg_by_fonds):
     cur.execute(
-        "SELECT fonds, n_operations, montant_ue_total FROM v_by_fonds WHERE source_id = %s",
+        "SELECT fonds, n_operations, montant_ue_total FROM marts.by_fonds WHERE source_id = %s",
         (source_id,),
     )
     sql_rows = {f: (n, m) for f, n, m in cur.fetchall()}
@@ -108,7 +117,7 @@ def check_by_fonds(cur, source_id, agg_by_fonds):
 
 def check_by_region_fonds(cur, source_id, agg_by_region_fonds):
     cur.execute(
-        "SELECT region, fonds, n_operations, montant_ue_total FROM v_by_region_fonds WHERE source_id = %s",
+        "SELECT region, fonds, n_operations, montant_ue_total FROM marts.by_region_fonds WHERE source_id = %s",
         (source_id,),
     )
     sql_rows = {(r, f): (n, m) for r, f, n, m in cur.fetchall()}
@@ -132,7 +141,7 @@ def check_by_region_fonds(cur, source_id, agg_by_region_fonds):
 
 def check_by_objectif_strategique(cur, source_id, agg_by_objectif):
     cur.execute(
-        "SELECT objectif_strategique, n_operations, montant_ue_total FROM v_by_objectif_strategique "
+        "SELECT objectif_strategique, n_operations, montant_ue_total FROM marts.by_objectif_strategique "
         "WHERE source_id = %s",
         (source_id,),
     )
@@ -156,7 +165,11 @@ def main():
     cur = conn.cursor()
 
     total_errors = 0
+    verifiees = 0
     for source_id, descriptor in sources_module.SOURCES.items():
+        if descriptor["periode"] != PERIODE_MARTS:
+            print(f"{source_id}: hors périmètre des marts by_* ({descriptor['periode']}, #231)")
+            continue
         fichier_sortie = descriptor.get("fichier_sortie")
         json_path = DATA_DIR / fichier_sortie
         if not json_path.exists():
@@ -168,8 +181,8 @@ def main():
 
         errors = []
         errors += check_by_region(cur, source_id, agg.get("by_region", {}))
-        errors += check_national_interregional(cur, source_id, agg, "v_national", "national")
-        errors += check_national_interregional(cur, source_id, agg, "v_interregional", "interregional")
+        errors += check_national_interregional(cur, source_id, agg, "marts.national", "national")
+        errors += check_national_interregional(cur, source_id, agg, "marts.interregional", "interregional")
         errors += check_by_fonds(cur, source_id, agg.get("by_fonds", {}))
         errors += check_by_region_fonds(cur, source_id, agg.get("by_region_fonds", {}))
         errors += check_by_objectif_strategique(cur, source_id, agg.get("by_objectif_strategique", {}))
@@ -179,11 +192,15 @@ def main():
         for e in errors:
             print(f"    - {e}")
         total_errors += len(errors)
+        verifiees += 1
 
     cur.close()
     conn.close()
 
     print()
+    if not verifiees:
+        print(f"ÉCHEC : aucune source {PERIODE_MARTS} vérifiée.")
+        sys.exit(1)
     if total_errors:
         print(f"ÉCHEC : {total_errors} écart(s) au total.")
         sys.exit(1)

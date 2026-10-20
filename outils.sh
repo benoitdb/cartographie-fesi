@@ -10,6 +10,7 @@
 #   ./outils.sh ports       # la table des ports, et ce qui écoute déjà
 #   ./outils.sh dashboard   # Streamlit
 #   ./outils.sh metabase    # stack Docker Metabase + PostgreSQL
+#   ./outils.sh marts       # construit dans PostgreSQL les marts dbt que lit Metabase
 #   ./outils.sh dbt-docs    # graphe et documentation des modèles dbt
 #   ./outils.sh duckdb-ui   # carnet SQL sur dbt/target/fesi.duckdb
 #   ./outils.sh dagster     # graphe d'assets et exécutions (spike #183)
@@ -75,6 +76,14 @@ case "${1:-}" in
         cd "$RACINE/metabase"
         docker compose up -d
         echo "Metabase : http://$HOTE:$PORT_METABASE  —  PostgreSQL : $HOTE:$PORT_POSTGRES"
+        echo "Marts dbt lus par Metabase : ./outils.sh marts (après un rechargement des données)"
+        ;;
+    marts)
+        # Metabase lit les marts dbt, pas des vues SQL (ADR 002, #231). À relancer
+        # après tout rechargement des données : les marts sont des tables.
+        cd "$RACINE/dbt"
+        venv/bin/python generer.py
+        POSTGRES_PORT="$PORT_POSTGRES" exec venv/bin/dbt build --profiles-dir . --target postgres
         ;;
     dbt-docs)
         port_libre "$PORT_DBT_DOCS" dbt-docs
@@ -108,7 +117,7 @@ input('Carnet DuckDB sur http://localhost:$PORT_DUCKDB_UI — Entrée pour quitt
             -m fesi_orchestration.definitions -h "$HOTE" -p "$PORT_DAGSTER"
         ;;
     *)
-        sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
         exit 1
         ;;
 esac

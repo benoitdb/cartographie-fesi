@@ -159,7 +159,7 @@ def _valeur(val):
 
 def operations_par_perimetre():
     """Chaque opération 2014-2020 avec son périmètre final — jumeau Python de la
-    vue `v_perimetre_2014_2020`.
+    vue `marts.perimetre_2014_2020`.
 
     Le routage n'est plus réécrit ici (#177) : c'est celui de la page, dans
     `utils/periodes.py` (`normaliser_fichiers_hors_synergie`,
@@ -171,7 +171,7 @@ def operations_par_perimetre():
     Sources passées **non filtrées** par fonds : les opérations sans fonds renseigné sont
     émises comme les autres, comme les émet la vue SQL. Les écarter ici cacherait les 26
     dossiers Normandie concernés à tout appelant, alors que c'est précisément à chaque écran
-    de dire s'il les compte (`v_engage_2014_2020` les écarte, la carte KPI du dashboard non —
+    de dire s'il les compte (`marts.engage_2014_2020` les écarte, la carte KPI du dashboard non —
     cf. verify_dashboards.py). Les agrégats de ce script filtrent donc eux-mêmes
     `fonds is None`.
 
@@ -206,7 +206,7 @@ def operations_par_perimetre():
 
 def engage_python():
     """{(perimetre, fonds): montant}, agrégé du jumeau ci-dessus — même filtre
-    `fonds IS NOT NULL` que `v_engage_2014_2020`."""
+    `fonds IS NOT NULL` que `marts.engage_2014_2020`."""
     engage = defaultdict(float)
     for op in operations_par_perimetre():
         if est_absent(op["fonds"]):
@@ -236,14 +236,14 @@ def enveloppes_python(engage):
 
 
 def check_pilotage(cur, engage, enveloppes):
-    """Compare ligne à ligne `v_pilotage_2014_2020` au calcul Python."""
-    cur.execute("SELECT perimetre, fonds, programme, engage FROM v_pilotage_2014_2020")
+    """Compare ligne à ligne `marts.pilotage_2014_2020` au calcul Python."""
+    cur.execute("SELECT perimetre, fonds, programme, engage FROM marts.pilotage_2014_2020")
     sql = {(p, f): (float(prog), float(eng)) for p, f, prog, eng in cur.fetchall()}
 
     errors = []
     for cle, programme in enveloppes.items():
         if cle not in sql:
-            errors.append(f"{cle} : absent de v_pilotage_2014_2020 (programmé {programme:,.2f} en Python)")
+            errors.append(f"{cle} : absent de marts.pilotage_2014_2020 (programmé {programme:,.2f} en Python)")
             continue
         sql_programme, sql_engage = sql[cle]
         if not close_enough(programme, sql_programme):
@@ -258,15 +258,15 @@ def check_pilotage(cur, engage, enveloppes):
 
 
 def check_engage(cur, engage):
-    """Compare `v_engage_2014_2020` (tout l'engagé, y compris les fonds sans
-    enveloppe — FEAD, FEDER-FSE — que `v_pilotage_2014_2020` écarte)."""
-    cur.execute("SELECT perimetre, fonds, engage FROM v_engage_2014_2020")
+    """Compare `marts.engage_2014_2020` (tout l'engagé, y compris les fonds sans
+    enveloppe — FEAD, FEDER-FSE — que `marts.pilotage_2014_2020` écarte)."""
+    cur.execute("SELECT perimetre, fonds, engage FROM marts.engage_2014_2020")
     sql = {(p, f): float(e) for p, f, e in cur.fetchall()}
 
     errors = []
     for cle, montant in engage.items():
         if cle not in sql:
-            errors.append(f"{cle} : absent de v_engage_2014_2020 ({montant:,.2f} en Python)")
+            errors.append(f"{cle} : absent de marts.engage_2014_2020 ({montant:,.2f} en Python)")
         elif not close_enough(montant, sql[cle]):
             errors.append(f"{cle} engagé : SQL {sql[cle]:,.2f} vs Python {montant:,.2f}")
     for cle in sql:

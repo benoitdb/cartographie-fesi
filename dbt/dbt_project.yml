@@ -10,16 +10,23 @@ seed-paths: ["seeds"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+# Schémas par couche : appliqués sur la cible postgres seulement, voir
+# macros/generate_schema_name.sql (#231).
 models:
   fesi:
     staging:
       +materialized: view
+      +schema: staging
+    intermediate:
+      +schema: staging
     marts:
       +materialized: table
+      +schema: marts
 
 seeds:
   fesi:
     +quote_columns: false
+    +schema: reference
 
 vars:
   # Chemin des Parquet, relatif au répertoire depuis lequel dbt est lancé.

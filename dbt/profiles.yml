@@ -18,9 +18,10 @@ fesi:
     postgres:
       type: postgres
       host: localhost
-      port: 5437
+      # 5437 en local (./outils.sh) ; la CI passe POSTGRES_PORT=5432 (#231).
+      port: "{{ env_var('POSTGRES_PORT', '5437') | int }}"
       user: "{{ env_var('POSTGRES_USER', 'fesi') }}"
       password: "{{ env_var('POSTGRES_PASSWORD', 'fesi_local') }}"
       dbname: "{{ env_var('POSTGRES_DB', 'fesi') }}"
-      schema: dbt_spike
+      schema: staging  # repli ; chaque couche a son schéma (#231)
       threads: 4

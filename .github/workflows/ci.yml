@@ -37,16 +37,19 @@ jobs:
       - name: Tests
         run: pytest -q
 
-  # Recoupe les vues SQL (metabase/init/*.sql) contre les agrégats Python
-  # (agregats.py) et la fusion des six sources 2014-2020 (periodes.py).
+  # Recoupe les marts dbt construits dans PostgreSQL, ceux que lit Metabase
+  # (ADR 002, #231), contre les agrégats Python (agregats.py) et la fusion des
+  # six sources 2014-2020 (periodes.py).
   # Job SÉPARÉ des tests : il a besoin d'un PostgreSQL chargé, que la suite
   # principale n'a aucune raison d'installer, et il doit pouvoir échouer sans
   # masquer un échec de test.
   #
   # Les Parquet sont committés (#119, #132), et le service PostgreSQL de GitHub
   # Actions fournit l'infrastructure qu'il manquait (#125, #148) : `load_data.py`
-  # charge les données depuis les Parquet/JSON du clone, puis les trois scripts
-  # de vérification recoupent les vues SQL contre la couche Python.
+  # charge les données depuis les Parquet/JSON du clone, dbt construit les marts
+  # (cible postgres), puis les trois scripts de vérification les recoupent contre
+  # la couche Python. dbt a son propre environnement : son lockfile et
+  # requirements-dev.txt ne s'accordent pas sur protobuf.
   verify-metabase:
     runs-on: ubuntu-latest
     services:
@@ -107,13 +110,24 @@ jobs:
       - name: Charger les données
         run: python metabase/load_data.py
 
+      - name: Installer dbt (environnement séparé)
+        run: |
+          python -m venv /tmp/venv-dbt
+          /tmp/venv-dbt/bin/pip install -r requirements-dbt.txt
+
+      # Sous le compte propriétaire (POSTGRES_USER) : les privilèges par défaut
+      # posés par provision_roles.py ouvrent au lecteur chaque table que dbt crée.
+      - name: Construire les marts (PostgreSQL)
+        working-directory: dbt
+        run: /tmp/venv-dbt/bin/dbt build --profiles-dir . --target postgres
+
       - name: Vérifier les agrégats (SQL vs JSON)
         run: python metabase/verify_aggregates.py
 
       - name: Vérifier la fusion 2014-2020 (SQL vs dashboard)
         run: python metabase/verify_pilotage_2014_2020.py
 
-      - name: Vérifier les vues unifiées (double-comptage, complétude, plafonds)
+      - name: Vérifier les marts unifiés (double-comptage, complétude, plafonds)
         run: python metabase/verify_vues_unifiees.py
 
   # Recoupe les marts dbt contre `agregats.calculer_agregats`, la règle qui

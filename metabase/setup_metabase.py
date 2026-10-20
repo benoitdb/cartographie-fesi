@@ -14,13 +14,14 @@ deux côte à côte.
 
 Ce que cette bascule suppose, et qui est verrouillé ailleurs :
 
-- les vues unifiées `v_engage_all` / `v_pilotage_all` (init/05_vues_unifiees.sql),
-  dont `verify_vues_unifiees.py` vérifie qu'elles ne rejouent pas le
-  double-comptage 2014-2020 de `v_pilotage` et qu'elles couvrent bien les trois
-  partitions de la période 2021-2027 ;
+- les marts dbt unifiés `marts.engage_all` / `marts.pilotage_all`, construits
+  par `dbt build --target postgres` (ADR 002, #231 ; ils remplacent les vues de
+  `init/05_vues_unifiees.sql`), dont `verify_vues_unifiees.py` vérifie qu'ils ne
+  rejouent pas le double-comptage 2014-2020 de `pilotage` et qu'ils couvrent
+  bien les trois partitions de la période 2021-2027 ;
 - les *field filters* multi-valeurs, qui exigent que Metabase ait synchronisé ces
-  vues comme des tables — d'où `sync_views()`, une vue non synchronisée n'ayant
-  pas d'id de champ ;
+  tables — d'où `sync_views()`, une table non synchronisée n'ayant pas d'id de
+  champ ;
 - `verify_dashboards.py`, qui compare chiffre à chiffre ce que rend chaque carte,
   filtres appliqués, à ce qu'affiche Streamlit.
 
@@ -191,22 +192,39 @@ def upsert_card(session, name, payload):
 # ------------------------------------------------------------- Champs et filtres
 
 def table_fields(session, db_id):
-    """{nom de table -> {nom de champ -> id}}. Metabase expose les 14 vues `v_*`
-    comme des tables ordinaires : leurs colonnes ont donc un id de champ, ce qui
-    les rend utilisables comme *field filter* sur une carte SQL native."""
+    """{`schéma.table` -> {nom de champ -> id}}. Les colonnes d'une table
+    synchronisée ont un id de champ, ce qui les rend utilisables comme *field
+    filter* sur une carte SQL native.
+
+    La clé porte le schéma : deux tables homonymes de schémas différents ne
+    peuvent pas se substituer l'une à l'autre en silence. C'est arrivé avec le
+    seed dbt `region_metadata`, à trois colonnes, synchronisé à côté de
+    `public.region_metadata` (#231)."""
     md = session.get(f"{MB_URL}/api/database/{db_id}/metadata").json()
-    return {t["name"]: {f["name"]: f["id"] for f in t["fields"]} for t in md["tables"]}
+    return {
+        f'{t["schema"]}.{t["name"]}': {f["name"]: f["id"] for f in t["fields"]}
+        for t in md["tables"]
+    }
 
 
-# Toute vue servant de field filter doit être synchronisée : sans id de champ,
-# le filtre est inconstructible. `v_repartition_all` (phase B) et
-# `allocations_rup` s'y ajoutent avec la phase C.
+# Toute table servant de field filter doit être synchronisée : sans id de champ,
+# le filtre est inconstructible. Les marts dbt (schéma `marts`, ADR 002) ont
+# remplacé les vues `v_*` de `metabase/init/` (#231).
 VUES_UNIFIEES = (
-    "v_engage_all",
-    "v_pilotage_all",
-    "v_repartition_all",
-    "allocations_rup",
+    "marts.engage_all",
+    "marts.pilotage_all",
+    "marts.repartition_all",
+    "marts.cofinancement_2014_2020_summary",
+    "public.operations",
+    "public.allocations_rup",
 )
+
+
+def _synchronisees(tables, attendues):
+    """Présentes ET avec leurs colonnes : Metabase liste une table nouvellement
+    découverte avant d'en avoir lu les champs. La bascule sur les marts (#231)
+    a buté sur `marts.engage_all` sans `periode` : présente, mais vide."""
+    return all(tables.get(v) for v in attendues)
 
 
 def sync_views(session, db_id, attendues=VUES_UNIFIEES):
@@ -217,19 +235,20 @@ def sync_views(session, db_id, attendues=VUES_UNIFIEES):
     juste des tables introuvables. Un `sync_schema` explicite les fait
     apparaître ; ce script ne le déclenche que si elles manquent."""
     tables = table_fields(session, db_id)
-    if all(v in tables for v in attendues):
+    if _synchronisees(tables, attendues):
         return tables
     session.post(f"{MB_URL}/api/database/{db_id}/sync_schema").raise_for_status()
     deadline = time.time() + 90
     while time.time() < deadline:
         time.sleep(3)
         tables = table_fields(session, db_id)
-        if all(v in tables for v in attendues):
+        if _synchronisees(tables, attendues):
             return tables
-    manquantes = sorted(set(attendues) - set(tables))
+    manquantes = sorted(v for v in attendues if not tables.get(v))
     raise RuntimeError(
-        f"vues non synchronisées par Metabase : {manquantes} — "
-        "vérifier qu'init/05_vues_unifiees.sql a bien été appliqué à PostgreSQL"
+        f"tables non synchronisées par Metabase : {manquantes} — vérifier que "
+        "`./outils.sh marts` a construit les marts et que `provision_roles.py` "
+        "les a ouverts au lecteur"
     )
 
 
@@ -250,7 +269,7 @@ def dimension_tag(name, display_name, field_id, tag_id):
 
     **La table visée par un field filter ne doit JAMAIS être aliasée dans la
     requête.** Metabase substitue une clause qualifiée du nom réel de la table
-    (`"public"."v_engage_all"."perimetre" IN (…)`) ; un `FROM v_engage_all e`
+    (`"marts"."engage_all"."perimetre" IN (…)`) ; un `FROM marts.engage_all e`
     rend cette référence invalide et PostgreSQL répond
     « invalid reference to FROM-clause entry ». Les tables *jointes* peuvent
     garder leur alias — seule celle du filtre est contrainte.
@@ -430,7 +449,7 @@ CARD_TAGS = {
     "controle_cofinancement": ("perimetre",),
     "sources_chargement": ("periode",),
     # Phase D — Analyses & contrôle. Le tag `perimetre` de ces cartes pointe
-    # sur `operations.region` (pas `v_engage_all.perimetre`) : les périmètres
+    # sur `operations.region` (pas `engage_all.perimetre`) : les périmètres
     # 'national'/'interregional' (region NULL ou flag sans valeur) ne matchent
     # pas, et la carte est vide — comportement voulu, voir le commentaire de
     # build_usage_cards Phase D.
@@ -450,9 +469,9 @@ CARD_TAGS = {
 
 SERIES_FONDS = {f: {"color": c} for f, c in FONDS_COLORS.items()}
 
-# Périmètres non géographiques de `v_engage_all` : le volet national et
-# l'interrégional sont des partitions à part entière (cf. init/02_views.sql et
-# la troisième branche de v_engage_all), qu'aucune carte choroplèthe ne peut
+# Périmètres non géographiques de `marts.engage_all` : le volet national et
+# l'interrégional sont des partitions à part entière (cf. les marts `national`
+# et `interregional`, et la troisième branche d'`engage_all`), qu'aucune carte choroplèthe ne peut
 # placer sur un fond de carte régional.
 PERIMETRES_HORS_CARTE = "('national', 'interregional')"
 
@@ -468,16 +487,17 @@ def build_usage_cards(session, db_id, tables):
     2014-2020. La période et le périmètre devenant des **paramètres** et non des
     écrans (#129), une seule carte par mesure suffit.
 
-    Toutes s'appuient sur les vues unifiées `v_engage_all` / `v_pilotage_all`,
-    dont la justesse par période est verrouillée par `verify_vues_unifiees.py` —
-    et notamment l'absence du double-comptage 2014-2020 de `v_pilotage`.
+    Toutes s'appuient sur les marts unifiés `marts.engage_all` /
+    `marts.pilotage_all`, dont la justesse par période est verrouillée par
+    `verify_vues_unifiees.py` — et notamment l'absence du double-comptage
+    2014-2020 de `pilotage`.
     """
-    engage = tables["v_engage_all"]
-    pilotage = tables["v_pilotage_all"]
-    ops = tables["operations"]
-    cofi = tables["v_cofinancement_2014_2020_summary"]
-    repartition = tables["v_repartition_all"]
-    rup = tables["allocations_rup"]
+    engage = tables["marts.engage_all"]
+    pilotage = tables["marts.pilotage_all"]
+    ops = tables["public.operations"]
+    cofi = tables["marts.cofinancement_2014_2020_summary"]
+    repartition = tables["marts.repartition_all"]
+    rup = tables["public.allocations_rup"]
     tag_id = "b1000000-0000-0000-0000-0000000000%02d"
     # Les décades 10 à 98 du radical ci-dessus sont prises par les phases A/B.
     # La phase C prend son propre radical plutôt que de se glisser dans les
@@ -512,7 +532,7 @@ def build_usage_cards(session, db_id, tables):
                 "type": "native",
                 "native": {
                     "query": (
-                        "SELECT SUM(engage) AS montant_ue FROM v_engage_all "
+                        "SELECT SUM(engage) AS montant_ue FROM marts.engage_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}}"
                     ),
                     "template-tags": filtres(("periode", "perimetre", "fonds"), engage, 10),
@@ -532,7 +552,7 @@ def build_usage_cards(session, db_id, tables):
                 "type": "native",
                 "native": {
                     "query": (
-                        "SELECT SUM(n_operations) AS n_operations FROM v_engage_all "
+                        "SELECT SUM(n_operations) AS n_operations FROM marts.engage_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}}"
                     ),
                     "template-tags": filtres(("periode", "perimetre", "fonds"), engage, 20),
@@ -552,7 +572,7 @@ def build_usage_cards(session, db_id, tables):
                 "type": "native",
                 "native": {
                     "query": (
-                        "SELECT fonds, SUM(engage) AS montant_ue FROM v_engage_all "
+                        "SELECT fonds, SUM(engage) AS montant_ue FROM marts.engage_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
                         "GROUP BY fonds ORDER BY fonds"
                     ),
@@ -582,7 +602,7 @@ def build_usage_cards(session, db_id, tables):
                     # dédiée à la comparaison n'est nécessaire.
                     "query": (
                         "SELECT perimetre, SUM(engage) AS montant_ue, "
-                        "SUM(n_operations) AS n_operations FROM v_engage_all "
+                        "SUM(n_operations) AS n_operations FROM marts.engage_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
                         "GROUP BY perimetre ORDER BY 2 DESC"
                     ),
@@ -613,7 +633,7 @@ def build_usage_cards(session, db_id, tables):
                     # qui les ignorerait en silence.
                     "query": (
                         "SELECT perimetre AS region, SUM(engage) AS montant_ue "
-                        "FROM v_engage_all "
+                        "FROM marts.engage_all "
                         f"WHERE perimetre NOT IN {PERIMETRES_HORS_CARTE} "
                         "AND {{periode}} AND {{fonds}} "
                         "GROUP BY perimetre ORDER BY perimetre"
@@ -650,7 +670,7 @@ def build_usage_cards(session, db_id, tables):
                         "CASE WHEN SUM(programme) > 0 THEN SUM(engage) / SUM(programme) "
                         "ELSE 0 END AS taux, "
                         "GREATEST(SUM(programme) - SUM(engage), 0) AS reste_a_engager "
-                        "FROM v_pilotage_all "
+                        "FROM marts.pilotage_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
                         "GROUP BY fonds ORDER BY fonds"
                     ),
@@ -677,7 +697,7 @@ def build_usage_cards(session, db_id, tables):
                         "SELECT perimetre, "
                         "CASE WHEN SUM(programme) > 0 THEN SUM(engage) / SUM(programme) "
                         "ELSE 0 END AS taux "
-                        "FROM v_pilotage_all "
+                        "FROM marts.pilotage_all "
                         "WHERE {{periode}} AND {{fonds}} "
                         "GROUP BY perimetre ORDER BY 2 DESC"
                     ),
@@ -705,7 +725,7 @@ def build_usage_cards(session, db_id, tables):
                     # bonne formule, il n'y a rien à recalculer.
                     "query": (
                         "SELECT periode, perimetre, fonds, programme, engage, taux, "
-                        "reste_a_engager FROM v_pilotage_all "
+                        "reste_a_engager FROM marts.pilotage_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
                         "ORDER BY periode, perimetre, fonds"
                     ),
@@ -728,7 +748,7 @@ def build_usage_cards(session, db_id, tables):
                     # Seule carte qui reste scopée à une période en dur, et son
                     # titre le dit. Une trajectoire 2014-2020 demanderait des
                     # dates par opération sur le périmètre FUSIONNÉ des six
-                    # sources ; `v_perimetre_2014_2020` ne porte pas de date, et
+                    # sources ; `perimetre_2014_2020` ne porte pas de date, et
                     # cumuler sur `operations` pour cette période rejouerait le
                     # double-comptage de #68/#95. À traiter en Phase C, pas ici.
                     #
@@ -769,7 +789,7 @@ def build_usage_cards(session, db_id, tables):
                         "SELECT region, fonds, categorie_ue, plafond_min, plafond_max, "
                         "n_operations, n_depassements, montant_depassements, "
                         "n_taux_divergents, montant_taux_divergents "
-                        "FROM v_cofinancement_2014_2020_summary "
+                        "FROM marts.cofinancement_2014_2020_summary "
                         "WHERE {{perimetre}} ORDER BY region, fonds"
                     ),
                     "template-tags": dimension_tag(
@@ -821,7 +841,7 @@ def build_usage_cards(session, db_id, tables):
             "dataset_query": {
                 "type": "native",
                 "native": {
-                    # `v_repartition_all` (phase B) porte déjà la dimension propre
+                    # `repartition_all` (phase B) porte déjà la dimension propre
                     # à chaque période : objectif stratégique -> objectif spécifique
                     # en 2021-2027, `domaine_intervention` en 2014-2020. La carte
                     # n'a donc pas à connaître la période, elle lit `niveau1`/
@@ -836,7 +856,7 @@ def build_usage_cards(session, db_id, tables):
                     # est dit à l'écran, pas seulement ici.
                     "query": (
                         "SELECT niveau1, niveau2, SUM(engage) AS montant_ue "
-                        "FROM v_repartition_all "
+                        "FROM marts.repartition_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
                         "GROUP BY niveau1, niveau2 ORDER BY 3 DESC"
                     ),
@@ -877,7 +897,7 @@ def build_usage_cards(session, db_id, tables):
                         "SELECT perimetre, SUM(n_operations) AS n_operations, "
                         "SUM(engage) / NULLIF(SUM(n_operations), 0) AS montant_moyen, "
                         "SUM(engage) AS montant_ue "
-                        "FROM v_engage_all "
+                        "FROM marts.engage_all "
                         "WHERE {{periode}} AND {{perimetre}} AND {{fonds}} "
                         "GROUP BY perimetre ORDER BY 4 DESC"
                     ),
@@ -905,11 +925,11 @@ def build_usage_cards(session, db_id, tables):
             "dataset_query": {
                 "type": "native",
                 "native": {
-                    # `public.region_metadata`, qualifié : la cible PostgreSQL de
-                    # dbt (#135) expose un `dbt_spike.region_metadata` homonyme,
-                    # à trois colonnes seulement — et c'est LUI que Metabase a
-                    # synchronisé. Un nom nu se résoudrait au `search_path`, donc
-                    # à une table qui n'a pas `population`.
+                    # `public.region_metadata`, qualifié : dbt construit un seed
+                    # `region_metadata` homonyme, à trois colonnes seulement
+                    # (schéma `reference`, fermé au lecteur depuis #231 ; il a
+                    # longtemps été synchronisé par Metabase). Le nom qualifié ne
+                    # dépend pas du `search_path`.
                     #
                     # INNER JOIN volontaire : `national` et `interregional` n'ont
                     # pas de population, et un montant par habitant n'y veut rien
@@ -917,14 +937,14 @@ def build_usage_cards(session, db_id, tables):
                     # zéro — 18 périmètres sur 19 en 2014-2020, 19 sur 21 en
                     # 2021-2027.
                     "query": (
-                        "SELECT v_engage_all.perimetre, v_engage_all.fonds, "
-                        "SUM(v_engage_all.engage) / m.population AS montant_par_habitant, "
-                        "SUM(v_engage_all.engage) AS montant_ue, m.population "
-                        "FROM v_engage_all "
-                        "JOIN public.region_metadata m ON m.region = v_engage_all.perimetre "
+                        "SELECT engage_all.perimetre, engage_all.fonds, "
+                        "SUM(engage_all.engage) / m.population AS montant_par_habitant, "
+                        "SUM(engage_all.engage) AS montant_ue, m.population "
+                        "FROM marts.engage_all "
+                        "JOIN public.region_metadata m ON m.region = engage_all.perimetre "
                         "WHERE m.population IS NOT NULL "
                         "AND {{periode}} AND {{perimetre}} AND {{fonds}} "
-                        "GROUP BY v_engage_all.perimetre, v_engage_all.fonds, m.population "
+                        "GROUP BY engage_all.perimetre, engage_all.fonds, m.population "
                         "ORDER BY 3 DESC"
                     ),
                     "template-tags": filtres(
@@ -1032,7 +1052,7 @@ def build_usage_cards(session, db_id, tables):
 
     # Les cartes d'analyse travaillent sur `operations` (données par opération),
     # pas sur les vues agrégées. Le filtre périmètre porte donc sur
-    # `operations.region` et non `v_engage_all.perimetre` : les périmètres
+    # `operations.region` et non `engage_all.perimetre` : les périmètres
     # 'national' et 'interregional' (region NULL ou flag sans valeur de région)
     # ne matchent pas et la carte est vide — comportement voulu, une analyse de
     # distribution sur 398 opérations du volet national ne serait pas instructive.
@@ -1368,7 +1388,7 @@ def build_usage_cards(session, db_id, tables):
                 "native": {
                     "query": (
                         "SELECT perimetre AS region, SUM(engage) AS montant_ue "
-                        "FROM v_engage_all "
+                        "FROM marts.engage_all "
                         f"WHERE perimetre IN {DROMCOM} "
                         "AND {{periode}} AND {{fonds}} "
                         "GROUP BY perimetre ORDER BY perimetre"
@@ -1970,7 +1990,7 @@ def ensure_usage_dashboards(session, collection_id, cards):
                  "chevauchent : Bretagne, Normandie et Nouvelle-Aquitaine ont leur "
                  "propre fichier ET des opérations dans Synergie (substitution), et "
                  "le PON FSE se fusionne par opération dans les régions ou le "
-                 "national (addition). C'est `v_perimetre_2014_2020` qui résout ces "
+                 "national (addition). C'est le modèle `perimetre_2014_2020` qui résout ces "
                  "règles — jamais une somme de ce tableau.\n\n"
                  "`sans_fonds` et `sans_region` comptent les champs non renseignés à "
                  "la source, pas des erreurs de chargement.",

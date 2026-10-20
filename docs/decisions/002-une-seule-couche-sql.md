@@ -68,3 +68,26 @@ comparées que par un script local (`dbt/verifier_vues_postgres.py`).
 - **Base locale** : les vues créées à l'initialisation du volume
   `metabase_pgdata` y restent après la suppression des fichiers ; elles se
   retirent par `DROP VIEW`, sans recréer le volume.
+
+## Amendement du 2026-10-20 — mise en œuvre, PR 1 de #231
+
+- **Un schéma par couche sur PostgreSQL** : `marts` (lu par Metabase), `staging`
+  (staging et intermediate), `reference` (seeds), par
+  `dbt/macros/generate_schema_name.sql`. La cible DuckDB reste à plat dans
+  `main` : ses lecteurs (`verifier_equivalence.py`, `verifier_harmonisation.py`,
+  Dagster) désignent les modèles par leur seul nom. Le seed `region_metadata`
+  ne peut plus masquer `public.region_metadata`.
+- **Le lecteur Metabase** reçoit `USAGE` sur `marts` et des privilèges par défaut
+  en lecture (`provision_roles.py`) : dbt recrée ses tables à chaque build.
+- **Les marts ne reproduisent pas toutes les vues sur les deux périodes.** Huit
+  marts ne couvrent que 2021-2027 (`by_region`, `national`, `interregional`,
+  `by_fonds`, `by_region_fonds`, `by_objectif_strategique`, `pilotage`,
+  `cofinancement_2021_2027`), là où leurs vues portaient les sept sources. C'est
+  un choix de construction de #135, pas un arbitrage nommé ; la mention « 18 vues
+  sur 19 identiques ligne à ligne » de `docs/spike-dbt-135.md` vaut sur
+  2021-2027. Metabase n'est pas touché : il ne lit aucune de ces huit vues.
+  **Option A retenue le 2026-10-20** : `verify_aggregates.py` ne vérifie plus
+  que la source 2021-2027, et le test du double-comptage contrôle que
+  `marts.pilotage` n'a aucune ligne 2014-2020. Ce que Metabase affiche sur
+  2014-2020 reste vérifié par `verify_pilotage_2014_2020.py`,
+  `verify_vues_unifiees.py` et `verify_dashboards.py`.
