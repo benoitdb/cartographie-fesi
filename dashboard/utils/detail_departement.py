@@ -25,7 +25,7 @@ def render_detail_departement(df_dept, region, annotation=None, metriques_non_re
     """Légende, carte et tableau côte à côte, puis la liste des opérations rattachées à un
     département d'une autre région.
 
-    `df_dept` : opérations de la région passées par `assign_departments_df`.
+    `df_dept` : opérations de la région, colonne `dept` écrite par le pipeline (#232).
     `metriques_non_reparti` : deux indicateurs sous le tableau (montant et nombre
     d'opérations sans département), affichés par la Vue Régionale."""
     tableau, color_range = tableau_departements(df_dept, region)

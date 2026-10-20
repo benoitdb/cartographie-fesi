@@ -58,7 +58,6 @@ from utils.data_loader import (
 )
 from utils.departments import (
     DEPT_TO_REGION,
-    assign_departments_df,
     build_dromcom_outline,
     build_dromcom_projects_map,
     department_coverage_summary,
@@ -554,7 +553,7 @@ else:
     if afficher_detail_dept:
         st.subheader("Détail par département")
 
-        df_region_dept = assign_departments_df(df_ops)
+        df_region_dept = df_ops
         # department_coverage_summary renvoie des **parts**, pas des effectifs. Le
         # seuil à 0,5 % évite d'afficher « inconnu : 0 % », qui occupe une place
         # pour ne rien dire.

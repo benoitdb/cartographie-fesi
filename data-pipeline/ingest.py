@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pandas as pd
 from agregats import calculer_agregats, partitionner
+from departements import ajouter_departements
 from region_mapping import (
     get_unresolved,
     harmonize_region,
@@ -195,7 +196,10 @@ def main(source_id=SOURCE_PAR_DEFAUT):
         indexer_programmes(conf.get('programme_interregional_to_region', {})),
     )
 
-    df_parquet = prepare_for_parquet(df)
+    # Département de chaque opération, calculé une fois ici et lu tel quel par
+    # Streamlit et dbt/Metabase (#232). Sur le DataFrame prêt pour le Parquet :
+    # c'est sur ces valeurs, relues, que le dashboard le calculait jusque-là.
+    df_parquet = ajouter_departements(prepare_for_parquet(df), cols)
 
     print("📊 Calcul des agrégats harmonisés...")
     partitions = partitionner(df)
