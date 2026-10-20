@@ -331,7 +331,7 @@ def main():
     print()
     if ecarts:
         sys.exit(f"ÉCHEC — {len(ecarts)} écart(s) : {', '.join(ecarts)}")
-    print("Vues unifiées conformes.")
+    print("Marts unifiés conformes.")
 
 
 if __name__ == "__main__":

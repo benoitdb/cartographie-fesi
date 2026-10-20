@@ -98,5 +98,38 @@ CREATE TABLE region_metadata (
     superficie_km2 NUMERIC,
     chef_lieu TEXT,
     categorie_ue TEXT,
-    ultraperipherique BOOLEAN DEFAULT FALSE
+    ultraperipherique BOOLEAN DEFAULT FALSE,
+    -- Plafond de cofinancement 2021-2027, résolu en Python au chargement
+    -- (`dashboard/utils/cofinancement.plafond_categorie`) : une catégorie mixte
+    -- (Auvergne-Rhône-Alpes) est une moyenne pondérée extraite du libellé par
+    -- regex, qu'on ne transcrit pas en SQL. Ajoutée par 05_vues_unifiees.sql
+    -- jusqu'au retrait des vues (#231) ; une base existante l'a déjà.
+    plafond_cofinancement NUMERIC
+);
+
+-- Catégories de cohésion UE 2014-2020 par région moderne (décision 2014/99,
+-- data/processed/categories_ue_2014_2020.json), plafond de cofinancement déjà
+-- résolu en (min, max) par `load_data.py`, qui appelle
+-- `dashboard/utils/cofinancement.plafond_intervalle_2014_2020`. Un intervalle,
+-- pas un nombre : six régions modernes sur treize réunissent d'anciennes
+-- régions de catégories différentes. Venue de 04_periode_2014_2020.sql (#231).
+CREATE TABLE categories_ue_2014_2020 (
+    region TEXT PRIMARY KEY,
+    categorie_ue TEXT,
+    plafond_min NUMERIC,
+    plafond_max NUMERIC
+);
+
+-- Allocation additionnelle ultrapériphérique (RUP, art. 349 TFUE), 2021-2027 :
+-- une dotation SUPPLÉMENTAIRE, distincte de la dotation de catégorie de base,
+-- pour les sept périmètres qui y ont droit (les cinq DROM, Saint-Martin, et le
+-- volet national côté FSE+), lue dans `programme_detail.json` clé `rup`.
+-- Elle n'est ni soustraite de `programme_totals` ni ajoutée dessus : le total
+-- programmé de la région la contient déjà. Venue de 05_vues_unifiees.sql (#231).
+CREATE TABLE allocations_rup (
+    id SERIAL PRIMARY KEY,
+    periode TEXT NOT NULL DEFAULT '2021-2027',
+    perimetre TEXT NOT NULL,
+    fonds TEXT NOT NULL,
+    montant_ue NUMERIC NOT NULL
 );

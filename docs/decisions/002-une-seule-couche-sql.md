@@ -91,3 +91,16 @@ comparées que par un script local (`dbt/verifier_vues_postgres.py`).
   `marts.pilotage` n'a aucune ligne 2014-2020. Ce que Metabase affiche sur
   2014-2020 reste vérifié par `verify_pilotage_2014_2020.py`,
   `verify_vues_unifiees.py` et `verify_dashboards.py`.
+
+## Amendement du 2026-10-20 — PR 2 de #231, vues retirées
+
+- `metabase/init/02` à `05` et `dbt/verifier_vues_postgres.py` sont supprimés.
+  Les trois éléments qui n'étaient pas des vues passent dans `01_schema.sql` :
+  les tables `categories_ue_2014_2020` et `allocations_rup`, et la colonne
+  `region_metadata.plafond_cofinancement`.
+- Base locale : les 19 vues ont été supprimées par un seul `DROP VIEW` sans
+  `CASCADE`, sans recréer le volume. Les marts, les scripts de vérification et
+  `verify_dashboards.py` (28 890 valeurs) restent verts sans elles.
+- Les commentaires qui servaient de consigne (« à faire évoluer ensemble »)
+  désignent désormais les marts ; le seuil de 0,01 du taux divergent et la
+  tolérance de 1e-6 restent écrits en dur dans les marts `cofinancement_*`.
