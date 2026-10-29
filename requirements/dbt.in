@@ -4,7 +4,7 @@
 # pandas et pyarrow sont déclarés ICI, explicitement, et non hérités du
 # pipeline : `generer.py` lit les Parquet pour apparier les libellés réels, et
 # `verifier_equivalence.py` rejoue `calculer_agregats` dessus.
-pandas>=2.0.0
+pandas>=3.1.0
 pyarrow>=26.0.0
 dbt-core~=1.12
 dbt-duckdb~=1.9
