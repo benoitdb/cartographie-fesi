@@ -5,7 +5,7 @@
 -r pipeline.in
 pytest>=9.0
 # Épinglé : la CI et le poste local doivent signaler les mêmes écarts de lint.
-ruff==0.17.1
+ruff==0.17.2
 # Pilote PostgreSQL des scripts metabase/ (chargement, rôles, vérifications) :
 # le job CI verify-metabase en a besoin, et test_metabase_load_data.py est sauté
 # sans lui. Même contrainte que dans dbt.in.
