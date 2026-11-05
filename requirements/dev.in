@@ -3,7 +3,7 @@
 # streamlit.testing.v1.AppTest). Lockfile : requirements-dev.txt.
 -r dashboard.in
 -r pipeline.in
-pytest>=9.0
+pytest>=9.2.0
 # Épinglé : la CI et le poste local doivent signaler les mêmes écarts de lint.
 ruff==0.17.1
 # Pilote PostgreSQL des scripts metabase/ (chargement, rôles, vérifications) :
