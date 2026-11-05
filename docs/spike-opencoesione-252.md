@@ -1,9 +1,9 @@
 # Spike #252 — Parcours Metabase et benchmark OpenCoesione
 
-**Relevé du 5 novembre 2026 — proposition soumise à arbitrage.** Ce document
+**Relevé et parcours validés le 5 novembre 2026.** Ce document
 distingue les constats API, la lecture du code et les essais visuels.
 
-**Recommandation :** reprendre la progression d'OpenCoesione, de la synthèse
+**Orientation retenue :** reprendre la progression d'OpenCoesione, de la synthèse
 aux opérations puis au détail ; emprunter à Kohesio l'organisation de la
 recherche et la séparation description/métadonnées, sans reprendre son entrée
 par regroupements de points. Les analyses approfondies restent accessibles et
@@ -15,7 +15,7 @@ adaptations de données relèvent de #124.
 
 - [#252](https://github.com/benoitdb/cartographie-fesi/issues/252) : capacités
   constatées de Metabase, benchmark OpenCoesione et comparaison Kohesio, puis
-  proposition de structure à arbitrer. Aucune implémentation des écrans.
+  proposition de structure validée le 5 novembre 2026. Aucune implémentation des écrans.
 - Ordre validé : #252, puis #238 (compte de démonstration), puis #124
   (recherche et détail des opérations).
 - Les issues transverses #8 (DuckDB) et #10 (positionnement) ne conditionnent
@@ -151,7 +151,7 @@ Les cartes communales et les indicateurs socio-économiques externes visibles
 sur le Piémont demanderaient d'autres données et des dénominateurs fiables.
 Ils ne sont pas des changements de mise en page à inclure implicitement.
 
-## Proposition de structure — à arbitrer
+## Structure retenue — arbitrage du 5 novembre 2026
 
 L'utilisateur apprécie la présentation générale d'OpenCoesione et souhaite
 ajouter ensuite les éléments Streamlit manquants, notamment statistiques,
@@ -177,7 +177,8 @@ sur le futur écran : la sonde n'a éprouvé qu'une liste 2014-2020.
 
 Cette proposition réorganise l'entrée dans l'outil ; elle ne décide ni de
 supprimer les cinq dashboards existants, ni d'abandonner leurs analyses.
-L'adoption de la structure exacte appartient à l'utilisateur.
+L'utilisateur a validé ce parcours le 5 novembre 2026. La conception détaillée
+des écrans et les compléments restent à arbitrer dans leurs issues.
 
 ### Besoins en données de #124, pas implémentés ici
 
@@ -219,15 +220,15 @@ La liste filtrée et la fiche de projet fournissent en revanche deux référence
 complémentaires à OpenCoesione. Il n'est pas nécessaire d'adopter l'ensemble de
 l'UX d'un portail pour en reprendre une organisation d'information utile.
 
-## Décisions attendues et limites
+## Décisions validées et limites
 
-1. **Valider ou amender le parcours principal** proposé : Explorer les
+1. **Parcours principal validé** : Explorer les
    financements → Consulter les opérations → Lire une opération, avec accès
    séparé aux analyses approfondies et à la qualité des sources.
-2. **Retenir la règle d'interaction recommandée** : clic carte = sélection,
+2. **Règle d'interaction retenue** : clic carte = sélection,
    lien explicite = ouverture des dossiers filtrés ; zoom interne du treemap
    annoncé comme tel. La géographie reste un moyen d'entrée, pas un passage obligé.
-3. **Confirmer l'ajout progressif des compléments statistiques** : pour chaque
+3. **Ajout progressif des compléments statistiques confirmé** : pour chaque
    élément Streamlit manquant, préciser la question métier, le besoin en données,
    la faisabilité constatée et la décision de l'utilisateur. Ne pas rouvrir une
    migration générale au nom d'une parité supposée.
@@ -244,9 +245,11 @@ fiche narrative, retour au contexte après la fiche et présentation DROM-COM
 lisible restent à éprouver selon le périmètre retenu. Ces limites n'empêchent
 pas de proposer une structure ; elles empêchent d'en promettre tous les détails.
 
-**#252 reste ouverte jusqu'à l'arbitrage.** Le relevé couvre les deux portails
-et les capacités utiles au parcours proposé ; aucune structure produit n'a été
-implémentée et aucun mart n'a été ajouté.
+**Arbitrage obtenu le 5 novembre 2026**, consigné dans #252. Le relevé couvre
+les deux portails et les capacités utiles au parcours retenu. Le périmètre
+d'étude est couvert ; la clôture est liée à la fusion de la PR documentaire
+#257. Aucun écran produit ni mart n'a été implémenté. La suite du lot reste
+#238, puis #124.
 
 ## Rangement des sondes
 
