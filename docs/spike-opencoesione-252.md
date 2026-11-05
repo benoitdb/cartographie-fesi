@@ -1,8 +1,15 @@
 # Spike #252 — Parcours Metabase et benchmark OpenCoesione
 
-**Relevé du 5 novembre 2026 — étude en cours.** Ce document distingue les
-constats API, la lecture du code et les essais visuels. La comparaison Kohesio
-reste à compléter ; la structure proposée ci-dessous reste à arbitrer.
+**Relevé du 5 novembre 2026 — proposition soumise à arbitrage.** Ce document
+distingue les constats API, la lecture du code et les essais visuels.
+
+**Recommandation :** reprendre la progression d'OpenCoesione, de la synthèse
+aux opérations puis au détail ; emprunter à Kohesio l'organisation de la
+recherche et la séparation description/métadonnées, sans reprendre son entrée
+par regroupements de points. Les analyses approfondies restent accessibles et
+s'enrichissent au cas par cas. Les sondes établissent le filtre croisé et la
+transmission de filtres vers une liste ; la fiche narrative complète et les
+adaptations de données relèvent de #124.
 
 ## Périmètre et décisions
 
@@ -185,18 +192,61 @@ Ne pas supposer que le numéro d'opération seul est une clé globale entre
 sources et périodes. Une modification du modèle se fera dans dbt, pas dans
 une vue SQL parallèle ni dans des règles réécrites au niveau des cartes.
 
-## Comparaison Kohesio et suite
+## Comparaison Kohesio
 
-Le second point de comparaison reste à compléter à partir des pages et
-captures récupérées manuellement. Aucun constat d'interface Kohesio n'est
-inféré de sa seule réputation ou du 403.
+Sources fournies manuellement par l'utilisateur le 5 novembre 2026 :
+`Kohesio_ discover EU projects in your region.html`,
+`Projects co-funded by the EU.html`,
+`Section 3 of the Sibiu–Pitești Motorway (A1) _ Kohesio.html`,
+quatre captures de l'accueil/parcours cartographique et deux de la recherche/fiche.
+La fiche enregistrée correspond à
+[Kohesio Q7417504](https://kohesio.ec.europa.eu/en/projects/Q7417504).
+Les pages ont été lues localement après le 403 ; aucune nouvelle tentative de
+collecte automatique ni source secondaire n'a remplacé ces éléments.
 
-La fiche narrative Metabase, le filtre croisé thématique et une présentation
-DROM-COM lisible ne sont pas déclarés validés. Les sondes expliquent ce qui
-est faisable et les points à concevoir, sans remplacer le travail de #124.
+| Élément constaté | Comparaison et intérêt | Application à FESI |
+|---|---|---|
+| Accueil avec carrousel éditorial, carte à regroupements de points et thèmes | Entrée par découverte géographique, moins orientée synthèse financière qu'OpenCoesione. Les captures montrent zoom, regroupements, liste contextuelle puis fenêtre de projet. L'utilisateur juge ce parcours peu utile et peu convaincant visuellement. Ce jugement est une préférence de conception, pas une mesure universelle d'utilisabilité. | Retenir la synthèse financière et la carte régionale explicite d'OpenCoesione comme entrée principale ; ne pas demander des zooms successifs pour atteindre les dossiers. |
+| Recherche autonome avec mots-clés, filtres et résultats | C'est le contrepoint utile : l'accès aux projets ne dépend pas de la carte. Les filtres principaux précèdent les filtres avancés ; une bascule permet de choisir résultats ou carte. | Pour #124, résultats en premier ; carte en appui si elle aide une question précise. Le composant de table paramétrée est prouvé, la reproduction du panneau latéral ne l'est pas. |
+| Tri, nombre de résultats et pagination | La capture rend visibles la taille de l'ensemble et l'ordre de lecture. Les résultats comportent titre, extrait et dates plutôt qu'un intitulé isolé. | Spécifier le tri et le compte exact du résultat filtré dans #124. Ne pas prendre les 50 premières lignes de la sonde pour un résultat exhaustif. L'extrait court et le texte complet doivent avoir des espaces distincts. |
+| Fiche avec longue description centrale et métadonnées latérales | La fiche de l'autoroute sépare récit du projet, financement, programme, dates et bénéficiaire. L'intérêt est l'organisation de l'information, indépendamment de l'avis réservé sur l'accueil. | Retenir cette hiérarchie pour une fiche FESI. Le rendu exact de texte long dans Metabase n'a pas été validé ; le réserver à une sonde ciblée de #124. |
+| Budget total et contribution UE explicitement distingués | Deux mesures sont affichées avec des libellés propres ; elles ne se confondent pas. | Afficher montant UE et dépenses éligibles sous leurs noms exacts ; ne pas rebaptiser les dépenses éligibles « budget total » sans preuve d'équivalence. |
+| Bandeau de couverture partielle des programmes 2021-2027 | La limite de couverture apparaît avant l'exploration. | Conserver millésime, source et réserves de couverture près des chiffres concernés ; la présence d'un programme dans une source ne prouve pas son exhaustivité. |
+| Raccourcis spécifiques vers les régions ultrapériphériques | Ils rendent ces territoires accessibles sans les chercher au zoom européen. | Étudier des accès explicites DROM-COM ; ne pas prétendre que le petit fond commun testé suffit à leur lisibilité. |
 
-**#252 reste ouverte** jusqu'à la fin du relevé, de la comparaison et de
-l'arbitrage.
+La navigation à regroupements de points n'est donc pas proposée comme modèle.
+La liste filtrée et la fiche de projet fournissent en revanche deux références
+complémentaires à OpenCoesione. Il n'est pas nécessaire d'adopter l'ensemble de
+l'UX d'un portail pour en reprendre une organisation d'information utile.
+
+## Décisions attendues et limites
+
+1. **Valider ou amender le parcours principal** proposé : Explorer les
+   financements → Consulter les opérations → Lire une opération, avec accès
+   séparé aux analyses approfondies et à la qualité des sources.
+2. **Retenir la règle d'interaction recommandée** : clic carte = sélection,
+   lien explicite = ouverture des dossiers filtrés ; zoom interne du treemap
+   annoncé comme tel. La géographie reste un moyen d'entrée, pas un passage obligé.
+3. **Confirmer l'ajout progressif des compléments statistiques** : pour chaque
+   élément Streamlit manquant, préciser la question métier, le besoin en données,
+   la faisabilité constatée et la décision de l'utilisateur. Ne pas rouvrir une
+   migration générale au nom d'une parité supposée.
+
+Avant une implémentation de la nouvelle navigation : traiter la configuration
+GeoJSON (#256) et rendre cohérent l'hôte de connexion/destination. #238 reste
+l'étape suivante du lot pour vérifier le parcours côté utilisateur ordinaire ;
+les sondes présentes ont utilisé le compte administrateur et ne prouvent pas
+les droits d'un lecteur.
+
+Les réglages avancés de clic ne sont pas tous testés : filtre croisé thématique,
+comportement au clic des tableaux, multisélection transmise à la destination,
+fiche narrative, retour au contexte après la fiche et présentation DROM-COM
+lisible restent à éprouver selon le périmètre retenu. Ces limites n'empêchent
+pas de proposer une structure ; elles empêchent d'en promettre tous les détails.
+
+**#252 reste ouverte jusqu'à l'arbitrage.** Le relevé couvre les deux portails
+et les capacités utiles au parcours proposé ; aucune structure produit n'a été
+implémentée et aucun mart n'a été ajouté.
 
 ## Rangement des sondes
 
