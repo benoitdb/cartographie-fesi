@@ -20,7 +20,7 @@ services:
       - "80"
 
   metabase:
-    image: metabase/metabase:v0.64.2.8@sha256:3b968d64944840ec0ed452a94fb58301a0a8d8e4fe6d632a5956014a91a2b635
+    image: metabase/metabase:v0.65.3.6@sha256:88541aec40e299b37fc34a0df9467283d47b7534e0226983fea141e36f28fc72
     environment:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabase
