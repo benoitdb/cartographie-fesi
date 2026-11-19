@@ -302,9 +302,9 @@ dbt-core==1.12.6 \
 dbt-core-experimental-parser==2.0.5 \
     --hash=sha256:b6ad345dc5bf187d8324d2f643ba6aad274eeb51e5c3b7c17780ea62338b069c
     # via dbt-core
-dbt-duckdb==1.11.0 \
-    --hash=sha256:4b087557e8559e2c141a8daae28f4a832a06f425d0b4567eca7c8ffb635cd0fe \
-    --hash=sha256:bac8c77771de890efa1af5b003af7c74de50c5ef67dba5891894e78348f7091b
+dbt-duckdb==1.11.1 \
+    --hash=sha256:4fe54c1aea840ccf4725a01851049be2bbe2d4c023faaad044c616505c780b45 \
+    --hash=sha256:81340c41a1bd0f8189109d3a61c394c08a636e482af0124a06765e9a41f44bcd
     # via -r requirements/dbt.in
 dbt-extractor==0.6.0 \
     --hash=sha256:05bcfab7ebd70296ceb31742e8333ba66a2c939de44e61a7088bebafa939aaf6 \
