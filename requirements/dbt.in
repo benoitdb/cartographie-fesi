@@ -7,7 +7,7 @@
 pandas>=3.1.1
 pyarrow>=26.0.1
 dbt-core~=1.12
-dbt-duckdb~=1.9
+dbt-duckdb~=1.11
 dbt-postgres~=1.9
 # Recoupement contre les vues PostgreSQL (verifier_vues_postgres.py). Pas
 # nécessaire au job CI, qui ne cible que DuckDB.
